@@ -64,7 +64,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   it('keeps a secret, hint only everywhere until changed, with who knows it', async () => {
-    const empty = await request(app).get(base).set(as(editor));
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    const refused = await request(app).get(base).set(as(editor));
+    expect(refused.status).toBe(403);
+    expect(refused.body.secrets).toBeUndefined();
+    const empty = await request(app).get(base).set(as(admin));
     expect(empty.status).toBe(200);
     expect(empty.body.secrets).toEqual([]);
     expect(empty.body.cast).toEqual([{ id: ids.mo, name: `Mo ${TAG}` }]);

@@ -66,14 +66,19 @@ const promptsSent = () => mockCreate.mock.calls.map(([arg]) => [
   });
 
   it('set, read and clear it; only an admin writes; a bad wing is refused', async () => {
-    expect((await request(app).get(url).set('Authorization', `Bearer ${editor}`)).body).toMatchObject({ typology: null, label: null });
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    const refused = await request(app).get(url).set('Authorization', `Bearer ${editor}`);
+    expect(refused.status).toBe(403);
+    expect(refused.body.typology).toBeUndefined();
+    expect((await request(app).get(url).set('Authorization', `Bearer ${admin}`)).body).toMatchObject({ typology: null, label: null });
     const body = { enneagram: { type: 3, wing: 4 }, mbti: 'ENTJ', why: 'Her worth is her output.' };
     expect((await request(app).put(url).set('Authorization', `Bearer ${editor}`).send(body)).status).toBe(403);
     expect((await request(app).put(url).set('Authorization', `Bearer ${admin}`).send({ enneagram: { type: 3, wing: 7 } })).status).toBe(400);
     const saved = await request(app).put(url).set('Authorization', `Bearer ${admin}`).send(body);
     expect(saved.status).toBe(200);
     expect(saved.body).toMatchObject({ label: 'Type 3w4, The Achiever', typology: { enneagram: { type: 3, wing: 4 }, mbti: 'ENTJ', set_by: 'evoni@type.dev' } });
-    expect((await request(app).get(url).set('Authorization', `Bearer ${editor}`)).body.label).toBe('Type 3w4, The Achiever');
+    expect((await request(app).get(url).set('Authorization', `Bearer ${admin}`)).body.label).toBe('Type 3w4, The Achiever');
+    expect((await request(app).get(url).set('Authorization', `Bearer ${editor}`)).body.label).toBeUndefined();
   });
 
   it('suggest reads their writing and saves nothing', async () => {

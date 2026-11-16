@@ -15,7 +15,7 @@
  */
 const express = require('express');
 const router  = express.Router();
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 router.use(requireAuth);
@@ -25,7 +25,7 @@ function getModels(req) {
 }
 
 // GET /
-router.get('/', async (req, res) => {
+router.get('/', authorize(['ADMIN']), async (req, res) => {
   const { CharacterCrossing, RegistryCharacter, StoryClockMarker } = getModels(req);
   try {
     const where = {};
@@ -185,7 +185,7 @@ router.put('/:id/confirm-gap', async (req, res) => {
 });
 
 // GET /tracker — Dashboard data
-router.get('/tracker', async (req, res) => {
+router.get('/tracker', authorize(['ADMIN']), async (req, res) => {
   const { CharacterCrossing, RegistryCharacter, StoryClockMarker } = getModels(req);
   try {
     const crossings = await CharacterCrossing.findAll({

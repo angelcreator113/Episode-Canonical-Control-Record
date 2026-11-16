@@ -72,7 +72,11 @@ describe('RegistryCharacter — PUT /character-crossings/:id/confirm-gap (src/ro
     const char = loaded(RegistryCharacter, { id: 'rc-1', performing_publicly: false, dimensions_performed: [], dimensions_hidden: [] });
     jest.spyOn(CharacterCrossing, 'findByPk').mockResolvedValue(crossing);
     jest.spyOn(RegistryCharacter, 'findByPk').mockResolvedValue(char);
-    jest.doMock('../../../src/middleware/auth', () => ({ requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } }));
+    jest.doMock('../../../src/middleware/auth', () => ({
+      requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); },
+      // The crossing routes' reads name authorize since 2026-11-15; these tests are of the writes.
+      authorize: () => (_req, _res, next) => next(),
+    }));
 
     const app = express();
     app.use(express.json());
@@ -135,7 +139,11 @@ describe('CharacterCrossing — POST /character-crossings/:id/propose-gap (src/r
       messages: { create: jest.fn(async () => ({ content: [{ text }] })) },
     })));
     jest.doMock('../../../src/middleware/aiRateLimiter', () => ({ aiRateLimiter: (_q, _s, next) => next() }));
-    jest.doMock('../../../src/middleware/auth', () => ({ requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } }));
+    jest.doMock('../../../src/middleware/auth', () => ({
+      requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); },
+      // The crossing routes' reads name authorize since 2026-11-15; these tests are of the writes.
+      authorize: () => (_req, _res, next) => next(),
+    }));
 
     const app = express();
     app.use(express.json());

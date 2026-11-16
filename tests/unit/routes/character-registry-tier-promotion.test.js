@@ -78,14 +78,16 @@ describe('Step 3 CP6 — characterRegistry.js anchor file Tier 1 sweep', () => {
     // site is admin only"): every write in this file is ADMIN only, first the
     // profile's (the profile audit), then the rest (the profile follow-up);
     // the reads stay requireAuth.
-    test('every write is ADMIN only, and no read is', () => {
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    test('every write is ADMIN only, and so is every read', () => {
       const handlers = SRC.match(/^router\.(get|post|put|patch|delete)\([^\n]+/gm) || [];
       const writes = handlers.filter((line) => !/^router\.get\(/.test(line));
       const reads = handlers.filter((line) => /^router\.get\(/.test(line));
       expect(writes.length).toBe(35);
       writes.forEach((line) => expect(line).toMatch(/requireAuth,\s*authorize\(\['ADMIN'\]\)/));
-      reads.forEach((line) => expect(line).not.toMatch(/authorize\(/));
-      expect((SRC.match(/authorize\(\['ADMIN'\]\)/g) || []).length).toBe(writes.length);
+      expect(reads.length).toBe(6);
+      reads.forEach((line) => expect(line).toMatch(/requireAuth,\s*authorize\(\['ADMIN'\]\)/));
+      expect((SRC.match(/authorize\(\['ADMIN'\]\)/g) || []).length).toBe(writes.length + reads.length);
     });
   });
 

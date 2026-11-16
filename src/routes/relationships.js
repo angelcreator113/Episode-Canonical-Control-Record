@@ -147,7 +147,7 @@ async function loadCastCharacters(db, { forAI = false } = {}) {
 // GET /api/v1/relationships
 // All confirmed relationships, optionally filtered by ?character_id=
 // ════════════════════════════════════════════════════════════════════════
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const { character_id } = req.query;
@@ -180,7 +180,7 @@ router.get('/', requireAuth, async (req, res) => {
 // ?confirmed=true for confirmed ones only (the Character Profile, Task #3119).
 // Each row also names the other character: related_id, related_name, related_portrait.
 // ════════════════════════════════════════════════════════════════════════
-router.get('/character/:charId', requireAuth, async (req, res) => {
+router.get('/character/:charId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const { charId } = req.params;
@@ -220,7 +220,7 @@ router.get('/character/:charId', requireAuth, async (req, res) => {
 // confirmed relationships with each other and the seeds still pending.
 // Every tab reads these same pairs.
 // ════════════════════════════════════════════════════════════════════════
-router.get('/cast', requireAuth, async (req, res) => {
+router.get('/cast', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const { characters, lalaId } = await loadCastCharacters(db);
@@ -256,7 +256,7 @@ router.get('/cast', requireAuth, async (req, res) => {
 // the script's quote, and the episode it happened in (metadata.episode_id,
 // written when an episode's story record is saved).
 // ════════════════════════════════════════════════════════════════════════
-router.get('/:relId/events', requireAuth, async (req, res) => {
+router.get('/:relId/events', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const { relId } = req.params;
@@ -597,7 +597,7 @@ router.post('/seeds', requireAuth, authorize(['ADMIN']), async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════
 const typeTidy = require('../services/relationshipTypeTidy');
 
-router.get('/type-tidy', requireAuth, async (req, res) => {
+router.get('/type-tidy', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     res.json(await typeTidy.proposals(getDb()));
   } catch (err) {
@@ -906,7 +906,7 @@ const driftError = (res, err, what) => {
   console.error(`${what} error:`, err);
   return res.status(500).json({ error: err.message });
 };
-router.get('/drift', requireAuth, async (req, res) => {
+router.get('/drift', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     res.json({ items: await truth.driftReport(getDb(), { includeKept: req.query.include_kept === 'true' }) });
   } catch (err) { driftError(res, err, 'GET /relationships/drift'); }
@@ -935,7 +935,7 @@ const PERSON_COLUMNS = `id, registry_id, display_name, selected_name, character_
   belief_pressured, emotional_function, personality, portrait_url, sort_order, feed_profile_id,
   ${companies.companySql('registry_characters')} AS company`;
 
-router.get('/person/:charId', requireAuth, async (req, res) => {
+router.get('/person/:charId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const { charId } = req.params;
@@ -961,7 +961,7 @@ router.get('/person/:charId', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/:relId', requireAuth, async (req, res) => {
+router.get('/:relId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getDb();
     const { relId } = req.params;

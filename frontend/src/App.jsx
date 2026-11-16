@@ -479,8 +479,10 @@ function AppContent() {
           <Route path="/chapter-structure/:bookId/:chapterId" element={<ChapterStructureEditor />} />
           
           {/* PNOS Character Registry */}
-          <Route path="/character-registry" element={<CharacterRegistryPage />} />
-          <Route path="/character/:id" element={<CharacterProfile />} />
+          {/* Character production screens (character privacy, Evoni, 2026-11-16): their reads are an ADMIN's on
+              the server, so AdminOnly explains that to anyone else instead of an empty or failed page. */}
+          <Route path="/character-registry" element={<AdminOnly><CharacterRegistryPage /></AdminOnly>} />
+          <Route path="/character/:id" element={<AdminOnly><CharacterProfile /></AdminOnly>} />
           <Route path="/your-voice" element={<YourVoicePage />} />
           <Route path="/brands" element={<Navigate to="/universe?tab=brands" replace />} />
           <Route path="/brands/:slug" element={<BrandProfilePage />} />
@@ -491,7 +493,7 @@ function AppContent() {
           <Route path="/continuity" element={<ContinuityEnginePage />} />
           
           {/* PNOS Relationships — Unified Tree + Web + Candidates + List */}
-          <Route path="/relationships" element={<RelationshipEngine />} />
+          <Route path="/relationships" element={<AdminOnly><RelationshipEngine /></AdminOnly>} />
 
           {/* The duplicate world editors' routes open their owner's page on
               the matching tab (audit IA-04; docs/WORLD_ROUTE_OWNERSHIP.md). */}
@@ -556,8 +558,8 @@ function AppContent() {
           <Route path="/feed" element={<PulseRedirect />} />
 
           {/* Narrative Pressure Dashboard — Feed Nervous System */}
-          <Route path="/pressure" element={<NarrativePressureDashboard />} />
-          <Route path="/feed-relationships" element={<FeedRelationshipMap />} />
+          <Route path="/pressure" element={<AdminOnly><NarrativePressureDashboard /></AdminOnly>} />
+          <Route path="/feed-relationships" element={<AdminOnly><FeedRelationshipMap /></AdminOnly>} />
           
           {/* PNOS Social Import Pipeline — redirects to Universe page */}
           <Route path="/social-import" element={<Navigate to="/universe/social-import" replace />} />

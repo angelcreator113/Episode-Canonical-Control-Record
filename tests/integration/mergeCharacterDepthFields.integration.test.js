@@ -84,8 +84,11 @@ const one = async (id) => (await run('SELECT * FROM registry_characters WHERE id
       de_blind_spot: 'She mistakes control for calm.', de_time_orientation: 'cyclical',
       de_change_capacity: 'highly_rigid', de_change_capacity_score: 25, de_change_condition: 'Being seen unfinished', de_money_behavior: 'spend_to_feel',
     });
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
     const hidden = await as(editor, request(app).get(`/api/v1/character-depth/${ids.maren}`));
-    expect(hidden.body.depth).not.toHaveProperty('de_blind_spot');
+    expect(hidden.status).toBe(403);
+    expect(hidden.body.depth).toBeUndefined();
+    expect(JSON.stringify(hidden.body)).not.toContain('She mistakes control for calm.');
 
     // Confirming saves the twins in their homes.
     const confirm = await as(admin, request(app).post(`/api/v1/character-depth/${ids.maren}/confirm`))

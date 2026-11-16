@@ -98,7 +98,7 @@ const SHOW_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * GET /registries
  * List all registries with character-count + status summary
  */
-router.get('/registries', requireAuth, async (req, res) => {
+router.get('/registries', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
@@ -184,7 +184,7 @@ router.post('/registries', requireAuth, authorize(['ADMIN']), async (req, res) =
  * GET /registries/default
  * Auto-find the first registry (or create one)
  */
-router.get('/registries/default', requireAuth, async (req, res) => {
+router.get('/registries/default', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     let registry = await CharacterRegistry.findOne({
@@ -208,7 +208,7 @@ router.get('/registries/default', requireAuth, async (req, res) => {
  * GET /registries/:id
  * Get single registry with all characters
  */
-router.get('/registries/:id', requireAuth, async (req, res) => {
+router.get('/registries/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const registry = await CharacterRegistry.findByPk(req.params.id, {
@@ -393,7 +393,7 @@ router.post('/registries/:id/characters', requireAuth, authorize(['ADMIN']), asy
  * Returns living_context + relationship edges for scene brief auto-populate.
  * Query params: ?registry_id=UUID (required)
  */
-router.get('/characters/scene-context/:characterKey', requireAuth, async (req, res) => {
+router.get('/characters/scene-context/:characterKey', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const db = require('../models');
@@ -469,7 +469,7 @@ router.get('/characters/scene-context/:characterKey', requireAuth, async (req, r
  * GET /characters/:id
  * Get a single character by ID
  */
-router.get('/characters/:id', requireAuth, async (req, res) => {
+router.get('/characters/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     // An ADMIN opening an archived character's link gets it, flagged, so the
@@ -490,7 +490,7 @@ router.get('/characters/:id', requireAuth, async (req, res) => {
  * GET /characters/:id/plot-threads
  * Returns plot threads stored in extra_fields.plot_threads
  */
-router.get('/characters/:id/plot-threads', requireAuth, async (req, res) => {
+router.get('/characters/:id/plot-threads', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);

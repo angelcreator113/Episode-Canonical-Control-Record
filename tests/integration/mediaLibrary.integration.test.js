@@ -121,16 +121,19 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     });
     const id = res.body.asset.id;
     expect(tagged(await gallery(ids.sable)).map((i) => i.url)).toContain(url('secret'));
-    const asUser = await gallery(ids.sable, user);
-    expect(asUser.can_edit).toBe(false);
-    expect(tagged(asUser).map((i) => i.url)).not.toContain(url('secret'));
-    expect(tagged(asUser).every((i) => i.asset === undefined)).toBe(true);
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    // A character's gallery is one; the library's own reads below still answer a reader who is not an ADMIN.
+    const asUser = await as(request(app).get(`/api/v1/cast/characters/${ids.sable}/gallery`), user);
+    expect(asUser.status).toBe(403);
+    expect(JSON.stringify(asUser.body)).not.toContain(url('secret'));
     expect((await as(request(app).get(`/api/v1/media/${id}`), user)).status).toBe(404);
     const list = await as(request(app).get(`/api/v1/media?entity_type=character&entity_id=${ids.sable}`), user);
     expect(list.body.items.map((a) => a.url)).not.toContain(url('secret'));
 
     await as(request(app).put(`/api/v1/media/${id}`)).send({ status: 'approved', visibility: 'internal', details: { objects: ['tea cup'], season: 'autumn', junk: 'x' } });
-    expect(tagged(await gallery(ids.sable, user)).map((i) => i.url)).toContain(url('secret'));
+    const approved = await as(request(app).get(`/api/v1/media?entity_type=character&entity_id=${ids.sable}`), user);
+    expect(approved.body.items.map((a) => a.url)).toContain(url('secret'));
+    expect((await as(request(app).get(`/api/v1/cast/characters/${ids.sable}/gallery`), user)).status).toBe(403);
     const [row] = await q('SELECT details FROM media_assets WHERE id = :id', { id });
     expect(row.details).toEqual({ objects: ['tea cup'], season: 'autumn' });
   });

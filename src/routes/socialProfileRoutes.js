@@ -1196,8 +1196,19 @@ async function autoLinkRelationships(db, profile, knownAssociates) {
 }
 
 // ── GET / ────────────────────────────────────────────────────────────────────
+// PUBLIC: the profile list. Anyone who is not an ADMIN gets the public columns only
+// (services/publicSocialProfile; character privacy, Evoni, 2026-11-15): the row also holds
+// the private reality, secret connections and other production material.
 router.get('/', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
+  if (!require('../services/publicSocialProfile').readsAsAdmin(req)) {
+    try {
+      return res.json(await require('../services/publicSocialProfile').publicProfileList(db, req.query));
+    } catch (err) {
+      console.error('[socialProfiles] public list error:', err);
+      return res.status(500).json({ error: 'The profiles could not be read.' });
+    }
+  }
   const { Op } = require('sequelize');
   const { series_id, archetype, status, platform, page, limit, search, sort, feed_layer, content_category, relevance_min, relevance_max, adult_content, celebrity_tier, follow_motivation } = req.query;
   try {
@@ -1551,7 +1562,7 @@ router.post('/bulk/delete', requireAuth, authorize(['ADMIN']), async (req, res) 
 
 // ── GET /export ──────────────────────────────────────────────────────────
 // Export profiles as JSON or CSV (must be before /:id to avoid route conflict)
-router.get('/export', requireAuth, async (req, res) => {
+router.get('/export', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { format, feed_layer, status } = req.query;
   try {
@@ -1585,7 +1596,8 @@ router.get('/export', requireAuth, async (req, res) => {
 // routes (GET /network, GET /templates, etc.) to avoid shadowing them.
 
 // ── GET /:id/followers ───────────────────────────────────────────────────────
-router.get('/:id/followers', optionalAuth, async (req, res) => {
+// ADMIN: production material (character privacy, Evoni, 2026-11-15); not every signed-in account's to read.
+router.get('/:id/followers', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileFollower) return res.json({ followers: [] });
   try {
@@ -2173,7 +2185,7 @@ router.post('/:id/add-moment', requireAuth, authorize(['ADMIN']), async (req, re
 // justawoman_mirror, mirror_proposed_by_amber) are withheld here.
 // Those fields are available only to the evaluation agent via storyEvaluationRoutes.
 // See DEV-030: author-knowledge injection split.
-router.get('/:id/scene-context', requireAuth, async (req, res) => {
+router.get('/:id/scene-context', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const p = await db.SocialProfile.findByPk(req.params.id);
@@ -2246,7 +2258,7 @@ ${(p.sample_captions || []).map((c, i) => `${i + 1}. ${c}`).join('\n')}
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /follow-engine/evaluate/:id — evaluate follow probability for a profile ─
-router.get('/follow-engine/evaluate/:id', requireAuth, async (req, res) => {
+router.get('/follow-engine/evaluate/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profile = await db.SocialProfile.findByPk(parseInt(req.params.id));
@@ -2353,7 +2365,7 @@ router.post('/follow-engine/run', requireAuth, authorize(['ADMIN']), async (req,
 });
 
 // ── GET /follow-engine/stats — follow analytics summary ─────────────────────
-router.get('/follow-engine/stats', requireAuth, async (req, res) => {
+router.get('/follow-engine/stats', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileFollower) return res.json({ stats: {} });
   const { fn, col } = require('sequelize');
@@ -2450,7 +2462,7 @@ router.get('/follow-engine/stats', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── GET /network — full creator relationship graph ──────────────────────────
-router.get('/network', requireAuth, async (req, res) => {
+router.get('/network', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileRelationship) return res.json({ nodes: [], edges: [] });
 
@@ -2509,7 +2521,7 @@ router.get('/network', requireAuth, async (req, res) => {
 });
 
 // ── GET /network/clusters — geographic cluster summary ──────────────────────
-router.get('/network/clusters', requireAuth, async (req, res) => {
+router.get('/network/clusters', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
     const profiles = await db.SocialProfile.findAll({
@@ -2526,7 +2538,7 @@ router.get('/network/clusters', requireAuth, async (req, res) => {
 });
 
 // ── GET /network/drama — highest drama relationships ────────────────────────
-router.get('/network/drama', requireAuth, async (req, res) => {
+router.get('/network/drama', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileRelationship) return res.json({ relationships: [] });
 
@@ -2548,7 +2560,7 @@ router.get('/network/drama', requireAuth, async (req, res) => {
 });
 
 // ── GET /:id/relationships — relationships for a specific profile ───────────
-router.get('/:id/relationships', requireAuth, async (req, res) => {
+router.get('/:id/relationships', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.SocialProfileRelationship) return res.json({ relationships: [] });
   const { Op } = require('sequelize');
@@ -2639,7 +2651,7 @@ router.delete('/relationships/:relId', requireAuth, authorize(['ADMIN']), async 
 
 // ── GET /analytics/composition ──────────────────────────────────────────────
 // Returns aggregated breakdown of feed composition for diversity dashboard
-router.get('/analytics/composition', requireAuth, async (req, res) => {
+router.get('/analytics/composition', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { Op } = require('sequelize');
   const { feed_layer } = req.query;
@@ -2820,7 +2832,7 @@ router.post('/:id/reject-crossing', requireAuth, authorize(['ADMIN']), guardJust
 
 // ── GET /moments/timeline ──────────────────────────────────────────────────
 // Aggregates moment_log entries across all profiles into a unified timeline
-router.get('/moments/timeline', requireAuth, async (req, res) => {
+router.get('/moments/timeline', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { feed_layer, limit: queryLimit, moment_type, lala_seeds_only } = req.query;
 
@@ -2886,7 +2898,7 @@ router.get('/moments/timeline', requireAuth, async (req, res) => {
 // Templates stored in DB when SocialProfileTemplate model is available, otherwise in-memory fallback
 const _profileTemplates = []; // fallback
 
-router.get('/templates', requireAuth, async (req, res) => {
+router.get('/templates', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (db.SocialProfileTemplate) {
     try {
@@ -3013,7 +3025,7 @@ router.delete('/templates/:templateId', requireAuth, authorize(['ADMIN']), async
 
 // ── GET /relationships/suggestions ──────────────────────────────────────────
 // Suggest potential relationships between profiles based on shared attributes
-router.get('/relationships/suggestions', requireAuth, async (req, res) => {
+router.get('/relationships/suggestions', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   const { Op } = require('sequelize');
   const { feed_layer, limit: queryLimit } = req.query;
@@ -3171,7 +3183,7 @@ router.get('/lala/sidebar', requireAuth, async (req, res) => {
 // closeness at the show's present (services/lalaCloseFriends). Start
 // Episode's "Who's new" step suggests them as featured guests (Task #3202).
 // Reads only. Before /:id.
-router.get('/lala/close-friends', requireAuth, async (req, res) => {
+router.get('/lala/close-friends', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const { show_id: showId } = req.query;
   if (typeof showId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(showId)) {
     return res.status(400).json({ error: 'show_id must be a UUID' });
@@ -3226,7 +3238,7 @@ const scheduleOf = (v) => {
   }
 };
 
-router.get('/:id/posting-schedule', requireAuth, async (req, res) => {
+router.get('/:id/posting-schedule', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { profile, voice } = await scheduleProfile(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
@@ -3339,6 +3351,18 @@ router.post('/:id/lala-reactions', requireAuth, authorize(['ADMIN']), aiRateLimi
 router.get('/:id', optionalAuth, async (req, res, next) => {
   if (!/^\d+$/.test(String(req.params.id))) return next();
   const db = req.app.locals.db || require('../models');
+  // PUBLIC: one profile. Not an ADMIN: its public columns only, no followers, no registry link
+  // (services/publicSocialProfile). A profile id is a running number, so every id can be asked for.
+  if (!require('../services/publicSocialProfile').readsAsAdmin(req)) {
+    try {
+      const shown = await require('../services/publicSocialProfile').publicProfileById(db, req.params.id);
+      if (!shown) return res.status(404).json({ error: 'Not found' });
+      return res.json({ profile: shown });
+    } catch (err) {
+      console.error('[socialProfiles] public GET /:id error:', err);
+      return res.status(500).json({ error: 'The profile could not be read.' });
+    }
+  }
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id, {
       include: db.SocialProfileFollower ? [{
