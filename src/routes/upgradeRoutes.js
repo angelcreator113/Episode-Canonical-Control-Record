@@ -21,7 +21,7 @@
 const express = require('express');
 const router = express.Router();
 const { createAnthropicClient } = require('../services/anthropicClient');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
@@ -363,7 +363,9 @@ router.patch('/writing-rhythm/goal', requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // GET all multi-product content (must be before :storyId param route)
-router.get('/multi-product/all', requireAuth, async (req, res) => {
+// ADMIN: the writing plan is production material (Evoni, 2026-11-16). This router is mounted before
+// franchiseBrainRoutes, which declares the same path, so this is the handler that answers.
+router.get('/multi-product/all', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const content = await db.MultiProductContent.findAll({
       order: [['created_at', 'DESC']],
