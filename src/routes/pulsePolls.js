@@ -4,11 +4,14 @@
  * services/pulsePolls.js). Mounted at /api/v1/pulse-polls. The public read
  * and the vote are routes/publicPolls.js.
  *
- *   GET /?show_id=            the show's polls with options and counts (requireAuth)
+ *   GET /?show_id=            the show's polls, drafts included, with options and
+ *                             counts (ADMIN: drafts and running counts are not
+ *                             every signed-in account's to read)
  *   POST / { show_id, world_event_id | episode_id, question?, options: [{ label, wardrobe_ids }], closes_at? }
  *                             a draft (ADMIN)
  *   PUT /:id { question?, options?, closes_at? }   a draft only (ADMIN)
- *   POST /:id/open            draft -> open (ADMIN)
+ *   DELETE /:id               removes a draft, soft delete (ADMIN); 409 once open or closed
+ *   POST /:id/open            draft -> open (ADMIN); 503 while voting is not set up
  *   POST /:id/close           open -> closed (ADMIN)
  */
 const express = require('express');
@@ -41,7 +44,7 @@ async function shaped(poll) {
   return list.find((p) => p.id === poll.id) || null;
 }
 
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return res.status(400).json({ success: false, error: 'show_id must be a show id (UUID).' });
@@ -82,6 +85,19 @@ router.put('/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   } catch (err) {
     if (sendKnown(res, err)) return undefined;
     console.error('[PulsePolls] PUT error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const poll = await pollOr404(req, res);
+    if (!poll) return undefined;
+    await require('../services/pulsePolls').removeDraft(getModels(), poll);
+    return res.json({ success: true });
+  } catch (err) {
+    if (sendKnown(res, err)) return undefined;
+    console.error('[PulsePolls] DELETE error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

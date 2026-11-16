@@ -12,7 +12,11 @@
  *                             options, each a label and wardrobe item ids
  *   openPoll / closePoll      draft -> open -> closed; an open poll past its
  *                             closes_at reads and votes as closed (and is
- *                             stamped closed when next touched)
+ *                             stamped closed when next touched). A poll does
+ *                             not open while votes cannot be taken (no
+ *                             POLL_HASH_SALT): it would show and refuse them
+ *   removeDraft               a draft, soft-deleted with its options; an open
+ *                             or closed poll, its votes and result stay
  *   listForShow               Admin: every poll with its options and counts
  *   publicPolls               the public site: open polls (no counts) and
  *                             polls closed in the last week (with counts);
@@ -148,10 +152,21 @@ async function updatePoll(db, poll, { question, options, closesAt }) {
 
 async function openPoll(db, poll) {
   if (poll.status !== 'draft') throw new PollError(409, `This poll is already ${poll.status}.`);
+  if (!saltOf()) throw new PollError(503, 'Voting is not set up on the server yet, so a poll cannot open.');
   if (poll.closes_at && new Date(poll.closes_at) <= new Date()) throw new PollError(400, 'Its closing time has passed; set a new one first.');
   const options = await db.PulsePollOption.count({ where: { poll_id: poll.id } });
   if (options < MIN_OPTIONS) throw new PollError(400, `A poll needs ${MIN_OPTIONS} options before it opens.`);
   return poll.update({ status: 'open', opened_at: new Date() });
+}
+
+/** Removes a draft (soft delete, with its options). Open and closed polls are kept. */
+async function removeDraft(db, poll) {
+  if (poll.status !== 'draft') throw new PollError(409, 'Only a draft poll can be removed.');
+  return db.sequelize.transaction(async (transaction) => {
+    await db.PulsePollOption.destroy({ where: { poll_id: poll.id }, transaction });
+    await poll.destroy({ transaction });
+    return { ok: true };
+  });
 }
 
 async function closePoll(poll) {
@@ -261,5 +276,5 @@ async function castVote(db, { pollId, optionId, voterId, ip, account = false }) 
 
 module.exports = {
   MIN_OPTIONS, MAX_OPTIONS, RESULTS_DAYS, IP_SOFT_CAP, PollError,
-  hashWith, statusAt, createPoll, updatePoll, openPoll, closePoll, listForShow, publicPolls, castVote,
+  hashWith, statusAt, createPoll, updatePoll, openPoll, closePoll, removeDraft, listForShow, publicPolls, castVote,
 };
