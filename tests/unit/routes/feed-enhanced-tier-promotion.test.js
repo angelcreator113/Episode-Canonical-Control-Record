@@ -13,13 +13,14 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 
 describe('Step 3 CP8 — feedEnhancedRoutes.js PROMOTE shape', () => {
   test('imports requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
     expect(SRC).toMatch(/const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/);
   });
 
   describe('Service-mediated AI POSTs (2 — D3 lock)', () => {
-    test('POST /post/:postId/ripple → requireAuth + aiRateLimiter', () => {
-      expect(SRC).toMatch(/router\.post\('\/post\/:postId\/ripple',\s*requireAuth,\s*aiRateLimiter,\s*async/);
+    // An ADMIN's since 2026-11-16 (Evoni): it writes reply posts on The Pulse.
+    test("POST /post/:postId/ripple → requireAuth + authorize(['ADMIN']) + aiRateLimiter", () => {
+      expect(SRC).toMatch(/router\.post\('\/post\/:postId\/ripple',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,\s*async/);
     });
     test('POST /:showId/chain/:eventId → requireAuth + aiRateLimiter', () => {
       expect(SRC).toMatch(/router\.post\('\/:showId\/chain\/:eventId',\s*requireAuth,\s*aiRateLimiter,\s*async/);
