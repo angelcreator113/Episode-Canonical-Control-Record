@@ -16,7 +16,8 @@ const slice = (from, to) => { const a = routes.indexOf(from); return routes.slic
 describe('feed comments contract', () => {
   test('the routes and their guards', () => {
     expect(routes).toMatch(/router\.get\('\/:postId\/comments',\s*optionalAuth,\s*async/);
-    expect(routes).toMatch(/router\.get\('\/:postId\/comments\/reactors',\s*requireAuth,\s*async/);
+    // Who would react, and why, is the studio's (2026-11-15): an ADMIN's.
+    expect(routes).toMatch(/router\.get\('\/:postId\/comments\/reactors',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*async/);
     expect(routes).toMatch(/router\.post\('\/:postId\/comments',\s*requireAuth,\s*async/);
     expect(routes).toMatch(/router\.post\('\/:postId\/comments\/draft',\s*requireAuth,\s*aiRateLimiter,\s*async/);
     expect(routes).toMatch(/router\.patch\('\/comments\/:commentId',\s*requireAuth,\s*async/);
@@ -66,7 +67,7 @@ describe('the wall\'s routes (2026-10-04)', () => {
     expect(create).toMatch(/ai_generated: false/);
   });
   test('GET /feed-posts/comments/pending lists a show\'s draft reactions with their posts, requireAuth, before the param routes', () => {
-    expect(routes).toMatch(/router\.get\('\/comments\/pending',\s*requireAuth,\s*async/);
+    expect(routes).toMatch(/router\.get\('\/comments\/pending',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*async/);
     expect(routes.indexOf("router.get('/comments/pending'")).toBeLessThan(routes.indexOf("router.get('/:showId/timeline'"));
     expect(routes.indexOf("router.get('/comments/pending'")).toBeLessThan(routes.indexOf("router.get('/:postId/comments'"));
     const pending = slice("router.get('/comments/pending'", '// ── GENERATE FEED POSTS');

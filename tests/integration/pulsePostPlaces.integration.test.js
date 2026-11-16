@@ -97,8 +97,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(texts(radiance)).toEqual(['radiance day']);
     const all = await request(app).get(`/api/v1/feed-posts?show_id=${ids.show}`);
     const byText = Object.fromEntries(all.body.data.map((x) => [x.content_text, x.place]));
-    expect(byText['velvet night']).toEqual({ city: 'dazzle_district', city_name: 'Dazzle District', location_id: ids.room, name: `Velvet Room ${tag}` });
-    expect(byText['radiance day']).toEqual({ city: 'radiance_row', city_name: 'Radiance Row', location_id: null, name: null });
+    // A reader who is not an ADMIN gets the place The Pulse draws (services/publicFeedPost, 2026-11-15): no venue id.
+    expect(byText['velvet night']).toEqual({ city: 'dazzle_district', city_name: 'Dazzle District', name: `Velvet Room ${tag}` });
+    expect(byText['radiance day']).toEqual({ city: 'radiance_row', city_name: 'Radiance Row', name: null });
+    const asAdmin = await as(request(app).get(`/api/v1/feed-posts?show_id=${ids.show}`));
+    const adminByText = Object.fromEntries(asAdmin.body.data.map((x) => [x.content_text, x.place]));
+    expect(adminByText['velvet night']).toEqual({ city: 'dazzle_district', city_name: 'Dazzle District', location_id: ids.room, name: `Velvet Room ${tag}` });
+    expect(adminByText['radiance day']).toEqual({ city: 'radiance_row', city_name: 'Radiance Row', location_id: null, name: null });
     expect(byText['home again']).toBeNull();
   });
 

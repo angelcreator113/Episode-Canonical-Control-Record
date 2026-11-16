@@ -89,12 +89,16 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('DELETE FROM episodes WHERE id = :epId', { epId });
   });
 
-  it('a deleted post is kept, listed for the signed-in author only', async () => {
+  it('a deleted post is kept, listed for an ADMIN only', async () => {
     const draft = (await auth(request(app).post('/api/v1/feed-posts')).send({ show_id: showId, content_text: 'Never mind.', status: 'draft' })).body.data;
     expect((await auth(request(app).delete(`/api/v1/feed-posts/${draft.id}`))).status).toBe(200);
     const [[row]] = await run('SELECT deleted_at FROM feed_posts WHERE id = :id', { id: draft.id });
     expect(row.deleted_at).not.toBeNull();
-    expect((await auth(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`))).body.data.map((p) => p.id)).toContain(draft.id);
+    // An operational read of the studio's: an ADMIN's since 2026-11-15 (tests/integration/feedPostPublicFields).
+    expect((await asAdmin(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`))).body.data.map((p) => p.id)).toContain(draft.id);
+    const refused = await auth(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`));
+    expect(refused.status).toBe(403);
+    expect(refused.body.data).toBeUndefined();
     expect((await request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`)).status).toBe(401);
   });
 });

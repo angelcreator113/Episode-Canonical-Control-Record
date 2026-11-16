@@ -49,19 +49,24 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
     const drafts = await asAdmin(request(app).get(`/api/v1/feed-posts?show_id=${showId}&status=draft`));
     expect(drafts.body.data.map((p) => p.id)).not.toContain(post.id);
-    const deleted = await auth(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`));
+    // An operational read of the studio's: an ADMIN's since 2026-11-15 (tests/integration/feedPostPublicFields).
+    const refused = await auth(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`));
+    expect(refused.status).toBe(403);
+    expect(refused.body.data).toBeUndefined();
+    const deleted = await asAdmin(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`));
     expect(deleted.status).toBe(200);
     expect(deleted.body.data.map((p) => p.id)).toEqual([post.id]);
 
     const restored = await auth(request(app).post(`/api/v1/feed-posts/${post.id}/restore`));
     expect(restored.status).toBe(200);
     expect((await asAdmin(request(app).get(`/api/v1/feed-posts?show_id=${showId}&status=draft`))).body.data.map((p) => p.id)).toContain(post.id);
-    expect((await auth(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`))).body.data).toEqual([]);
+    expect((await asAdmin(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`))).body.data).toEqual([]);
     expect((await auth(request(app).post(`/api/v1/feed-posts/${post.id}/restore`))).status).toBe(409);
   });
 
   it('the deleted list needs a show; a live post cannot be redrafted', async () => {
-    expect((await auth(request(app).get('/api/v1/feed-posts/deleted'))).status).toBe(400);
+    expect((await asAdmin(request(app).get('/api/v1/feed-posts/deleted'))).status).toBe(400);
+    expect((await auth(request(app).get('/api/v1/feed-posts/deleted'))).status).toBe(403);
     const live = await models.FeedPost.create({ show_id: showId, poster_handle: 'lala', content_text: 'Posted.', status: 'live', posted_at: new Date() });
     expect((await auth(request(app).post(`/api/v1/feed-posts/${live.id}/redraft`).send({}))).status).toBe(409);
   });
