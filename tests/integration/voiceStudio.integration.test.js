@@ -888,16 +888,16 @@ const SCRIPT = [
       delete process.env.VOICE_STUDIO;
       expect((await request(app).get(`/api/v1/voice-studio/${ep}/playable`).set('Authorization', `Bearer ${userToken}`)).status).toBe(404);
       process.env.VOICE_STUDIO = 'on';
-      const res = await request(app).get(`/api/v1/voice-studio/${ep}/playable`).set('Authorization', `Bearer ${userToken}`);
+      // Evoni, 2026-11-16: /playable is an ADMIN's (a non-admin got a list without held approvals until then, #3626).
+      expect((await request(app).get(`/api/v1/voice-studio/${ep}/playable`).set('Authorization', `Bearer ${userToken}`)).status).toBe(403);
+      const res = await request(app).get(`/api/v1/voice-studio/${ep}/playable`).set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.data.takes[0].audio_url).toMatch(/^https:\/\/.*\/voice\/sources\/[0-9a-f]{64}\.wav$/);
-      const page = await request(app).get(`/api/v1/episodes/${ep}`).set('Authorization', `Bearer ${userToken}`);
+      const page = await request(app).get(`/api/v1/episodes/${ep}`).set('Authorization', `Bearer ${adminToken}`);
       expect(page.status).toBe(200);
       expect(page.body.script_revision).toBe(res.body.data.script_revision);
-      // A non-admin's list carries no held approvals (#3626); an admin's does.
-      expect(res.body.data).not.toHaveProperty('held');
-      const asAdmin = await request(app).get(`/api/v1/voice-studio/${ep}/playable`).set('Authorization', `Bearer ${adminToken}`);
-      expect(asAdmin.body.data).toHaveProperty('held');
+      // An admin's list carries the held approvals, as before.
+      expect(res.body.data).toHaveProperty('held');
     } finally {
       if (prev === undefined) delete process.env.VOICE_STUDIO; else process.env.VOICE_STUDIO = prev;
     }
