@@ -287,7 +287,8 @@ router.post('/:showId/generate/:overlayType', requireAuth, async (req, res) => {
 });
 
 // POST /api/v1/ui-overlays/:showId/remove-bg/:assetId — remove background from existing overlay
-router.post('/:showId/remove-bg/:assetId', requireAuth, async (req, res) => {
+// An ADMIN's (Evoni, 2026-11-16): a paid background removal that rewrites the overlay.
+router.post('/:showId/remove-bg/:assetId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { removeBackgroundFromAsset } = require('../services/uiOverlayService');
