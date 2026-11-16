@@ -498,7 +498,7 @@ router.delete('/:id/title-card', validateUUIDParam('id'), requireAuth, async (re
 // cost. Every image route checks the photo belongs to this episode.
 function sendLookbookError(res, err, where) {
   console.error(`[Lookbook] ${where} failed:`, err.message);
-  if (err.status) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+  if (err.status) return res.status(err.status).json({ success: false, error: err.message, code: err.code, ...(err.details ? { details: err.details } : {}) });
   return res.status(500).json({ success: false, error: 'The Lookbook could not be saved. Try again.' });
 }
 
@@ -730,9 +730,45 @@ router.post('/:id/style-sheet/distribution/site', validateUUIDParam('id'), requi
   try {
     const models = require('../models');
     const { publishStyleSheetToSite } = require('../services/styleSheetDistributionService');
-    return res.json({ success: true, data: await publishStyleSheetToSite(models, req.params.id, req.user) });
+    // The body is what she confirmed of each product: { links: [{ piece_id, real_brand, real_product_name, retailer, url, affiliate, match, confirmed }] },
+    // and what she declares of the look image: { image_rights: { category, note? } }; without it the look is text only.
+    return res.json({ success: true, data: await publishStyleSheetToSite(models, req.params.id, req.user, { links: req.body?.links, imageRights: req.body?.image_rights }) });
   } catch (err) {
     return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site');
+  }
+});
+
+// Withdraw the look image's rights without publishing again (Evoni, 2026-11-15): the image stops being shown at
+// once; the look, its products and links stay. Safe to ask twice. Nothing in storage is deleted or moved.
+router.post('/:id/style-sheet/distribution/site/image/withdraw', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { withdrawLookImageRights } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await withdrawLookImageRights(models, req.params.id, req.user) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site/image/withdraw');
+  }
+});
+
+// Check whether a copy that is no longer shown can still be fetched at its public address: { key }.
+router.post('/:id/style-sheet/distribution/site/image/check', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { checkPublicCopy } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await checkPublicCopy(models, req.params.id, req.user, { key: req.body?.key }) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site/image/check');
+  }
+});
+
+// A product of the published look can no longer be bought, or can again: { piece_id, available }.
+router.patch('/:id/style-sheet/distribution/site/links', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { setPublishedLinkAvailability } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await setPublishedLinkAvailability(models, req.params.id, { pieceId: req.body?.piece_id, available: req.body?.available }) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'PATCH /:id/style-sheet/distribution/site/links');
   }
 });
 
