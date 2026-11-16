@@ -213,7 +213,9 @@ router.get('/', requireAuth, async (req, res) => {
 /**
  * GET /api/v1/shows/:id
  * Get a single show by ID
- * Falls back to auto-creating a minimal show record if episodes exist for this show_id
+ * Falls back to auto-creating a minimal show record if episodes exist for this show_id,
+ * on an ADMIN's read only (Evoni, 2026-11-16: a read must not write for a reader who may not
+ * write). Anyone else gets 404 for a show that has no record, and nothing is created.
  * Includes raw SQL fallback if Sequelize model query fails
  */
 router.get('/:id', requireAuth, async (req, res) => {
@@ -246,8 +248,9 @@ router.get('/:id', requireAuth, async (req, res) => {
       }
     }
 
-    // If no show record but episodes reference this show_id, auto-create a minimal record
-    if (!show) {
+    // If no show record but episodes reference this show_id, auto-create a minimal record. That is a write,
+    // so only an ADMIN's read does it; for anyone else the show is not found.
+    if (!show && require('../services/publicSocialProfile').readsAsAdmin(req)) {
       try {
         const { Episode, sequelize } = require('../models');
         const episodeCount = await Episode.count({ where: { show_id: id, deleted_at: null } });

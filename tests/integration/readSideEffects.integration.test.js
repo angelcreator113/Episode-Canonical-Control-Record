@@ -1,6 +1,6 @@
 /**
  * A read must not write, or spend, for a reader who may not (Evoni,
- * 2026-11-16), against the test database. Five reads did:
+ * 2026-11-16), against the test database. Six reads did:
  *
  *   GET /api/v1/episode-brief/:episodeId          made the episode's brief row
  *   GET /api/v1/session/brief/latest              stamped the brief as used
@@ -8,11 +8,14 @@
  *                                                 generated posts and tried to save them on the event
  *   GET /api/v1/memories/books/:bookId/scenes     a paid AI call (and its POST twin)
  *   GET /api/v1/amber/greeting                    a paid AI call, with no rate limit
+ *   GET /api/v1/shows/:id                         made an "Untitled Show" row for an id that
+ *                                                 live episodes point at and no show has
  *
  * Any signed-in account could cause each. Now only an ADMIN's read writes or
  * calls the AI. The three reads that also carry data still answer a viewer
- * and an editor, with what is there and nothing saved; the two AI reads are
- * an ADMIN's (403 otherwise). No token is 401 on all five, as before.
+ * and an editor, with what is there and nothing saved; a show with no record
+ * is not found for them; the two AI reads are an ADMIN's (403 otherwise). No
+ * token is 401 on all six, as before.
  */
 jest.unmock('uuid');
 const mockCreate = jest.fn();
@@ -35,7 +38,9 @@ const shouldSkip =
 (shouldSkip ? describe.skip : describe)('a read does not write or spend for a reader who may not', () => {
   const tag = crypto.randomUUID().slice(0, 8);
   const uuid = () => crypto.randomUUID();
-  const ids = { show: uuid(), ep: uuid(), epAdmin: uuid(), event: uuid(), eventAdmin: uuid() };
+  const ids = { show: uuid(), ep: uuid(), epAdmin: uuid(), event: uuid(), eventAdmin: uuid(), orphanShow: uuid(), orphanShowAdmin: uuid(), noShow: uuid() };
+  // Whether this database lets an episode point at a show that has no row (no foreign key): only then can the read create one.
+  let orphanPossible = false;
   const tokens = {};
   let book; let sessionBrief;
   let ipN = 0;
@@ -64,6 +69,14 @@ const shouldSkip =
       await run(`INSERT INTO world_events (id, show_id, name, event_type, status, canon_consequences, created_at, updated_at)
                  VALUES (:id, :show, :name, 'invite', 'draft', CAST(:cc AS jsonb), NOW(), NOW())`, { id, show: ids.show, name: `Gala ${tag}`, cc });
     }
+    try {
+      await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES
+                   (:a, :orphanShow, 'Orphan', 1, 'draft', NOW(), NOW()), (:b, :orphanShowAdmin, 'Orphan', 1, 'draft', NOW(), NOW())`,
+      { a: uuid(), b: uuid(), orphanShow: ids.orphanShow, orphanShowAdmin: ids.orphanShowAdmin });
+      orphanPossible = true;
+    } catch (err) {
+      if (!/foreign key|violates/i.test(`${err.message} ${err.parent?.message || ''}`)) throw err;
+    }
     book = await models.StorytellerBook.create({ title: `Reads book ${tag}`, character_name: 'JustAWoman', status: 'draft' });
     const chapter = await models.StorytellerChapter.create({ book_id: book.id, title: 'Approved', chapter_number: 1, sort_order: 1 });
     await models.StorytellerLine.create({ chapter_id: chapter.id, text: 'Elias watched.', content: 'Elias watched.', status: 'approved', sort_order: 1, line_order: 1 });
@@ -82,8 +95,64 @@ const shouldSkip =
     await book.destroy({ force: true });
     await run('DELETE FROM episode_briefs WHERE episode_id IN (:eps)', { eps: [ids.ep, ids.epAdmin] });
     await run('DELETE FROM world_events WHERE id IN (:events)', { events: [ids.event, ids.eventAdmin] });
-    await run('DELETE FROM episodes WHERE show_id = :show', ids);
-    await run('DELETE FROM shows WHERE id = :show', ids);
+    await run('DELETE FROM episodes WHERE show_id IN (:shows)', { shows: [ids.show, ids.orphanShow, ids.orphanShowAdmin] });
+    await run('DELETE FROM shows WHERE id IN (:shows)', { shows: [ids.show, ids.orphanShow, ids.orphanShowAdmin, ids.noShow] });
+  });
+
+  describe('GET /api/v1/shows/:id', () => {
+    const showRows = async () => (await run('SELECT id, name, deleted_at FROM shows WHERE id IN (:shows) ORDER BY id', { shows: [ids.show, ids.orphanShow, ids.orphanShowAdmin, ids.noShow] }))[0];
+
+    test('no token: 401 for an existing show, a missing one and one only episodes point at; no row is made', async () => {
+      const before = await showRows();
+      for (const id of [ids.show, ids.noShow, ids.orphanShow]) expect([id, (await get('anon', `/api/v1/shows/${id}`)).status]).toEqual([id, 401]);
+      expect(await showRows()).toEqual(before);
+    });
+
+    test.each(['viewer', 'editor', 'admin'])('%s reads an existing show, and the read changes nothing', async (who) => {
+      const before = await showRows();
+      const res = await get(who, `/api/v1/shows/${ids.show}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({ id: ids.show, name: `Reads ${tag}` });
+      expect(await showRows()).toEqual(before);
+    });
+
+    test.each(['viewer', 'editor', 'admin'])('%s: a show no row and no episode has is not found, and none is made', async (who) => {
+      const before = await showRows();
+      expect((await get(who, `/api/v1/shows/${ids.noShow}`)).status).toBe(404);
+      expect(await showRows()).toEqual(before);
+      expect(before.some((r) => r.id === ids.noShow)).toBe(false);
+    });
+
+    test.each(NOT_ADMIN)('%s: a show only episodes point at is not found, however often it is asked, and no row is made', async (who) => {
+      if (!orphanPossible) return;   // this database refuses such an episode, so the read has nothing to create
+      const before = await showRows();
+      for (let i = 0; i < 3; i += 1) expect((await get(who, `/api/v1/shows/${ids.orphanShow}`)).status).toBe(404);
+      expect(await showRows()).toEqual(before);
+      expect(before.some((r) => r.id === ids.orphanShow)).toBe(false);
+    });
+
+    test('an ADMIN: a show only episodes point at is made on the first read, once, and a viewer then reads it', async () => {
+      if (!orphanPossible) return;
+      const first = await get('admin', `/api/v1/shows/${ids.orphanShowAdmin}`);
+      expect(first.status).toBe(200);
+      expect(first.body.data).toMatchObject({ id: ids.orphanShowAdmin, name: 'Untitled Show' });
+      expect((await get('admin', `/api/v1/shows/${ids.orphanShowAdmin}`)).status).toBe(200);
+      const rows = (await showRows()).filter((r) => r.id === ids.orphanShowAdmin);
+      expect(rows).toHaveLength(1);
+      expect((await get('viewer', `/api/v1/shows/${ids.orphanShowAdmin}`)).body.data).toMatchObject({ id: ids.orphanShowAdmin, name: 'Untitled Show' });
+      // The one the viewer and the editor asked for still has no row.
+      expect((await showRows()).some((r) => r.id === ids.orphanShow)).toBe(false);
+    });
+
+    test('the route creates only inside the ADMIN branch', () => {
+      const src = require('fs').readFileSync(require('path').join(__dirname, '../../src/routes/shows.js'), 'utf8');
+      const handler = src.slice(src.indexOf("router.get('/:id', requireAuth,"), src.indexOf("router.", src.indexOf("router.get('/:id', requireAuth,") + 10));
+      const branch = handler.indexOf("if (!show && require('../services/publicSocialProfile').readsAsAdmin(req)) {");
+      expect(branch).toBeGreaterThan(0);
+      expect(handler.indexOf('Show.create(')).toBeGreaterThan(branch);
+      expect(handler.indexOf('INSERT INTO shows')).toBeGreaterThan(branch);
+      expect(handler.slice(0, branch)).not.toMatch(/Show\.create\(|INSERT INTO/);
+    });
   });
 
   test('no token: 401 on all five, and on the POST twin; nothing is written and the AI is not called', async () => {
