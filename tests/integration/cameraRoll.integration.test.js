@@ -223,9 +223,14 @@ const PLAN = [
     expect(edited.status).toBe(200);
     expect(edited.body.data.moment).toMatchObject({ moment: 'Rain on the bakery window, the first customer outside', purpose: 'posted', taken_by: 'friend', outfit: 'going_out' });
     expect((await as(request(app).patch(`/api/v1/camera-roll/moments/${jar.id}`)).send({ moment: 'x' })).status).toBe(409);
-    // A dropped moment frees a place: the member read has no moments at all.
-    const asMember = await get(ids.maren, member);
-    expect(asMember.body.data.moments).toEqual([]);
+    // A dropped moment frees a place: a reader who is not an ADMIN has no moments at all.
+    // The library's and the camera roll's reads are an ADMIN's since 2026-11-15 (tests/integration/pictureReadAuthorization).
+    // The route refuses that reader; the rule for what they would see is still the roll's own.
+    const refused = await get(ids.maren, member);
+    expect(refused.status).toBe(403);
+    expect(refused.body.data).toBeUndefined();
+    const asMember = await require('../../src/services/cameraRoll').rollFor(models, ids.maren, { audience: 'member' });
+    expect(asMember.moments).toEqual([]);
   });
 
   it('a face photo needs the official headshot, and is made from it; a photo with no face from words alone', async () => {
@@ -276,7 +281,9 @@ const PLAN = [
     expect(adminRead.photos).toHaveLength(2);
     expect(adminRead.moments.filter((m) => m.status === 'made').every((m) => m.url)).toBe(true);
     expect(adminRead.albums.find((a) => a.key === 'everyday').count).toBe(2);
-    const memberRead = (await get(ids.maren, member)).body.data;
+    expect((await get(ids.maren, member)).status).toBe(403);
+    expect((await request(app).get(`/api/v1/camera-roll/characters/${ids.maren}`)).status).toBe(401);
+    const memberRead = await require('../../src/services/cameraRoll').rollFor(models, ids.maren, { audience: 'member' });
     expect(memberRead.photos).toHaveLength(1);
     expect(memberRead.photos[0].purpose).toBe('posted');
     expect(memberRead.headshot).not.toBeNull();
