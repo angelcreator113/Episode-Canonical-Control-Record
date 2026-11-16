@@ -32,7 +32,7 @@ router.get('/', validateEpisodeQuery, requireAuth, asyncHandler(episodeControlle
 router.get(
   '/:id/wardrobe',
   validateUUIDParam('id'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(wardrobeController.getEpisodeWardrobe)
 );
 
@@ -67,7 +67,7 @@ router.delete(
 router.get(
   '/:id/outfits',
   validateUUIDParam('id'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(outfitSetsController.getEpisodeOutfits)
 );
 
@@ -502,7 +502,7 @@ function sendLookbookError(res, err, where) {
   return res.status(500).json({ success: false, error: 'The Lookbook could not be saved. Try again.' });
 }
 
-router.get('/:id/lookbook', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/lookbook', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { getLookbook } = require('../services/episodeLookbookService');
@@ -603,7 +603,7 @@ router.delete('/:id/lookbook/images/:imageId', validateUUIDParam('id'), validate
 // The 1024 x 1536 style sheet from canon data and the Lookbook: read it
 // (images inlined so the browser can draw the PNG), approve it, reopen it.
 // No AI, no image generation, no cost.
-router.get('/:id/style-sheet', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/style-sheet', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { buildStyleSheet } = require('../services/styleSheetService');
@@ -625,7 +625,7 @@ router.post('/:id/style-sheet/approve', validateUUIDParam('id'), requireAuth, as
 
 // One export size of the approved sheet, drawn on the server (Task #2877):
 // sheet, pin, story, post, look or pdf. Refused while Draft or out of date.
-router.get('/:id/style-sheet/export/:size', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/style-sheet/export/:size', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { exportStyleSheet } = require('../services/styleSheetService');
@@ -641,7 +641,7 @@ router.get('/:id/style-sheet/export/:size', validateUUIDParam('id'), requireAuth
 
 // Evoni's five designs (2026-10-22): one design in one size, or all five
 // in one size (or "all" sizes) as a zip. Approved, up-to-date sheets only.
-router.get('/:id/style-sheet/design/:design/:size', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/style-sheet/design/:design/:size', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { exportDesign } = require('../services/styleSheetService');
@@ -655,7 +655,7 @@ router.get('/:id/style-sheet/design/:design/:size', validateUUIDParam('id'), req
   }
 });
 
-router.get('/:id/style-sheet/designs-zip/:size', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/style-sheet/designs-zip/:size', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { exportDesignsZip } = require('../services/styleSheetService');
@@ -683,7 +683,7 @@ router.post('/:id/style-sheet/reopen', validateUUIDParam('id'), requireAuth, asy
 // Send the approved sheet's export sizes to the episode's Distribution with a
 // caption draft; edit the caption and the Shop the Look toggle; take it out.
 // Stored in episodes.distribution_metadata.style_sheet. Nothing is posted.
-router.get('/:id/style-sheet/distribution', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/style-sheet/distribution', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { getStyleSheetDistribution } = require('../services/styleSheetDistributionService');
@@ -1067,7 +1067,7 @@ router.delete(
 router.get(
   '/:id/timeline/wardrobe/current',
   validateUUIDParam('id'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(require('../controllers/timelinePlacementsController').getCurrentWardrobe)
 );
 
@@ -1173,7 +1173,7 @@ router.delete(
 router.get(
   '/:episodeId/timeline/wardrobe/current',
   validateUUIDParam('episodeId'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(timelinePlacementsController.getCurrentWardrobe)
 );
 
@@ -1238,7 +1238,7 @@ router.delete(
  * GET /api/v1/episodes/:id/wardrobe-defaults
  * Get episode wardrobe defaults for all characters
  */
-router.get('/:id/wardrobe-defaults', requireAuth, async (req, res) => {
+router.get('/:id/wardrobe-defaults', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { EpisodeWardrobeDefault, Asset } = require('../models');
 
