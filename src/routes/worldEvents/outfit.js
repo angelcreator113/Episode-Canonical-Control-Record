@@ -203,8 +203,9 @@ router.get('/world/:showId/events/:eventId/feed-activity', requireAuth, async (r
     const cc = typeof event.canon_consequences === 'string' ? JSON.parse(event.canon_consequences) : (event.canon_consequences || {});
     const posts = cc.feed_activity || [];
 
-    // If no posts yet, generate them
-    if (posts.length === 0 && cc.automation) {
+    // If no posts yet, generate them. Generating saves them on the event, so only an ADMIN's read does it
+    // (Evoni, 2026-11-16: a read must not write for a reader who may not write); anyone else reads what is there.
+    if (posts.length === 0 && cc.automation && require('../../services/publicSocialProfile').readsAsAdmin(req)) {
       try {
         const feedActivity = require('../../services/feedActivityService');
         const generated = await feedActivity.generatePostEventActivity(
