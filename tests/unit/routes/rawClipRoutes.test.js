@@ -332,10 +332,14 @@ describe('stopping green removal (Evoni, 2026-10-31)', () => {
     removeClip.mockRestore();
   });
 
-  test('the delete route is ADMIN only; a take\'s other routes keep requireAuth alone', () => {
+  // Evoni, 2026-11-16: every footage route is an ADMIN's, not the delete alone (it was
+  // requireAuth for the rest until then). One shared pair, and no route without it.
+  test('every route is ADMIN only: the delete, and now the list, uploads, relabelling and green removal', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '../../../src/routes/rawClipRoutes.js'), 'utf8');
-    expect(src).toMatch(/router\.delete\('\/:episodeId\/:clipId', requireAuth, authorize\(\['ADMIN'\]\), /);
-    expect(src).toMatch(/router\.patch\('\/:episodeId\/:clipId', requireAuth, async /);
+    expect(src).toMatch(/const admin = \[requireAuth, authorize\(\['ADMIN'\]\)\];/);
+    const routes = src.split('\n').filter((l) => /^router\.(get|post|put|patch|delete)\(/.test(l));
+    expect(routes).toHaveLength(10);
+    for (const line of routes) expect(line).toMatch(/^router\.\w+\('[^']+', \.\.\.admin, /);
     expect(src.match(/authorize\(/g)).toHaveLength(1);
   });
 });
