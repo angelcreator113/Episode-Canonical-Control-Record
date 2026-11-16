@@ -21,11 +21,9 @@ router.get('/:showId/trending', requireAuth, async (req, res) => {
     const { getTrendingTopics } = require('../services/feedEngagementService');
     // ?at= and ?city= (Task #2987): trends as of a story moment, and one Dream City's local trends.
     let at = null;
-    if (req.query.at !== undefined && req.query.at !== '') {
-      try { at = await require('../services/storyClock').resolveAt(models, req.params.showId, String(req.query.at)); } catch (atErr) {
-        if (atErr.status === 400) return res.status(400).json({ error: atErr.message });
-        throw atErr;
-      }
+    try { at = await require('../services/readerMoment').momentFor(req, models, req.params.showId, req.query.at); } catch (atErr) {
+      if (atErr.status === 400) return res.status(400).json({ error: atErr.message });
+      throw atErr;
     }
     const city = req.query.city === undefined ? null : String(req.query.city);
     const { DREAM_CITY_KEYS } = require('../utils/feedCities');
