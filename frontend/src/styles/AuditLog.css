@@ -260,3 +260,8 @@
     max-width: none;
   }
 }
+
+/* A failed load: said in place, under the filters, with Retry (2026-11-13). */
+.audit-error { padding: 16px; border: 1px solid var(--danger-border, #f3c0b8); border-radius: 8px; background: var(--danger-bg, #fdf1ef); color: var(--danger-text, #b42318); }
+.audit-error p { margin: 0 0 12px; overflow-wrap: anywhere; }
+.audit-back { margin: 0 0 8px; }
