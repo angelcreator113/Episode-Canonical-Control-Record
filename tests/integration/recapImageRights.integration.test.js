@@ -399,13 +399,16 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       }
     }
 
-    // GET /pulse-recaps is open to any signed-in reader: the review is an ADMIN's only.
+    // GET /pulse-recaps is an ADMIN's since 2026-11-15 (The Pulse's production reads, #3849): a signed-in reader
+    // who is not one is refused, and the refusal carries none of the review's fields or the recap's own.
     for (const token of [editor, viewer]) {
       const res = await as(token, request(app).get(`/api/v1/pulse-recaps?show_id=${ids.show}`));
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(403);
+      expect(res.body.data).toBeUndefined();
+      expect(res.body.recaps).toBeUndefined();
       const raw = JSON.stringify(res.body);
-      // (published_by, the publisher's email, was already in this read and is left as it was.)
-      for (const secret of [NOTE, 'declared_by', 'seed@rights.dev', shown.assetId, hiddenKey, 'image_rights', 'pending_revocations', 'rights_categories']) expect(raw).not.toContain(secret);
+      for (const secret of [NOTE, 'declared_by', 'seed@rights.dev', ADMIN_EMAIL, shown.assetId, hidden.assetId, hiddenKey, shown.url, hidden.url,
+        'image_rights', 'pending_revocations', 'rights_categories', 'published_by']) expect(raw).not.toContain(secret);
     }
     const adminList = await as(admin, request(app).get(`/api/v1/pulse-recaps?show_id=${ids.show}`));
     expect(adminList.body.rights_categories.map((c) => [c.key, c.label, c.cleared])).toEqual([
