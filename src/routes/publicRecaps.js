@@ -7,8 +7,12 @@
  * shows it at the present (a post since hidden or taken down drops out).
  * Each post's image is its copy in the public site bucket, made at
  * publishing, sent only while it still matches what The Pulse shows
- * (pulseRecap.publicImageOf; Task #3099). No show, profile or episode ids,
- * and no studio image URL, leave the server.
+ * (Task #3099) and, checked on every read, while its media-library picture
+ * is still the one copied, approved, public and cleared by a rights
+ * declaration (pulseRecap.publicImages; Evoni, 2026-11-15); otherwise the
+ * post is text only. No show, profile, episode or library ids, no rights
+ * note or declarer, no storage key and no studio image URL leave the server.
+ * The list sends no images.
  *
  *   GET /        published recaps, newest week first: id, title, week_start
  *   GET /:id     one published recap: its title, intro and posts
@@ -46,8 +50,9 @@ router.get('/:id', readLimiter, async (req, res) => {
     const recap = await getModels().PulseRecap.findOne({ where: { id: req.params.id, status: 'published' } });
     if (!recap) return res.status(404).json({ error: 'Recap not found' });
     const storyLabel = require('../services/storyClock').label;
-    const { postsOf, publicImageOf } = require('../services/pulseRecap');
+    const { postsOf, publicImages } = require('../services/pulseRecap');
     const posts = await postsOf(getModels(), recap);
+    const images = await publicImages(getModels(), recap, posts);
     res.set('Cache-Control', 'public, max-age=300');
     return res.json({
       recap: {
@@ -55,7 +60,7 @@ router.get('/:id', readLimiter, async (req, res) => {
         posts: posts.map((p) => ({
           poster_handle: p.poster_handle, poster_display_name: p.poster_display_name, content_text: p.content_text,
           likes: p.likes, comments_count: p.comments_count, moment: p.story_order == null ? null : storyLabel(p.story_order),
-          image: publicImageOf(recap, p),
+          image: images.get(String(p.id)) || null,
         })),
       },
     });

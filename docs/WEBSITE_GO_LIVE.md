@@ -24,6 +24,7 @@ The `website_slots` table comes from `src/migrations/20261010150000-create-websi
    - Restrict the behaviour to path pattern `site-public/*`.
    - **Leave the origin path empty.** The app builds URLs as `https://<cdn>/<prefix>/<file>` (`websiteSlotService.publicUrl`), so the key already carries the prefix. An origin path of `/site-public` would double it and every image would 404.
    - Use a cache policy that respects the object's `Cache-Control`. Uploads are written with `public, max-age=31536000, immutable`, and keys are never reused.
+   - Shop the Look images are the exception (`websiteSlotService` `CACHE_LOOK_IMAGE`, used by `copyLookImage`): they are written with `public, max-age=3600`, one hour and not immutable, so a copy Evoni withdraws ages out of the CDN and browsers within the hour. A cache policy with a minimum TTL above one hour would defeat this. **A shorter cache does not revoke access.** An object the distribution can still fetch is still public at its address; making a withdrawn image unreachable means removing the distribution's access to that object (and invalidating its path), which is Evoni's step.
    - Add a response-headers policy with `X-Content-Type-Options: nosniff`.
 3. **Bucket policy.** Grant `s3:GetObject` on `<bucket>/site-public/*` only: to the CloudFront distribution (OAC) or to the public. Grant no `ListBucket`. Keep Block Public Access on for every other prefix.
 4. **The app's IAM role.** Grant `s3:PutObject` on `<bucket>/site-public/*` only. The app never deletes site media (replacing a file writes a new key), so `DeleteObject` is not needed.
@@ -54,6 +55,7 @@ Video clips are measured with `ffprobe` before they are accepted (`websiteSlotSe
 4. **Draft preview.** Signed in, `/site-preview?drafts=1` shows drafts. `/site-preview` shows only what visitors see. Signed in, `/` is the studio dashboard, not the landing page.
 5. **Publish.** Add alt text and publish. Within five minutes (the endpoint's cache), `/` in a private window shows it.
 6. **A clip.** Try a clip over 30 seconds or over 25 MB: refused. A clip of 30 seconds or less needs a poster (and captions if "has speech" is on) before it will publish.
+7. **Go-live requirement: the look image's one-hour lifetime reaches visitors.** Before the public storage is switched on, check in the CloudFront console that the cache policy on the `site-public/*` behaviour has a **minimum TTL of 3600 seconds or less** and honours the origin's `Cache-Control` (a higher minimum overrides the object's one hour). After the first look is published, confirm it from outside: `curl -sI https://<cdn>/site-public/looks/<key>/<file>.png` should show `cache-control: public, max-age=3600` and no `immutable`. This is Evoni's check; no session changes CloudFront. It bounds how long a cache keeps a copy and is not a revocation: see Storage, step 2.
 
 ## Limits (as built)
 
