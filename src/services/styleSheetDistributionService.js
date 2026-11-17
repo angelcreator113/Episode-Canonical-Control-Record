@@ -79,23 +79,102 @@ async function readMetadata(sequelize, episodeId) {
   return parseMetadata(row.distribution_metadata);
 }
 
-async function writeMetadata(models, episodeId, metadata) {
-  await models.Episode.update({ distribution_metadata: metadata }, { where: { id: episodeId, deleted_at: null } });
+/**
+ * Save the record. The entry is read, changed and written by several
+ * actions (send, publish, withdraw, take down, a check), and two of them can
+ * overlap. The write locks the episode's row, and then:
+ *
+ *   - Stale writes are refused (Evoni, 2026-11-16). The entry carries a
+ *     revision number (`rev`), raised by every save. An action saves only if
+ *     the stored entry is still at the revision it read; otherwise something
+ *     else has saved since, and this action's entry, built from what it read,
+ *     is not written: 409 DISTRIBUTION_CHANGED, and she reloads. So one
+ *     action can no longer overwrite another's products, declaration or image
+ *     with an older picture of the look.
+ *   - No public copy is lost by that. A refused publish may already have put
+ *     its image in the public bucket, and a refused check or withdrawal may
+ *     have learned of a copy; before refusing, what the stale action knew of
+ *     public copies is added to the stored entry (keepPublicCopies), as
+ *     pending.
+ *   - Removing the entry is refused, under the same lock, while a copy's
+ *     access is not known to be gone.
+ *   - The revision outlives the entry (Evoni, 2026-11-16). Removing the entry
+ *     leaves its next revision in the metadata (`style_sheet_rev`), and every
+ *     later save is compared with it. So an action that read the entry before
+ *     it was removed is stale, and cannot bring the entry back; a new send,
+ *     which reads the kept revision, can.
+ *
+ * Returns the revision saved.
+ */
+const REV_KEY = `${KEY}_rev`;
+const revOf = (e) => (isObject(e) && Number.isInteger(e.rev) ? e.rev : 0);
+/** The revision a reader of this metadata must save against: the entry's, or the one kept when it was removed. */
+const revisionIn = (metadata) => (isObject(metadata[KEY]) ? revOf(metadata[KEY]) : (Number.isInteger(metadata[REV_KEY]) ? metadata[REV_KEY] : 0));
+
+async function writeMetadata(models, episodeId, metadata, { removing = null } = {}) {
+  let stale = false;
+  let saved = null;
+  await models.sequelize.transaction(async (transaction) => {
+    const [[row]] = await models.sequelize.query(
+      'SELECT distribution_metadata FROM episodes WHERE id = :id AND deleted_at IS NULL FOR UPDATE',
+      { replacements: { id: episodeId }, transaction });
+    const storedAll = row ? parseMetadata(row.distribution_metadata) : {};
+    const stored = isObject(storedAll[KEY]) ? storedAll[KEY] : null;
+    const current = revisionIn(storedAll);
+    const next = { ...metadata };
+    const save = (value) => models.Episode.update({ distribution_metadata: value }, { where: { id: episodeId, deleted_at: null }, transaction });
+    if (!isObject(next[KEY])) {
+      // Already removed by something else: there is nothing to remove, and nothing is written.
+      if (!stored) { saved = current; return; }
+      // A removal built on an older reading is stale too: the entry it meant to remove is not the one stored.
+      if (revOf(stored) !== revOf(removing)) { stale = true; return; }
+      if (hasUnrevokedCopy(stored)) {
+        throw new LookbookError('This look has a public image copy whose access is not yet known to be removed. Take the look down and check the copy first.', 409, 'PUBLIC_COPIES_PENDING');
+      }
+      saved = current + 1;
+      await save({ ...next, [REV_KEY]: saved });
+      return;
+    }
+    if (revOf(next[KEY]) !== current) {
+      // Something else saved since this action read, or removed the entry. What is stored stands; a removed entry
+      // stays removed. Only the public copies this action knew of are added to an entry that is still there.
+      stale = true;
+      if (stored) {
+        const kept = keepPublicCopies(next[KEY], stored);
+        if (JSON.stringify(kept.public_copies || []) !== JSON.stringify(stored.public_copies || [])) {
+          await save({ ...storedAll, [KEY]: { ...kept, rev: current + 1 } });
+        }
+      }
+      return;
+    }
+    saved = current + 1;
+    const value = { ...next, [KEY]: { ...keepPublicCopies(stored, next[KEY]), rev: saved } };
+    delete value[REV_KEY];
+    await save(value);
+  });
+  if (stale) {
+    throw new LookbookError('This look was changed by something else while this was being saved. Reload it and try again.', 409, 'DISTRIBUTION_CHANGED');
+  }
+  return saved;
 }
 
 /**
  * For the other Distribution writers (the tab's Save, Generate, the episode
  * update): what they save, with the style sheet entry carried over from the
- * stored record. The entry is only ever written by this service.
+ * stored record, or the revision kept in its place. Both are only ever
+ * written by this service; neither can be sent in.
  */
 async function keepStyleSheet(sequelize, episodeId, incoming, { transaction = null } = {}) {
   const next = { ...parseMetadata(incoming) };
   delete next[KEY];
+  delete next[REV_KEY];
   // Read in the caller's transaction when it has one (the episode save locks the row).
   const [[row]] = await sequelize.query(
     'SELECT distribution_metadata FROM episodes WHERE id = :id', { replacements: { id: episodeId }, transaction });
-  const stored = row ? parseMetadata(row.distribution_metadata)[KEY] : null;
-  if (stored) next[KEY] = stored;
+  const all = row ? parseMetadata(row.distribution_metadata) : {};
+  if (all[KEY]) next[KEY] = all[KEY];
+  // And the revision kept when the entry was removed: without it a save built on the removed entry would pass.
+  else if (Number.isInteger(all[REV_KEY])) next[REV_KEY] = all[REV_KEY];
   return next;
 }
 
@@ -285,7 +364,7 @@ const publicLink = (l) => ({
  * drawn from. Empty when nothing does. A look published before snapshots
  * has none to compare and says so.
  */
-function siteDiffers(site, sheet, pieces) {
+function siteDiffers(site, sheet, pieces, entryCaption = null) {
   if (!Array.isArray(site.links)) return ['no_snapshot'];
   const out = [];
   const now = (sheet.wardrobe_piece_ids || []).map(String);
@@ -300,6 +379,7 @@ function siteDiffers(site, sheet, pieces) {
   });
   if (changed) out.push('links');
   if (isObject(site.image) && site.image.sheet_hash && site.image.sheet_hash !== sheet.inputs_hash) out.push('image');
+  if (typeof site.caption === 'string' && typeof entryCaption === 'string' && site.caption !== entryCaption) out.push('caption');
   return out;
 }
 
@@ -345,6 +425,8 @@ async function view(models, episodeId, entry, sheet) {
     site: siteView(entry, await episodeReleased(models, episodeId), sheet, pieces),
     // What she reviews before publishing: each piece of the look and its real product, as the wardrobe has it.
     site_review: pieces,
+    // Copies in the public bucket that are no longer shown, and whether access to each is known to be gone.
+    public_copies: (Array.isArray(entry.public_copies) ? entry.public_copies : []).map(copyView),
   };
 }
 
@@ -383,7 +465,7 @@ function siteView(entry, released = false, sheet = null, pieces = []) {
     links: Array.isArray(site.links) ? site.links.map((l) => ({ ...l, label: snapshotLabel(l), available: publicLink(l).available })) : null,
     disclosure: site.disclosure || null,
     confirmed_at: site.confirmed_at || null,
-    differs: sheet ? siteDiffers(site, sheet, pieces) : [],
+    differs: sheet ? siteDiffers(site, sheet, pieces, text(entry.caption) || '') : [],
     published: true,
     // The website shows a look only once its episode is released (releasedOn); until then it waits.
     released: Boolean(released),
@@ -395,11 +477,13 @@ function siteView(entry, released = false, sheet = null, pieces = []) {
     // on the site (she cleared this very image), not cleared (no declaration, or "unknown": text only),
     // failed to copy, or none (no bucket).
     image: imageCleared(site) ? 'on_site'
-      : (!isObject(site.image_rights) || !site.image_rights.cleared ? 'not_cleared' : (site.image?.failed ? 'failed' : 'none')),
+      : (isObject(site.image_rights) && site.image_rights.withdrawn ? 'withdrawn'
+        : (!isObject(site.image_rights) || !site.image_rights.cleared ? 'not_cleared' : (site.image?.failed ? 'failed' : 'none'))),
     // Her declaration, as saved; `stale` when the poses or the sheet have changed since she made it.
     image_rights: isObject(site.image_rights) ? {
       category: site.image_rights.category, label: IMAGE_RIGHTS[site.image_rights.category] || null, cleared: site.image_rights.cleared === true,
       note: site.image_rights.note || null, declared_by: site.image_rights.declared_by || null, declared_at: site.image_rights.declared_at || null,
+      withdrawn: site.image_rights.withdrawn === true, withdrawn_at: site.image_rights.withdrawn_at || null, withdrawn_by: site.image_rights.withdrawn_by || null,
       stale: Boolean(sheet) && (!sameRefs(site.image_rights.poses, poseRefs(sheet)) || (site.image_rights.sheet_hash || null) !== (sheet.inputs_hash || null)),
     } : null,
   };
@@ -437,10 +521,14 @@ async function sendStyleSheetToDistribution(models, episodeId, { includeShopLink
     caption: keepCaption ? previous.caption : captionDraft(sheet),
     caption_edited: Boolean(keepCaption),
     include_shop_links: Boolean(includeShopLinks),
+    // The revision this send read: the entry's, or the one kept when the entry was removed (writeMetadata
+    // refuses a save over a newer one).
+    rev: revisionIn(metadata),
   };
   // Published stays published, exactly as she published it (Evoni, 2026-11-15): sending another look
   // changes nothing on the website. The card says the two differ until she reviews and publishes again.
   if (previous && isObject(previous.site) && previous.site.key) entry.site = previous.site;
+  if (previous && Array.isArray(previous.public_copies)) entry.public_copies = previous.public_copies;
   await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   return view(models, episodeId, entry, sheet);
 }
@@ -462,22 +550,40 @@ async function updateStyleSheetDistribution(models, episodeId, body = {}) {
 }
 
 /**
- * The look strip copied to the public site bucket: { key, sheet_hash }, or
- * { failed: true, sheet_hash } when it cannot be drawn or stored, or null
- * without SITE_PUBLIC_BUCKET (text only).
+ * The look image goes to the public bucket in three steps, so that no copy
+ * is ever there without a record of it (Evoni, 2026-11-16):
+ *
+ *   1. it is drawn (nothing is stored yet);
+ *   2. its exact object key is reserved on the entry's `public_copies`,
+ *      under the row lock and the revision check (reserveLookImage). If the
+ *      entry has changed or been removed, this is refused and nothing is
+ *      copied;
+ *   3. only then is it stored under that key (storeLookImage).
+ *
+ * drawLookImage returns { cfg, buffer }, or { failed: true } when it cannot
+ * be drawn, or null without SITE_PUBLIC_BUCKET (text only).
  */
-async function copyLookImage(models, episodeId, siteKey, sheetHash) {
+async function drawLookImage(models, episodeId) {
   const slots = require('./websiteSlotService');
   const cfg = slots.storageConfig();
   if (!cfg) return null;
   try {
     const out = await module.exports.drawLook(models, episodeId);
-    const key = `${cfg.prefix}/looks/${siteKey}/${crypto.randomUUID()}.png`;
-    await slots.putObject(cfg, key, out.buffer, 'image/png');
-    return { key, sheet_hash: sheetHash || null };
+    return { cfg, buffer: out.buffer };
   } catch (err) {
     console.error(`[StyleSheetDistribution] the look image of episode ${episodeId} could not be copied to the public site:`, err.message);
-    return { failed: true, sheet_hash: sheetHash || null };
+    return { failed: true };
+  }
+}
+
+/** true when the object was stored; false when the storage refused or could not be reached (it may or may not be there). */
+async function storeLookImage(cfg, key, buffer, episodeId) {
+  try {
+    await require('./websiteSlotService').putObject(cfg, key, buffer, 'image/png');
+    return true;
+  } catch (err) {
+    console.error(`[StyleSheetDistribution] the look image of episode ${episodeId} could not be copied to the public site:`, err.message);
+    return false;
   }
 }
 
@@ -557,6 +663,153 @@ function imageCleared(site) {
     && rights.image_key === image.key && (rights.sheet_hash || null) === (image.sheet_hash || null);
 }
 
+// ── Public copies that are no longer shown (Evoni, 2026-11-15) ─────────────
+// When an image stops being shown (she withdraws its rights, publishes the
+// look again, or takes it down), the website's API stops giving its address
+// at once. The copy itself stays in the public bucket: nothing here deletes
+// or moves it, and anyone who has its address can still fetch it until she
+// removes access to it in the storage. So each such copy is recorded on the
+// entry (`public_copies`) with its key and address, and is "pending" until
+// a check of its address finds it is no longer served. It is never called
+// revoked on anyone's say-so. The pose originals are other files and are
+// not touched.
+//
+// A copy's key is reserved here before the image is stored (Evoni,
+// 2026-11-16), so a record can be ahead of the object. `upload` says which:
+//   'reserved'  the key is reserved; whether the object was stored is not known
+//   'failed'    the storage did not confirm the upload (it may still be there)
+//   absent, or 'stored': the object is known to have been stored
+// A reserved or failed copy is "unconfirmed": it is not a known public copy
+// awaiting revocation, and it is never called revoked. A check that finds it
+// served makes it a known copy. Checks that find nothing there, twice, and
+// not while its publish may still be running, mark it 'absent': no object
+// was found, which is not the same as access having been removed.
+const COPY_REASONS = ['rights_withdrawn', 'replaced', 'taken_down', 'reserved'];
+const GONE_STATUSES = [403, 404, 410];
+const RESERVATION_MINUTES = 10;
+const ABSENT_CHECKS = 2;
+const unconfirmed = (c) => c?.upload === 'reserved' || c?.upload === 'failed';
+/** Is the publish that reserved this copy possibly still running? */
+const inFlight = (c, now = Date.now()) => c?.upload === 'reserved' && now - (Date.parse(c.reserved_at || '') || 0) < RESERVATION_MINUTES * 60 * 1000;
+/** Is this copy settled: access checked and gone, or (never confirmed stored) checked and not there? */
+const settled = (c) => c?.revocation?.status === 'verified' || (c?.revocation?.status === 'absent' && unconfirmed(c));
+
+/** Does this stored entry hold an image on the website, or a copy whose access is not yet known to be gone? */
+function hasUnrevokedCopy(entry) {
+  if (!isObject(entry)) return false;
+  const pending = (Array.isArray(entry.public_copies) ? entry.public_copies : []).some((c) => !settled(c));
+  return pending || Boolean(isObject(entry.site) && isObject(entry.site.image) && entry.site.image.key);
+}
+
+/**
+ * The entry about to be saved, with every public copy the stored entry
+ * knows of that this one does not: copies another action recorded since
+ * this one read, and the image another action put on the website, if this
+ * entry no longer shows it. Where both know a copy, the later check stands.
+ */
+function keepPublicCopies(stored, entry) {
+  if (!isObject(stored)) return entry;
+  const checkedAt = (c) => Date.parse(c?.revocation?.checked_at || '') || 0;
+  const byKey = new Map();
+  for (const c of (Array.isArray(stored.public_copies) ? stored.public_copies : [])) if (c && c.key) byKey.set(c.key, c);
+  for (const c of (Array.isArray(entry.public_copies) ? entry.public_copies : [])) {
+    if (!c || !c.key) continue;
+    const known = byKey.get(c.key);
+    if (!known || checkedAt(c) >= checkedAt(known)) byKey.set(c.key, c);
+  }
+  const out = { ...entry, public_copies: [...byKey.values()] };
+  const shown = isObject(stored.site) && isObject(stored.site.image) ? stored.site.image : null;
+  const stillShown = isObject(out.site) && isObject(out.site.image) && out.site.image.key === shown?.key;
+  if (shown?.key && !stillShown) {
+    recordPublicCopy(out, shown, { reason: 'replaced', who: null, at: new Date().toISOString(), rights: stored.site.image_rights });
+  }
+  // The image this entry shows is on the website, not on the list of copies that are not.
+  const showing = isObject(out.site) && isObject(out.site.image) ? out.site.image.key : null;
+  if (showing) out.public_copies = out.public_copies.filter((c) => c.key !== showing);
+  if (!out.public_copies.length) delete out.public_copies;
+  return out;
+}
+
+/**
+ * Add a copy that is no longer shown to the entry's record, once. `image` is
+ * an image that was stored and shown, so a record that only reserved its key
+ * becomes a known copy.
+ */
+function recordPublicCopy(entry, image, { reason, who, at, rights = null } = {}) {
+  if (!isObject(image) || !image.key) return;
+  const list = Array.isArray(entry.public_copies) ? entry.public_copies : [];
+  const known = list.find((c) => c.key === image.key);
+  if (known && !unconfirmed(known)) { entry.public_copies = list; return; }
+  const record = {
+    key: image.key, sheet_hash: image.sheet_hash || null, reason: COPY_REASONS.includes(reason) ? reason : 'replaced',
+    hidden_at: at, hidden_by: who, rights_category: rights?.category || null,
+    revocation: { status: 'pending', checked_at: null, checked_by: null, last_status: null },
+  };
+  entry.public_copies = known ? list.map((c) => (c.key === image.key ? record : c)) : [...list, record];
+}
+
+/**
+ * Reserve a look image's object key on the entry, before the image is
+ * stored. A key already reserved for the same sheet whose upload was never
+ * confirmed is used again, so a publish asked again does not add a record.
+ * Returns the key.
+ */
+function reserveCopy(entry, { prefix, siteKey, sheetHash, who, at, key = null }) {
+  const list = Array.isArray(entry.public_copies) ? entry.public_copies : [];
+  const folder = `${prefix}/looks/${siteKey}/`;
+  const again = key
+    ? list.find((c) => c.key === key)
+    // Any look folder: a first publish whose save failed had not yet saved the look's public key, and the next
+    // try draws another; the object key reserved for the same image is still the one to use.
+    : list.find((c) => unconfirmed(c) && (c.sheet_hash || null) === (sheetHash || null) && String(c.key).startsWith(`${prefix}/looks/`));
+  const useKey = key || (again ? again.key : `${folder}${crypto.randomUUID()}.png`);
+  const record = {
+    key: useKey, sheet_hash: sheetHash || null, reason: 'reserved', upload: 'reserved',
+    reserved_at: at, reserved_by: who, hidden_at: at, hidden_by: who, rights_category: null,
+    revocation: { status: 'pending', checked_at: null, checked_by: null, last_status: null },
+  };
+  entry.public_copies = again ? list.map((c) => (c.key === useKey ? record : c)) : [...list, record];
+  return useKey;
+}
+
+/** A recorded copy as Distribution shows it. `verified` only when a check of its address found it gone. */
+function copyView(c) {
+  const url = require('./websiteSlotService').publicUrl(c.key);
+  const maybe = unconfirmed(c);
+  const verified = !maybe && c.revocation?.status === 'verified';
+  const absent = maybe && c.revocation?.status === 'absent';
+  return {
+    key: c.key, url: url || null, reason: c.reason, hidden_at: c.hidden_at || null, hidden_by: c.hidden_by || null,
+    rights_category: c.rights_category || null,
+    // Was the object stored? 'stored': yes, it is (or was) a public copy. 'reserved': its key was reserved for a
+    // publish and the upload was not confirmed. 'failed': the storage did not confirm the upload.
+    upload: maybe ? c.upload : 'stored',
+    // Four separate facts: her withdrawal, the API, the object, and the check of the object.
+    rights_withdrawn: c.reason === 'rights_withdrawn',
+    api_hidden: true,
+    // 'verified' is only ever said of a copy known to have been stored. An unconfirmed copy is 'unconfirmed'
+    // until checks find nothing at its address ('absent'), which is not a revocation.
+    revocation: verified ? 'verified' : absent ? 'absent' : maybe ? 'unconfirmed' : 'pending',
+    checked_at: c.revocation?.checked_at || null, last_status: c.revocation?.last_status ?? null,
+  };
+}
+
+/** Ask the copy's public address whether it is still served: its HTTP status, or null when it could not be asked. */
+async function fetchStatus(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    // No cache on our side; the CDN may still answer from its own for up to the object's lifetime, which is the point.
+    const res = await fetch(url, { method: 'GET', redirect: 'manual', cache: 'no-store', signal: controller.signal, headers: { Range: 'bytes=0-0' } });
+    return res.status;
+  } catch (err) {
+    console.error('[StyleSheetDistribution] a public copy could not be checked:', err.message);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The look's public image { url, alt }, or null: only an image she cleared (imageCleared). */
 function publicImageOf(site, title) {
   const image = isObject(site.image) ? site.image : null;
@@ -598,16 +851,39 @@ async function publishStyleSheetToSite(models, episodeId, user = null, { links: 
     confirmed_at: at,
     confirmed_by: who,
     sheet_hash: sheet.inputs_hash,
+    // The caption as it is at this publish. The entry's caption is redrafted when another sheet is sent, and is
+    // hers to edit; neither changes the published look until she publishes again.
+    caption: text(entry.caption) || '',
   };
   // The image: only with her declaration that it may be shown, made at this publish. Without one, or with
   // "unknown", nothing is copied to the public bucket and the look is text and links. No earlier image or
   // declaration is carried over: each published image has its own.
   const rights = readImageRights(declared, sheet, who, at);
   if (rights) entry.site.image_rights = rights;
+  // The image this publish replaces (or drops) is no longer shown, and is still in the bucket.
+  recordPublicCopy(entry, previous.image, { reason: 'replaced', who, at, rights: previous.image_rights });
   if (rights && rights.cleared) {
-    const image = await copyLookImage(models, episodeId, entry.site.key, sheet.inputs_hash);
-    if (image) entry.site.image = image;
-    if (image && image.key) rights.image_key = image.key;
+    const sheetHash = sheet.inputs_hash || null;
+    const drawn = await drawLookImage(models, episodeId);
+    if (drawn && drawn.failed) entry.site.image = { failed: true, sheet_hash: sheetHash };
+    else if (drawn) {
+      // Reserve the object's key on the entry as it is stored now, before anything is copied. If the entry has
+      // changed or been removed since it was read, this is refused (409) and no copy is made.
+      const reserved = { ...metadata[KEY] };
+      const key = reserveCopy(reserved, { prefix: drawn.cfg.prefix, siteKey: entry.site.key, sheetHash, who, at });
+      entry.rev = await writeMetadata(models, episodeId, { ...metadata, [KEY]: reserved });
+      reserveCopy(entry, { prefix: drawn.cfg.prefix, siteKey: entry.site.key, sheetHash, who, at, key });
+      if (await storeLookImage(drawn.cfg, key, drawn.buffer, episodeId)) {
+        // Stored: it is the image of this publish. It is shown only once the save below has it with its declaration.
+        entry.site.image = { key, sheet_hash: sheetHash };
+        rights.image_key = key;
+        entry.public_copies = entry.public_copies.filter((c) => c.key !== key);
+      } else {
+        // Not confirmed: the look is text and links, and the reserved record stays, for her to check.
+        entry.site.image = { failed: true, sheet_hash: sheetHash };
+        entry.public_copies = entry.public_copies.map((c) => (c.key === key ? { ...c, upload: 'failed' } : c));
+      }
+    }
   }
   await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   return view(models, episodeId, entry, sheet);
@@ -645,9 +921,78 @@ async function takeDownStyleSheetFromSite(models, episodeId) {
   const entry = isObject(metadata[KEY]) ? { ...metadata[KEY] } : null;
   if (!entry) throw new LookbookError('The style sheet has not been sent to Distribution.', 404, 'NOT_SENT');
   if (entry.site !== undefined) {
+    // Taken down, its image is no longer shown; the copy is still in the bucket.
+    if (isObject(entry.site)) recordPublicCopy(entry, entry.site.image, { reason: 'taken_down', who: null, at: new Date().toISOString(), rights: entry.site.image_rights });
     delete entry.site;
     await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   }
+  return view(models, episodeId, entry, await sheetFor(models, episodeId));
+}
+
+/**
+ * Withdraw the image's rights from a published look, without publishing it
+ * again. The look stays as it is: its products, links, disclosure and
+ * dates. Its image stops being shown at once, by both public reads, and
+ * its copy is recorded for her to remove access to. Asking again changes
+ * nothing. Nothing is deleted or moved.
+ */
+async function withdrawLookImageRights(models, episodeId, user = null) {
+  const metadata = await readMetadata(models.sequelize, episodeId);
+  const entry = isObject(metadata[KEY]) ? { ...metadata[KEY] } : null;
+  if (!entry || !isObject(entry.site) || !entry.site.key) throw new LookbookError('This look is not on the website.', 404, 'NOT_PUBLISHED');
+  const site = { ...entry.site };
+  const rights = isObject(site.image_rights) ? site.image_rights : null;
+  const hasImage = isObject(site.image) && Boolean(site.image.key);
+  // Already withdrawn, or never shown with an image: nothing to do, and nothing is written.
+  if (!hasImage && !(rights && rights.cleared)) return view(models, episodeId, entry, await sheetFor(models, episodeId));
+  const who = user ? String(user.email || user.id || user.sub || '').slice(0, 255) || null : null;
+  const at = new Date().toISOString();
+  if (hasImage) recordPublicCopy(entry, site.image, { reason: 'rights_withdrawn', who, at, rights });
+  delete site.image;
+  if (rights) {
+    site.image_rights = { ...rights, cleared: false, withdrawn: true, withdrawn_at: at, withdrawn_by: who, withdrawn_category: rights.category };
+  }
+  entry.site = site;
+  await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
+  return view(models, episodeId, entry, await sheetFor(models, episodeId));
+}
+
+/**
+ * Check whether a copy that is no longer shown can still be fetched at its
+ * public address, and record what was found. Only a check that finds it
+ * gone (403, 404 or 410) marks it verified; anything else, a copy with no
+ * public address, or a check that could not be made, leaves it pending. A
+ * copy found reachable again after being verified goes back to pending.
+ */
+async function checkPublicCopy(models, episodeId, user = null, { key } = {}) {
+  const metadata = await readMetadata(models.sequelize, episodeId);
+  const entry = isObject(metadata[KEY]) ? { ...metadata[KEY] } : null;
+  if (!entry) throw new LookbookError('The style sheet has not been sent to Distribution.', 404, 'NOT_SENT');
+  const list = Array.isArray(entry.public_copies) ? entry.public_copies : [];
+  const index = list.findIndex((c) => c.key === key);
+  if (typeof key !== 'string' || index < 0) throw new LookbookError('That is not a copy this look has stopped showing.', 404, 'COPY_NOT_FOUND');
+  const url = require('./websiteSlotService').publicUrl(list[index].key);
+  const status = url ? await module.exports.fetchStatus(url) : null;
+  const gone = GONE_STATUSES.includes(status);
+  const who = user ? String(user.email || user.id || user.sub || '').slice(0, 255) || null : null;
+  const checkedAt = new Date().toISOString();
+  entry.public_copies = list.map((c, i) => {
+    if (i !== index) return c;
+    if (!unconfirmed(c)) {
+      return { ...c, revocation: { status: gone ? 'verified' : 'pending', checked_at: checkedAt, checked_by: who, last_status: status } };
+    }
+    // A copy whose upload was never confirmed. Served: it is there, and is now a known public copy.
+    if (status !== null && !gone) {
+      const { upload: _upload, ...known } = c;
+      return { ...known, revocation: { status: 'pending', checked_at: checkedAt, checked_by: who, last_status: status } };
+    }
+    // Not asked (no address, or the network): nothing is learned. Not there: counted, and called absent only
+    // after it was found so more than once, and not while the publish that reserved it may still be running.
+    const count = gone ? (Number(c.revocation?.gone_checks) || 0) + 1 : (Number(c.revocation?.gone_checks) || 0);
+    const absent = gone && count >= ABSENT_CHECKS && !inFlight(c);
+    return { ...c, revocation: { status: absent ? 'absent' : 'pending', checked_at: checkedAt, checked_by: who, last_status: status, gone_checks: count } };
+  });
+  await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   return view(models, episodeId, entry, await sheetFor(models, episodeId));
 }
 
@@ -739,7 +1084,8 @@ async function publicLook(models, key) {
     title,
     published_at: look.site.published_at || null,
     image: publicImageOf(look.site, title),
-    caption: text(look.entry.caption) || '',
+    // The caption she published; a look published before captions were saved with it shows the entry's.
+    caption: typeof look.site.caption === 'string' ? look.site.caption : (text(look.entry.caption) || ''),
   };
   if (Array.isArray(look.site.links)) {
     // The snapshot: every piece, the ones that can no longer be bought shown without a link. Never a 404 for that.
@@ -761,9 +1107,12 @@ async function publicLook(models, key) {
 async function removeStyleSheetFromDistribution(models, episodeId) {
   const metadata = await readMetadata(models.sequelize, episodeId);
   if (metadata[KEY] !== undefined) {
+    // Removing the entry would discard the record of copies still in the public bucket. While a look image is
+    // on the website, or a copy's access is not yet known to be gone, the entry stays (take the look down
+    // first). writeMetadata refuses it under the row's lock (PUBLIC_COPIES_PENDING).
     const next = { ...metadata };
     delete next[KEY];
-    await writeMetadata(models, episodeId, next);
+    await writeMetadata(models, episodeId, next, { removing: metadata[KEY] });
   }
   return { sent: false };
 }
@@ -773,6 +1122,7 @@ module.exports = {
   getStyleSheetDistribution, sendStyleSheetToDistribution, updateStyleSheetDistribution, removeStyleSheetFromDistribution,
   publishStyleSheetToSite, takeDownStyleSheetFromSite, setPublishedLinkAvailability, listPublicLooks, publicLook,
   httpsUrl, snapshotLinks, MATCHES, IMAGE_RIGHTS, CLEARED_RIGHTS, imageCleared,
+  withdrawLookImageRights, checkPublicCopy, fetchStatus, writeMetadata, REV_KEY,
   // The look strip, drawn as the export (styleSheetService); here so a test can stand in for the drawing.
   drawLook: (models, episodeId) => require('./styleSheetService').exportStyleSheet(models, episodeId, 'look'),
 };

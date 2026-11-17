@@ -72,6 +72,9 @@ export const styleSheetDistributionApi = {
   // What goes on the website is what she confirmed of each product (links); the server refuses anything else.
   // image_rights is what she declares of the look image; without a cleared one the look is published as text and links.
   publish: (episodeId, links, imageRights) => api.post(`${distUrl(episodeId)}/site`, { links, image_rights: imageRights }).then((r) => r.data?.data),
+  // Withdraw the look image's rights without publishing again; then check whether a hidden copy can still be fetched.
+  withdrawImage: (episodeId) => api.post(`${distUrl(episodeId)}/site/image/withdraw`).then((r) => r.data?.data),
+  checkCopy: (episodeId, key) => api.post(`${distUrl(episodeId)}/site/image/check`, { key }).then((r) => r.data?.data),
   setLinkAvailable: (episodeId, pieceId, available) => api.patch(`${distUrl(episodeId)}/site/links`, { piece_id: pieceId, available }).then((r) => r.data?.data),
   takeDown: (episodeId) => api.delete(`${distUrl(episodeId)}/site`).then((r) => r.data?.data),
 };
