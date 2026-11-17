@@ -93,11 +93,16 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     for (const sql of sent) expect(sql).toMatch(/^\s*SELECT\b/i);
   });
 
-  test('GET /edit/sources answers any signed-in user; an unknown episode is 404', async () => {
-    const res = await request(app).get(`/api/v1/episodes/${ep}/edit/sources`).set('Authorization', `Bearer ${token}`);
+  // Evoni, 2026-11-16: the edit's reads are an ADMIN's (it answered any signed-in user until then).
+  test('GET /edit/sources answers an ADMIN; a signed-in user who is not one is refused; an unknown episode is 404', async () => {
+    const adminToken = TokenService.generateTokenPair({ id: 'test-b1-admin', email: 'a@b1.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+    const refused = await request(app).get(`/api/v1/episodes/${ep}/edit/sources`).set('Authorization', `Bearer ${token}`);
+    expect(refused.status).toBe(403);
+    expect(refused.body.data).toBeUndefined();
+    const res = await request(app).get(`/api/v1/episodes/${ep}/edit/sources`).set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.data.summary.ready).toBe(1);
-    const none = await request(app).get(`/api/v1/episodes/${uuid()}/edit/sources`).set('Authorization', `Bearer ${token}`);
+    const none = await request(app).get(`/api/v1/episodes/${uuid()}/edit/sources`).set('Authorization', `Bearer ${adminToken}`);
     expect(none.status).toBe(404);
     const anon = await request(app).get(`/api/v1/episodes/${ep}/edit/sources`);
     expect(anon.status).toBe(401);
