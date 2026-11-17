@@ -25,17 +25,20 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 (shouldSkip ? describe.skip : describe)('The Pulse numbers on the story-time curve (Task #2955)', () => {
   const tag = uuid().slice(0, 8);
   const ids = { show: uuid(), locked: uuid(), waiting: uuid(), plain: uuid() };
-  // No token: what the audience reads. Likes and shares are there; the viral flags are the
-  // studio's since 2026-11-15 (services/publicFeedPost) and are read with adminFeed.
+  // Two rules of 2026-11-15 meet here. The viral flags are the studio's (services/publicFeedPost, #3842): a reader
+  // who is not an ADMIN never gets them. And the story moment is the server's (services/readerMoment, #3845): that
+  // reader is kept at the present whatever ?at= says. So the curve at chosen moments is read as an ADMIN (feed),
+  // and the audience is read with no token (audienceFeed) to pin both refusals.
   const read = async (at, token) => {
     const req = request(app).get(`/api/v1/feed-posts?show_id=${ids.show}${at ? `&at=${at}` : ''}`);
     const res = await (token ? req.set('Authorization', `Bearer ${token}`) : req);
     expect(res.status).toBe(200);
     return Object.fromEntries(res.body.data.map((p) => [p.id, p]));
   };
-  const feed = (at) => read(at, null);
+  const audienceFeed = (at) => read(at, null);
   const adminToken = require('../../src/services/tokenService').generateTokenPair({ id: 'test-admin-curve', email: 'evoni@curve.dev', name: 'Evoni', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   const adminFeed = (at) => read(at, adminToken);
+  const feed = adminFeed;
 
   beforeAll(async () => {
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
@@ -60,10 +63,16 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   test('the same post at three moments grows, then settles; viral flags from the shown likes', async () => {
     const at17 = (await adminFeed('ep:1:after_episode'))[ids.locked];
     expect(at17).toMatchObject({ likes: 550, shares: 55, is_viral: true, viral_reach: 1100 });
-    const audience17 = (await feed('ep:1:after_episode'))[ids.locked];
-    expect(audience17).toMatchObject({ likes: 550, shares: 55 });
-    expect(audience17).not.toHaveProperty('is_viral');
-    expect(audience17).not.toHaveProperty('viral_reach');
+    // The audience asks for the same moment and a later one: no episode of this show is released, so the present
+    // is before the post and it is not given, at either; nothing it is given carries a viral flag.
+    for (const asked of ['ep:1:after_episode', 'ep:1:week_later', undefined]) {
+      const audience = await audienceFeed(asked);
+      expect([asked, audience[ids.locked]]).toEqual([asked, undefined]);
+      for (const post of Object.values(audience)) {
+        expect(post).not.toHaveProperty('is_viral');
+        expect(post).not.toHaveProperty('viral_reach');
+      }
+    }
     expect((await feed('ep:1:next_day'))[ids.locked]).toMatchObject({ likes: 850, shares: 85 });
     expect((await adminFeed('ep:1:week_later'))[ids.locked]).toMatchObject({ likes: 1000, shares: 100, is_viral: true, viral_reach: 2000 });
     expect((await feed('ep:1:week_later'))[ids.locked]).toMatchObject({ likes: 1000, shares: 100 });

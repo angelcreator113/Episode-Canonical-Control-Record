@@ -41,7 +41,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   };
 
   beforeAll(async () => {
-    token = TokenService.generateTokenPair({ id: 'test-user-lala-feed', email: 'evoni@lala-feed.dev', name: 'Lala Feed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    // These reads name story moments, later ones and none (the director's view): an ADMIN's since 2026-11-15, when the
+    // server began deciding the moment anyone else reads at (tests/integration/pulseReaderStoryMoment).
+    token = TokenService.generateTokenPair({ id: 'test-user-lala-feed', email: 'evoni@lala-feed.dev', name: 'Lala Feed', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at)
       VALUES (:show, :name, :slug, CAST(:meta AS jsonb), NOW(), NOW())`,
     { show: ids.show, name: `Feed ${tag}`, slug: `feed-${tag}`, meta: JSON.stringify({ lala_home: { address: '246 Olddy Paveway Ln', neighbourhood: null, city: 'Echo Park' } }) });

@@ -107,7 +107,7 @@ router.get('/latest', async (req, res) => {
     const { PulseFit, sequelize } = models;
     const clock = require('../services/storyClock');
     let at;
-    try { at = await clock.resolveAt(models, showId, req.query.at ?? 'present'); } catch (err) {
+    try { at = await require('../services/readerMoment').momentFor(req, models, showId, req.query.at ?? 'present'); } catch (err) {
       if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
       throw err;
     }

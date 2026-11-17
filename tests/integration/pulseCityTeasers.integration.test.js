@@ -44,7 +44,9 @@ const CITIES = [
     { id: uuid(), data: JSON.stringify(data) });
 
   beforeAll(async () => {
-    token = TokenService.generateTokenPair({ id: 'test-user-city-teasers', email: 'evoni@cities.dev', name: 'Cities', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    // These reads name story moments, later ones and none (the director's view): an ADMIN's since 2026-11-15, when the
+    // server began deciding the moment anyone else reads at (tests/integration/pulseReaderStoryMoment).
+    token = TokenService.generateTokenPair({ id: 'test-user-city-teasers', email: 'evoni@cities.dev', name: 'Cities', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     const [[row]] = await run(`SELECT data FROM page_content WHERE page_name = 'world_infrastructure' AND constant_key = 'DREAM_CITIES'`);
     saved = row ? row.data : undefined;
     await setList(CITIES);
