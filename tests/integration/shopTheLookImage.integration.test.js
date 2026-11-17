@@ -40,6 +40,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const profiles = [];
   const saved = {};
   let stored;
+  let cached;
   let drawn;
   const PNG = Buffer.from('look-strip-png');
 
@@ -53,8 +54,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     process.env.SITE_PUBLIC_BUCKET = 'lalaverse-site-test';
     process.env.SITE_PUBLIC_CDN = 'site.cdn.test';
     stored = [];
+    cached = [];
     drawn = [];
-    jest.spyOn(slots, 'putObject').mockImplementation(async (cfg, key, buffer, type) => { stored.push({ bucket: cfg.bucket, key, buffer, type }); });
+    jest.spyOn(slots, 'putObject').mockImplementation(async (cfg, key, buffer, type, options) => { stored.push({ bucket: cfg.bucket, key, buffer, type }); cached.push(options?.cacheControl); });
     jest.spyOn(distribution, 'drawLook').mockImplementation(async (m, episodeId) => { drawn.push(episodeId); return { buffer: PNG, type: 'image/png', ext: 'png' }; });
   });
 
@@ -142,6 +144,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ bucket: 'lalaverse-site-test', type: 'image/png', buffer: PNG });
     expect(stored[0].key).toMatch(new RegExp(`^site-public/looks/${site.key}/[0-9a-f-]{36}\\.png$`));
+    // One hour in caches, not the site media's year, and not "immutable" (Evoni, 2026-11-15).
+    expect(cached).toEqual(['public, max-age=3600']);
 
     const image = { url: `https://site.cdn.test/${stored[0].key}`, alt: 'The look: Episode 1: Wearable Experiments' };
     expect((await publicLook(site.key)).image).toEqual(image);

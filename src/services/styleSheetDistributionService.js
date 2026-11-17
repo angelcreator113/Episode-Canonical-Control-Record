@@ -579,7 +579,10 @@ async function drawLookImage(models, episodeId) {
 /** true when the object was stored; false when the storage refused or could not be reached (it may or may not be there). */
 async function storeLookImage(cfg, key, buffer, episodeId) {
   try {
-    await require('./websiteSlotService').putObject(cfg, key, buffer, 'image/png');
+    // One hour in caches, not a year: see websiteSlotService CACHE_LOOK_IMAGE (#3856), on the one upload this
+    // service makes (#3858 moved it here, after the key is reserved).
+    const slots = require('./websiteSlotService');
+    await slots.putObject(cfg, key, buffer, 'image/png', { cacheControl: slots.CACHE_LOOK_IMAGE });
     return true;
   } catch (err) {
     console.error(`[StyleSheetDistribution] the look image of episode ${episodeId} could not be copied to the public site:`, err.message);
