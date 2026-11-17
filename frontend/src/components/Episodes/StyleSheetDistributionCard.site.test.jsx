@@ -20,8 +20,17 @@ const LINKS = [{ piece_id: 'w1', label: 'Pump', retailer: null, url: 'https://sh
 const entry = (over = {}) => ({
   sent: true, sent_at: '2026-10-10T20:00:00.000Z', out_of_date: false, items: [], caption: 'Hi', caption_max: 2200,
   include_shop_links: true, shop_links: LINKS, disclosure: null, disclosure_locked: false, post_text: 'Hi',
-  site: { published: false }, ...over,
+  site: { published: false },
+  // What she reviews before publishing: the piece (the studio's name for it) and its real product as Wardrobe has it.
+  site_review: [{ piece_id: 'w1', piece: 'Crimson Pump', category: 'shoes', real_brand: 'Maison Rouge', real_product_name: 'Satin Ballet Pump', retailer: 'Nordstrom', url: 'https://shop.example/pump', affiliate: false, missing: [] }],
+  ...over,
 });
+const CONFIRMED = [{ piece_id: 'w1', real_brand: 'Maison Rouge', real_product_name: 'Satin Ballet Pump', retailer: 'Nordstrom', url: 'https://shop.example/pump', affiliate: false, match: 'exact', confirmed: true }];
+/** Tick "I opened this link and it is the right product" on every product in the review, then publish. */
+const confirmAndPublish = (site, name = 'Put on the website') => {
+  for (const box of site.getAllByRole('checkbox', { name: 'I opened this link and it is the right product' })) fireEvent.click(box);
+  fireEvent.click(site.getByRole('button', { name }));
+};
 const PUBLISHED = { published: true, published_at: '2026-10-12T20:00:00.000Z', key: 'Ab3_k9-Zq1Lm', path: '/shop-the-look/Ab3_k9-Zq1Lm', showing: true };
 
 const renderCard = async (data) => {
@@ -51,8 +60,13 @@ describe('Show on the website', () => {
     api.post.mockResolvedValue({ data: { data: entry({ site: PUBLISHED }) } });
     const site = await renderCard(entry());
     expect(theSwitch(site).disabled).toBe(false);
+    // The switch opens her review; nothing is published until she has checked each product.
     fireEvent.click(theSwitch(site));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL));
+    expect(api.post).not.toHaveBeenCalled();
+    expect(site.getByRole('button', { name: 'Put on the website' }).disabled).toBe(true);
+    expect(site.getByTestId('ssd-review-blocker').textContent).toMatch(/Crimson Pump: open the link/);
+    confirmAndPublish(site);
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL, { links: CONFIRMED }));
     const link = await site.findByRole('link', { name: '/shop-the-look/Ab3_k9-Zq1Lm' });
     expect(link.getAttribute('href')).toBe('/shop-the-look/Ab3_k9-Zq1Lm');
     expect(theSwitch(site).checked).toBe(true);
@@ -79,7 +93,10 @@ describe('Show on the website', () => {
     api.post.mockRejectedValue({ response: { status: 409, data: { error: "None of the look's pieces has a real-world link yet.", code: 'NO_LINKS' } } });
     const site = await renderCard(entry());
     fireEvent.click(theSwitch(site));
+    confirmAndPublish(site);
     expect((await screen.findByRole('alert')).textContent).toMatch(/real-world link/);
+    // Refused: the review stays open with what she entered.
+    expect(site.getByTestId('ssd-site-review')).toBeTruthy();
   });
 
   test('the look image: on the site says nothing; failed or none says so and publishing again tries (Task 3120)', async () => {
@@ -91,7 +108,8 @@ describe('Show on the website', () => {
     const failed = await renderCard(entry({ site: { ...PUBLISHED, image: 'failed' } }));
     expect(failed.getByText('The look image could not be copied to the website.')).toBeTruthy();
     fireEvent.click(failed.getByRole('button', { name: 'Try the look image again' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL));
+    confirmAndPublish(failed, 'Publish again');
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL, { links: CONFIRMED }));
     await waitFor(() => expect(failed.queryByTestId('ssd-site-image')).toBeNull());
     expect(theSwitch(failed).checked).toBe(true);
     cleanup();
@@ -109,5 +127,62 @@ describe('Show on the website', () => {
     const out = await renderCard(entry({ site: { ...PUBLISHED, released: true } }));
     expect(out.getByRole('link', { name: '/shop-the-look/Ab3_k9-Zq1Lm' })).toBeTruthy();
     expect(out.queryByTestId('ssd-site-waiting')).toBeNull();
+  });
+  test('the review: a product needs its real brand, product, retailer, an https link and her tick; a piece left out is not sent', async () => {
+    api.post.mockResolvedValue({ data: { data: entry({ site: PUBLISHED }) } });
+    const two = entry({ site_review: [
+      ...entry().site_review,
+      { piece_id: 'w2', piece: 'Bloom Studs', category: 'jewelry', real_brand: null, real_product_name: null, retailer: null, url: null, affiliate: false, missing: ['real_brand', 'real_product_name', 'retailer', 'url'] },
+    ] });
+    const site = await renderCard(two);
+    fireEvent.click(theSwitch(site));
+    const pump = within(site.getByTestId('ssd-review-w1'));
+    const studs = within(site.getByTestId('ssd-review-w2'));
+    // The piece with no product starts left out: no fields, nothing made up for it.
+    expect(studs.getByRole('checkbox', { name: 'It can be bought' }).checked).toBe(false);
+    expect(studs.queryByLabelText('Link (https)')).toBeNull();
+
+    fireEvent.change(pump.getByLabelText('Link (https)'), { target: { value: 'http://shop.example/pump' } });
+    expect(site.getByTestId('ssd-review-blocker').textContent).toMatch(/must start with https/);
+    fireEvent.change(pump.getByLabelText('Link (https)'), { target: { value: 'https://zappos.example/felicia' } });
+    fireEvent.change(pump.getByLabelText('Real brand'), { target: { value: '' } });
+    expect(site.getByTestId('ssd-review-blocker').textContent).toMatch(/add the real brand/);
+    fireEvent.change(pump.getByLabelText('Real brand'), { target: { value: 'Sam Edelman' } });
+    fireEvent.change(pump.getByLabelText('This product is'), { target: { value: 'similar' } });
+    fireEvent.click(pump.getByRole('checkbox', { name: 'I opened this link and it is the right product' }));
+    // Changing a product after ticking un-ticks it: she confirms what is sent.
+    fireEvent.change(pump.getByLabelText('Retailer'), { target: { value: 'Zappos' } });
+    expect(site.getByRole('button', { name: 'Put on the website' }).disabled).toBe(true);
+    confirmAndPublish(site);
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL, { links: [
+      { piece_id: 'w1', real_brand: 'Sam Edelman', real_product_name: 'Satin Ballet Pump', retailer: 'Zappos', url: 'https://zappos.example/felicia', affiliate: false, match: 'similar', confirmed: true },
+    ] }));
+  });
+
+  test('published: what differs is said, with the review again; a product is marked no longer available, and back', async () => {
+    const links = [
+      { piece_id: 'w1', label: 'Sam Edelman Felicia Flat', real_brand: 'Sam Edelman', real_product_name: 'Felicia Flat', retailer: 'Zappos', url: 'https://zappos.example/felicia', affiliate: false, match: 'similar', status: 'available', available: true },
+      { piece_id: 'w2', label: 'Jewelry', real_brand: null, real_product_name: null, retailer: null, url: null, affiliate: false, match: null, status: 'unavailable', available: false },
+    ];
+    api.patch.mockResolvedValue({ data: { data: entry({ site: { ...PUBLISHED, links: [{ ...links[0], status: 'unavailable', available: false }, links[1]], differs: [] } }) } });
+    const site = await renderCard(entry({ site: { ...PUBLISHED, links, differs: ['pieces', 'image'] } }));
+    expect(site.getByTestId('ssd-site-differs').textContent).toMatch(/still shows the look as you published it\. The look has different pieces now\. The image is of an earlier sheet\./);
+    const list = within(site.getByTestId('ssd-site-links'));
+    expect(list.getByText('Similar')).toBeTruthy();
+    // The piece published without a product has nothing to switch.
+    expect(list.getAllByRole('button')).toHaveLength(1);
+    fireEvent.click(list.getByRole('button', { name: 'Mark as no longer available' }));
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith(`${SITE_URL}/links`, { piece_id: 'w1', available: false }));
+    expect(await site.findByRole('button', { name: 'Available again' })).toBeTruthy();
+    expect(site.queryByTestId('ssd-site-differs')).toBeNull();
+
+    // The review starts from what is published, unconfirmed.
+    cleanup();
+    const again = await renderCard(entry({ site: { ...PUBLISHED, links, differs: ['links'] } }));
+    fireEvent.click(again.getByRole('button', { name: 'Review and publish again' }));
+    const pump = within(again.getByTestId('ssd-review-w1'));
+    expect(pump.getByLabelText('Real brand').value).toBe('Sam Edelman');
+    expect(pump.getByLabelText('This product is').value).toBe('similar');
+    expect(pump.getByRole('checkbox', { name: 'I opened this link and it is the right product' }).checked).toBe(false);
   });
 });

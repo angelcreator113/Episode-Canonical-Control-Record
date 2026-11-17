@@ -93,6 +93,15 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     return { ...ids, pump: pump.id, studs: studs.id };
   }
   const send = (ep, includeShopLinks = true) => as(admin, request(app).post(distUrl(ep))).send({ include_shop_links: includeShopLinks });
+  // What she confirms when she publishes: each piece that has a link, with its real brand, product, retailer,
+  // address, whether the link is an affiliate's and whether it is the piece itself. `over` corrects a piece by id.
+  const confirmAll = async (ep, over = {}) => ((await as(admin, request(app).get(distUrl(ep)))).body.data.site_review || [])
+    .filter((p) => p.url)
+    .map((p) => ({
+      piece_id: p.piece_id, real_brand: p.real_brand || 'Bloom Atelier', real_product_name: p.real_product_name || 'Enamel Stud Earrings',
+      retailer: p.retailer || 'Etsy', url: p.url, affiliate: p.affiliate, match: 'exact', confirmed: true, ...(over[p.piece_id] || {}),
+    }));
+  const publish = async (ep, over = {}) => as(admin, request(app).post(siteUrl(ep))).send({ links: await confirmAll(ep, over) });
   const publicList = async () => (await request(app).get('/api/v1/public/looks')).body.looks;
 
   it('publish and take down need an ADMIN; publish needs the sheet sent, links included, and a link', async () => {
@@ -100,22 +109,22 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await request(app).post(siteUrl(ids.ep))).status).toBe(401);
     expect((await as(editor, request(app).post(siteUrl(ids.ep)))).status).toBe(403);
     expect((await as(editor, request(app).delete(siteUrl(ids.ep)))).status).toBe(403);
-    const notSent = await as(admin, request(app).post(siteUrl(ids.ep)));
+    const notSent = await publish(ids.ep);
     expect([notSent.status, notSent.body.code]).toEqual([404, 'NOT_SENT']);
     expect((await send(ids.ep, false)).status).toBe(200);
-    const noLinks = await as(admin, request(app).post(siteUrl(ids.ep)));
+    const noLinks = await publish(ids.ep);
     expect([noLinks.status, noLinks.body.code]).toEqual([409, 'NO_SHOP_LINKS']);
 
     const bare = await seed({ bare: true });
     expect((await send(bare.ep)).status).toBe(200);
-    const none = await as(admin, request(app).post(siteUrl(bare.ep)));
+    const none = await publish(bare.ep);
     expect([none.status, none.body.code]).toEqual([409, 'NO_LINKS']);
   });
 
   it('a published look is on the website: links live, the disclosure first, no ids and no prices', async () => {
     const ids = await seed();
     expect((await send(ids.ep)).body.data.site).toEqual({ published: false });
-    const res = await as(admin, request(app).post(siteUrl(ids.ep)));
+    const res = await publish(ids.ep);
     expect(res.status).toBe(200);
     const { site } = res.body.data;
     expect(site).toMatchObject({ published: true, showing: true });
@@ -133,9 +142,12 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(one.body.look).toMatchObject({ key: site.key, title: 'Episode 1: Wearable Experiments', disclosure: DISCLOSURE });
     expect(one.body.look.caption.length).toBeGreaterThan(0);
     expect(one.body.look.links).toEqual([
-      { label: 'Maison Rouge Satin Ballet Pump', retailer: 'Nordstrom', url: 'https://shop.example/pump', affiliate: false },
-      { label: 'Crimson Bloom Enamel Stud Earrings', retailer: null, url: 'https://aff.example/studs?ref=lala', affiliate: true },
+      { label: 'Maison Rouge Satin Ballet Pump', retailer: 'Nordstrom', url: 'https://shop.example/pump', affiliate: false, match: 'exact', available: true },
+      // The studs had no real brand or product in the wardrobe: she gave them when she confirmed. The studio's
+      // own name for the piece ("Crimson Bloom Enamel Stud Earrings") is never the website's label (Evoni, 2026-11-15).
+      { label: 'Bloom Atelier Enamel Stud Earrings', retailer: 'Etsy', url: 'https://aff.example/studs?ref=lala', affiliate: true, match: 'exact', available: true },
     ]);
+    expect(JSON.stringify(one.body)).not.toMatch(/Crimson/);
     const body = JSON.stringify(one.body);
     for (const id of [ids.ep, ids.show, ids.pump, ids.studs, ids.event]) expect(body).not.toContain(id);
     // The prices never leave; the publish time and the random key are left
@@ -143,17 +155,21 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const { published_at: _when, key: _key, ...rest } = one.body.look;
     expect(JSON.stringify(rest)).not.toMatch(/price|128|420/);
 
-    // Read live: a piece's link edited after publishing shows at once.
+    // A snapshot (Evoni, 2026-11-15): a piece's link edited after publishing changes nothing on the website;
+    // Distribution says the two differ, and publishing again after her review updates it.
     await run('UPDATE wardrobe SET real_product_url = :u WHERE id = :id', { u: 'https://shop.example/pump-2', id: ids.pump });
     const again = await request(app).get(`/api/v1/public/looks/${site.key}`);
-    expect(again.body.look.links[0].url).toBe('https://shop.example/pump-2');
+    expect(again.body.look.links[0].url).toBe('https://shop.example/pump');
+    expect((await as(admin, request(app).get(distUrl(ids.ep)))).body.data.site.differs).toEqual(['links']);
+    expect((await publish(ids.ep)).body.data.site.differs).toEqual([]);
+    expect((await request(app).get(`/api/v1/public/looks/${site.key}`)).body.look.links[0].url).toBe('https://shop.example/pump-2');
   });
 
   it('publishing again and sending again keep the key; links off hides it; take down and remove are a 404', async () => {
     const ids = await seed();
     await send(ids.ep);
-    const { key } = (await as(admin, request(app).post(siteUrl(ids.ep)))).body.data.site;
-    expect((await as(admin, request(app).post(siteUrl(ids.ep)))).body.data.site.key).toBe(key);
+    const { key } = (await publish(ids.ep)).body.data.site;
+    expect((await publish(ids.ep)).body.data.site.key).toBe(key);
     expect((await send(ids.ep)).body.data.site).toMatchObject({ published: true, key, showing: true });
 
     const off = await as(admin, request(app).patch(distUrl(ids.ep))).send({ include_shop_links: false });
@@ -168,10 +184,158 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await request(app).get(`/api/v1/public/looks/${key}`)).status).toBe(404);
     expect((await publicList()).map((l) => l.key)).not.toContain(key);
 
-    const key2 = (await as(admin, request(app).post(siteUrl(ids.ep)))).body.data.site.key;
+    const key2 = (await publish(ids.ep)).body.data.site.key;
     expect((await request(app).get(`/api/v1/public/looks/${key2}`)).status).toBe(200);
     expect((await as(admin, request(app).delete(distUrl(ids.ep)))).status).toBe(200);
     expect((await request(app).get(`/api/v1/public/looks/${key2}`)).status).toBe(404);
+  });
+
+  describe('the published look is what she confirmed, and stays that (Evoni, 2026-11-15)', () => {
+    let ipN = 0;
+    const from = (r) => { ipN += 1; return r.set('X-Forwarded-For', `198.51.114.${(ipN % 250) + 1}`); };
+    const look = async (key) => (await from(request(app).get(`/api/v1/public/looks/${key}`)));
+    const dist = async (ep) => (await as(admin, from(request(app).get(distUrl(ep))))).body.data;
+    const setLink = (ep, body) => as(admin, from(request(app).patch(`${siteUrl(ep)}/links`))).send(body);
+    let ids;
+    let key;
+    beforeAll(async () => {
+      ids = await seed();
+      expect((await send(ids.ep)).status).toBe(200);
+    });
+
+    it('nothing is published without her confirmation of each product; a refusal publishes nothing', async () => {
+      const post = (links) => as(admin, from(request(app).post(siteUrl(ids.ep)))).send(links === undefined ? {} : { links });
+      const good = await confirmAll(ids.ep);
+      const one = (over) => [{ ...good[0], ...over }, good[1]];
+      const cases = [
+        [undefined, null],
+        [one({ confirmed: false }), 'not_confirmed'],
+        [one({ real_brand: ' ' }), 'real_brand'],
+        [one({ real_product_name: '' }), 'real_product_name'],
+        [one({ retailer: null }), 'retailer'],
+        [one({ url: 'http://shop.example/pump' }), 'https_url'],
+        [one({ url: 'javascript:alert(1)' }), 'https_url'],
+        [one({ url: 'https://user:pw@shop.example/pump' }), 'https_url'],
+        [one({ url: 'not an address' }), 'https_url'],
+        [one({ match: 'close enough' }), 'match'],
+        [one({ affiliate: 'yes' }), 'affiliate'],
+        [[...good, { ...good[0], piece_id: uuid() }], 'not_in_look'],
+        [[good[0], good[0]], 'listed_twice'],
+      ];
+      for (const [links, problem] of cases) {
+        const res = await post(links);
+        expect([problem, res.status, res.body.code]).toEqual([problem, 400, 'LINKS_NOT_CONFIRMED']);
+        if (problem) expect(JSON.stringify(res.body.details.pieces)).toContain(problem);
+      }
+      // Every piece left out: nothing to buy, nothing published.
+      const none = await post([]);
+      expect([none.status, none.body.code]).toEqual([409, 'NO_LINKS']);
+      expect((await dist(ids.ep)).site).toEqual({ published: false });
+    });
+
+    it('a similar alternative is hers to give and is labelled; a piece she leaves out is shown without a link', async () => {
+      const [pump] = await confirmAll(ids.ep);
+      const res = await as(admin, from(request(app).post(siteUrl(ids.ep)))).send({ links: [{
+        ...pump, real_brand: 'Sam Edelman', real_product_name: 'Felicia Ballet Flat', retailer: 'Zappos', url: 'https://zappos.example/felicia', affiliate: false, match: 'similar',
+      }] });
+      expect(res.status).toBe(200);
+      key = res.body.data.site.key;
+      const shown = (await look(key)).body.look;
+      expect(shown.links).toEqual([
+        { label: 'Sam Edelman Felicia Ballet Flat', retailer: 'Zappos', url: 'https://zappos.example/felicia', affiliate: false, match: 'similar', available: true },
+        { label: 'Jewelry', retailer: null, url: null, affiliate: false, match: null, available: false },
+      ]);
+      expect(shown.archive).toBe(false);
+      expect(JSON.stringify(shown)).not.toMatch(/Crimson|Maison Rouge|shop\.example|aff\.example/);
+    });
+
+    it('editing, removing or replacing a piece, or sending another look, changes nothing on the website', async () => {
+      const before = (await look(key)).body.look;
+      await run(`UPDATE wardrobe SET real_brand = 'Changed', real_product_name = 'Changed', real_retailer = 'Changed',
+                   real_product_url = 'https://changed.example/x', affiliate_url = 'https://changed.example/aff', name = 'Changed name' WHERE id = :pump`, ids);
+      expect((await look(key)).body.look).toEqual(before);
+      await run('UPDATE wardrobe SET deleted_at = NOW() WHERE id = :studs', ids);
+      expect((await look(key)).body.look).toEqual(before);
+      expect((await dist(ids.ep)).site.differs).toEqual(expect.arrayContaining(['pieces']));
+      await run('UPDATE wardrobe SET deleted_at = NULL WHERE id = :studs', ids);
+
+      // Another look, approved and sent: the website keeps the one she published.
+      expect((await as(admin, request(app).post(`/api/v1/episodes/${ids.ep}/style-sheet/reopen`))).status).toBe(200);
+      await run('DELETE FROM episode_wardrobe WHERE episode_id = :ep AND wardrobe_id = :studs', ids);
+      expect((await as(admin, request(app).post(`/api/v1/episodes/${ids.ep}/style-sheet/approve`))).status).toBe(200);
+      const resent = await send(ids.ep);
+      expect(resent.status).toBe(200);
+      expect(resent.body.data.site).toMatchObject({ published: true, key });
+      expect(resent.body.data.site.differs).toEqual(expect.arrayContaining(['pieces']));
+      expect((await look(key)).body.look).toEqual(before);
+    });
+
+    it('a product that can no longer be bought: the look stays up, the piece stays shown, its link is gone', async () => {
+      expect((await request(app).patch(`${siteUrl(ids.ep)}/links`).send({ piece_id: ids.pump, available: false })).status).toBe(401);
+      expect((await as(editor, request(app).patch(`${siteUrl(ids.ep)}/links`)).send({ piece_id: ids.pump, available: false })).status).toBe(403);
+      expect((await setLink(ids.ep, { piece_id: ids.pump, available: 'no' })).body.code).toBe('BAD_AVAILABLE');
+      expect((await setLink(ids.ep, { piece_id: uuid(), available: false })).body.code).toBe('PIECE_NOT_PUBLISHED');
+
+      const off = await setLink(ids.ep, { piece_id: ids.pump, available: false });
+      expect(off.status).toBe(200);
+      const archived = await look(key);
+      // Never a 404 for this: every piece is still there, none with a link, and no disclosure with nothing to buy.
+      expect(archived.status).toBe(200);
+      expect(archived.body.look.archive).toBe(true);
+      expect(archived.body.look.disclosure).toBeNull();
+      expect(archived.body.look.links).toEqual([
+        { label: 'Sam Edelman Felicia Ballet Flat', retailer: null, url: null, affiliate: false, match: 'similar', available: false },
+        { label: 'Jewelry', retailer: null, url: null, affiliate: false, match: null, available: false },
+      ]);
+      expect(JSON.stringify(archived.body)).not.toContain('zappos.example');
+      expect((await publicList()).map((l) => l.key)).toContain(key);
+
+      // Back in stock: the same product, the same link. A piece published without a product needs a review.
+      expect((await setLink(ids.ep, { piece_id: ids.studs, available: true })).body.code).toBe('NO_PRODUCT');
+      expect((await setLink(ids.ep, { piece_id: ids.pump, available: true })).status).toBe(200);
+      expect((await look(key)).body.look.links[0]).toMatchObject({ url: 'https://zappos.example/felicia', available: true });
+    });
+
+    it('the disclosure is saved with the look, and is for affiliate links only: Amazon\'s sentence for an Amazon affiliate link', async () => {
+      const fresh = await seed();
+      await send(fresh.ep);
+      // The pump: a plain Amazon link, no affiliate. The studs: left out. Nothing to disclose.
+      const plain = await as(admin, from(request(app).post(siteUrl(fresh.ep)))).send({ links: (await confirmAll(fresh.ep))
+        .filter((l) => l.piece_id === fresh.pump).map((l) => ({ ...l, url: 'https://www.amazon.com/dp/B000TEST', retailer: 'Amazon', affiliate: false })) });
+      expect(plain.status).toBe(200);
+      const { key: k } = plain.body.data.site;
+      expect((await look(k)).body.look.disclosure).toBeNull();
+      // The same link as an affiliate's: both sentences.
+      const aff = await publish(fresh.ep, { [fresh.pump]: { url: 'https://www.amazon.com/dp/B000TEST?tag=lala-20', retailer: 'Amazon', affiliate: true } });
+      expect(aff.status).toBe(200);
+      const shown = (await look(k)).body.look;
+      expect(shown.disclosure).toBe(`${DISCLOSURE} As an Amazon Associate I earn from qualifying purchases.`);
+      // The piece's address changed in the wardrobe: the published disclosure and link stay.
+      await run(`UPDATE wardrobe SET real_product_url = 'https://shop.example/elsewhere', affiliate_url = NULL WHERE id = :pump`, fresh);
+      expect((await look(k)).body.look.disclosure).toBe(shown.disclosure);
+      // That affiliate product no longer available, the other affiliate link still is: the affiliate sentence alone.
+      expect((await setLink(fresh.ep, { piece_id: fresh.pump, available: false })).status).toBe(200);
+      expect((await look(k)).body.look.disclosure).toBe(DISCLOSURE);
+    });
+
+    it('a look published before products were confirmed still shows, from its pieces, and says it needs a review', async () => {
+      const old = await seed();
+      await send(old.ep);
+      const { key: oldKey } = (await publish(old.ep)).body.data.site;
+      // As such a look is stored: its pieces, no snapshot.
+      const [[row]] = await run('SELECT distribution_metadata FROM episodes WHERE id = :ep', old);
+      const meta = typeof row.distribution_metadata === 'string' ? JSON.parse(row.distribution_metadata) : row.distribution_metadata;
+      const { links: _l, disclosure: _d, confirmed_at: _a, confirmed_by: _b, sheet_hash: _h, ...legacy } = meta.style_sheet.site;
+      meta.style_sheet.site = legacy;
+      await models.Episode.update({ distribution_metadata: meta }, { where: { id: old.ep } });
+      const shown = await look(oldKey);
+      expect(shown.status).toBe(200);
+      expect(shown.body.look.links.map((l) => l.url)).toEqual(['https://shop.example/pump', 'https://aff.example/studs?ref=lala']);
+      expect((await dist(old.ep)).site.differs).toEqual(['no_snapshot']);
+      expect((await setLink(old.ep, { piece_id: old.pump, available: false })).body.code).toBe('NO_SNAPSHOT');
+      // Reviewed and published again, it is a snapshot like any other.
+      expect((await publish(old.ep)).body.data.site.differs).toEqual([]);
+    });
   });
 
   describe('the website shows a look only once its episode is released (Evoni, 2026-11-15)', () => {
@@ -191,7 +355,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       b = await seed({ status: 'draft' });
       for (const ids of [a, b]) {
         expect((await send(ids.ep)).status).toBe(200);
-        const res = await as(admin, request(app).post(siteUrl(ids.ep)));
+        const res = await publish(ids.ep);
         expect(res.status).toBe(200);
         expect(res.body.data.site).toMatchObject({ published: true, showing: true, released: false });
         ids.key = res.body.data.site.key;

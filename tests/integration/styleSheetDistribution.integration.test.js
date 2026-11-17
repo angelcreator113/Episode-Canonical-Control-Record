@@ -153,10 +153,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(edited.body.data).toMatchObject({ caption: 'Studio night.', disclosure: DISCLOSURE });
     expect(edited.body.data.post_text.startsWith(`${DISCLOSURE}\n\nStudio night.\n\n`)).toBe(true);
 
-    // No affiliate link left: the disclosure stays while links are included (Task #3170).
+    // No affiliate link left: nothing to disclose, and the post says nothing of affiliates (Evoni, 2026-11-15;
+    // before, the sentence stayed whenever links were included).
     await run('UPDATE wardrobe SET affiliate_url = NULL WHERE id = :id', { id: ids.studs });
     const plain = (await asAdmin(request(app).get(distUrl(ids.ep)))).body.data;
-    expect(plain).toMatchObject({ disclosure: DISCLOSURE, disclosure_locked: true });
+    expect(plain).toMatchObject({ disclosure: null, disclosure_locked: false });
+    expect(plain.post_text.startsWith('Studio night.\n\n')).toBe(true);
+    expect(plain.post_text).not.toContain('affiliate');
     expect(plain.post_text).toContain('Crimson Bloom Enamel Stud Earrings: https://shop.example/studs');
 
     // An Amazon link: the Amazon Associates sentence follows the affiliate one, locked.
