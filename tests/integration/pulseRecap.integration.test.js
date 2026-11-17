@@ -98,9 +98,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const again = await as(admin, request(app).post('/api/v1/pulse-recaps/build')).send({ show_id: ids.show, week_start: WEEK });
     expect(again.status).toBe(200);
     expect(again.body).toMatchObject({ created: false, recap: { id: recapId } });
-    const list = await as(editor, request(app).get(`/api/v1/pulse-recaps?show_id=${ids.show}`));
+    const list = await as(admin, request(app).get(`/api/v1/pulse-recaps?show_id=${ids.show}`));
     expect(list.body.recaps.map((r) => r.id)).toEqual([recapId]);
-    expect((await as(editor, request(app).get(`/api/v1/pulse-recaps/${recapId}/candidates`))).body.posts).toHaveLength(3);
+    expect((await as(admin, request(app).get(`/api/v1/pulse-recaps/${recapId}/candidates`))).body.posts).toHaveLength(3);
   });
 
   test("a draft is not public; Evoni edits it (live posts of the show only) and publishes it", async () => {
@@ -171,5 +171,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(made).toHaveLength(1);
     expect(made[0].post_ids).toEqual([p.nextweek]);
     expect((await recaps.tick(models, later)).filter((r) => r.show_id === ids.show)).toEqual([]);
+  });
+  test("The Pulse's production reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/pulse-recaps?show_id=00000000-0000-4000-8000-000000000000`).set('Authorization', `Bearer ${editor}`);
+    expect(res.status).toBe(403);
   });
 });
