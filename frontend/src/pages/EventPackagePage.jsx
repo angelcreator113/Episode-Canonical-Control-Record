@@ -149,6 +149,7 @@ import EventFlowHeader from '../components/EventPackage/EventFlowHeader';
 // Where the event goes next (Evoni, 2026-10-25): beat 14, the episode, Fill what's missing, the follow-up, defaults and clashes.
 import EventFlowStrip from '../components/EventPackage/EventFlowStrip';
 import EventFieldHints from '../components/EventPackage/EventFieldHints';
+import EventScheduleContinuity from '../components/EventPackage/EventScheduleContinuity';
 import StartCopiesPreview from '../components/EventPackage/StartCopiesPreview';
 import useEventActions from './eventPackage/useEventActions';
 import useFillMissing from './eventPackage/useFillMissing';
@@ -518,6 +519,7 @@ function EventPackageBody({ pkg }) {
             invitationApprovalInfo={invitationApprovalInfo} setInvitationApprovalInfo={setInvitationApprovalInfo}
             invitationRegenSignal={invitationRegenSignal} load={load} openOrganizerPicker={picker.openOrganizerPicker}
             hints={hints(['dress_code', 'date'])}
+            schedule={<EventScheduleContinuity showId={showId} flow={actions.flow} event={event} used={used} putEvent={putEvent} load={load} setToast={setToast} />}
           />
           <EventPeopleSection
             event={event} used={used} castLocked={castLocked} organizer={organizer} sourceProfile={sourceProfile}
