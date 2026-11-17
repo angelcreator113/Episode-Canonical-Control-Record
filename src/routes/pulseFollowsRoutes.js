@@ -105,16 +105,57 @@ const MAX_PINS = 3;
 const HIGHLIGHT_PHOTOS = 12;
 const TAGGED_LIMIT = 60;
 
+/**
+ * The story's release boundary for a profile's pictures (Evoni, 2026-11-15):
+ * pinned posts, Tagged and Highlights are of posts released at the reader's
+ * story moment, by the rule the feed applies (services/storyClock readerAt and
+ * postOrderSql; services/pulseReveals). null means no boundary: an ADMIN who
+ * named no moment. Anyone else always has one, of the show they named.
+ *   sql        a condition on feed_posts aliased fp (its show, its story time)
+ *   shows(id)  whether a post's pictures may show (not hidden, not a first look)
+ *   listed(id) whether a post may be listed at all (not hidden)
+ */
+async function releaseBoundary(db, { showId, at }) {
+  if (at === undefined) return null;
+  const clock = require('../services/storyClock');
+  const order = clock.postOrderSql('fp');
+  const { lalaProfileId } = require('../services/lalaFeedProfile');
+  const reveals = await require('../services/pulseReveals').revealsAt(db, showId, at, { lalaProfileId: await lalaProfileId(db.sequelize) });
+  return {
+    sql: `AND fp.show_id = :showId AND (${order} IS NULL OR ${order} <= ${Number(at)})`,
+    listed: (postId) => reveals.stateOf('post', postId) !== 'hidden',
+    shows: (postId) => reveals.stateOf('post', postId) === 'revealed' && reveals.stateOf('image', postId, 'post_photo') === 'revealed',
+  };
+}
+
 router.get('/profile/:handle/media', requireAuth, async (req, res) => {
   const handle = String(req.params.handle || '');
   if (!HANDLE_RE.test(handle)) return res.status(400).json({ error: 'handle is not a Pulse handle' });
+  const { show_id: showId } = req.query;
+  if (showId !== undefined && (typeof showId !== 'string' || !UUID_RE.test(showId))) {
+    return res.status(400).json({ error: 'show_id must be a UUID' });
+  }
   try {
     const db = getModels();
     const profile = await pulseProfile(db, HANDLE_MATCH, { handle: bareHandle(handle) });
     if (!profile) return res.status(404).json({ error: 'Nobody on The Pulse has that handle.' });
-    const [pins] = await db.sequelize.query(
-      `SELECT id FROM feed_posts WHERE social_profile_id = :id AND pinned_at IS NOT NULL AND status = 'live' AND deleted_at IS NULL
-        ORDER BY pinned_at DESC LIMIT ${MAX_PINS}`, { replacements: { id: profile.id } });
+    // The reader's story moment is the server's to decide, not the page's (services/storyClock readerAt).
+    const admin = userInGroup(req.user, 'admin');
+    // With no show there is no present to read at: nothing is shown to anyone but an ADMIN.
+    if (!admin && !showId) return res.json({ data: { pinned: [], tagged: [], highlights: [] } });
+    let at;
+    if (showId) {
+      try { at = await require('../services/storyClock').readerAt(db, showId, req.query.at, { admin }); } catch (err) {
+        if (err.status === 400) return res.status(400).json({ error: err.message });
+        throw err;
+      }
+    }
+    const boundary = await releaseBoundary(db, { showId, at });
+    const within = boundary ? boundary.sql : '';
+    const [pinRows] = await db.sequelize.query(
+      `SELECT fp.id FROM feed_posts fp WHERE fp.social_profile_id = :id AND fp.pinned_at IS NOT NULL AND fp.status = 'live' AND fp.deleted_at IS NULL ${within}
+        ORDER BY fp.pinned_at DESC LIMIT ${MAX_PINS}`, { replacements: { id: profile.id, showId: showId || null } });
+    const pins = boundary ? pinRows.filter((p) => boundary.listed(p.id)) : pinRows;
     const [[character]] = await db.sequelize.query(
       `SELECT id FROM registry_characters WHERE feed_profile_id = :id AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1`,
       { replacements: { id: profile.id } });
@@ -129,19 +170,36 @@ router.get('/profile/:handle/media', requireAuth, async (req, res) => {
            JOIN media_asset_links lp ON lp.asset_id = ma.id AND lp.entity_type = 'post' AND lp.deleted_at IS NULL
            JOIN feed_posts fp ON fp.id::text = lp.entity_id AND fp.status = 'live' AND fp.deleted_at IS NULL
           WHERE me.entity_type = 'character' AND me.entity_id = :cid AND me.role = 'pictured' AND me.deleted_at IS NULL
-            AND COALESCE(fp.social_profile_id, 0) <> :pid
+            AND COALESCE(fp.social_profile_id, 0) <> :pid ${within}
           ORDER BY ma.id, fp.posted_at DESC NULLS LAST`,
-        { replacements: { cid: String(character.id), pid: profile.id } });
-      tagged = rows.sort((a, b) => new Date(b.posted_at || 0) - new Date(a.posted_at || 0)).slice(0, TAGGED_LIMIT)
+        { replacements: { cid: String(character.id), pid: profile.id, showId: showId || null } });
+      const taggedRows = boundary ? rows.filter((r) => boundary.shows(r.post_id)) : rows;
+      tagged = taggedRows.sort((a, b) => new Date(b.posted_at || 0) - new Date(a.posted_at || 0)).slice(0, TAGGED_LIMIT)
         .map((r) => ({ ...r, poster_handle: String(r.poster_handle || '').replace(/^@/, '') }));
       // Highlights: their posted camera-roll photos by album (services/cameraRoll; public only).
       const roll = await require('../services/cameraRoll').rollFor(db, character.id, { audience: 'public' });
       if (roll.eligible) {
-        highlights = roll.albums.filter((a) => a.count > 0).map((a) => {
-          const photos = roll.photos.filter((p) => p.album === a.key).slice(0, HIGHLIGHT_PHOTOS)
-            .map((p) => ({ asset_id: p.asset_id, url: p.url, caption: p.caption }));
-          return { key: a.key, label: a.label, count: a.count, cover: photos[0]?.url || null, photos };
-        });
+        // Within the boundary a camera-roll photo shows only once a post that carries it is released:
+        // a photo has no story time of its own, so one no released post carries stays back.
+        let released = null;
+        if (boundary && roll.photos.length) {
+          const [carried] = await db.sequelize.query(
+            `SELECT lp.asset_id, fp.id AS post_id FROM media_asset_links lp
+               JOIN feed_posts fp ON fp.id::text = lp.entity_id AND fp.status = 'live' AND fp.deleted_at IS NULL
+              WHERE lp.entity_type = 'post' AND lp.deleted_at IS NULL AND lp.asset_id IN (:assets) ${within}
+             UNION
+             SELECT m.asset_id, fp.id AS post_id FROM camera_roll_moments m
+               JOIN feed_posts fp ON fp.id = m.post_id AND fp.status = 'live' AND fp.deleted_at IS NULL
+              WHERE m.asset_id IN (:assets) AND m.deleted_at IS NULL ${within}`,
+            { replacements: { assets: roll.photos.map((p) => p.asset_id), showId: showId || null } });
+          released = new Set(carried.filter((r) => boundary.shows(r.post_id)).map((r) => String(r.asset_id)));
+        }
+        const shown = boundary ? roll.photos.filter((p) => released && released.has(String(p.asset_id))) : roll.photos;
+        highlights = roll.albums.map((a) => {
+          const all = shown.filter((p) => p.album === a.key);
+          const photos = all.slice(0, HIGHLIGHT_PHOTOS).map((p) => ({ asset_id: p.asset_id, url: p.url, caption: p.caption }));
+          return { key: a.key, label: a.label, count: all.length, cover: photos[0]?.url || null, photos };
+        }).filter((a) => a.count > 0);
       }
     }
     return res.json({ data: { pinned: pins.map((p) => p.id), tagged, highlights } });

@@ -330,7 +330,10 @@ const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
     expect((await as(request(app).delete(`/api/v1/pulse-follows/posts/${live[0]}/pin`), member)).status).toBe(403);
     expect((await as(request(app).delete(`/api/v1/pulse-follows/posts/${live[0]}/pin`))).status).toBe(200);
     expect((await pin(live[3])).status).toBe(200);
-    const media = await as(request(app).get(`/api/v1/pulse-follows/profile/ppfriend${tag}/media`), member);
+    // The page sends its show; a reader who is not an ADMIN reads within that show's story (2026-11-15, profileMediaStoryMoment).
+    const media = await as(request(app).get(`/api/v1/pulse-follows/profile/ppfriend${tag}/media?show_id=${ids.show}`), member);
+    const noShow = await as(request(app).get(`/api/v1/pulse-follows/profile/ppfriend${tag}/media`), member);
+    expect(noShow.body.data).toEqual({ pinned: [], tagged: [], highlights: [] });
     expect(media.status).toBe(200);
     expect(media.body.data.pinned.sort()).toEqual([live[1], live[2], live[3]].sort());
   });
@@ -342,7 +345,7 @@ const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
       roll: { purpose: 'private', album: 'social' }, links: [['character', ids.maren, 'pictured'], ['post', theirs, 'pictured']] });
     await asset({ url: `https://cdn.test/${tag}/secret-roll.jpg`, caption: 'Kept for herself', visibility: 'private',
       roll: { purpose: 'private', album: 'travel' }, links: [['character', ids.maren, 'owner']] });
-    const res = await as(request(app).get(`/api/v1/pulse-follows/profile/@ppmaren${tag}/media`), member);
+    const res = await as(request(app).get(`/api/v1/pulse-follows/profile/@ppmaren${tag}/media?show_id=${ids.show}`), member);
     expect(res.status).toBe(200);
     const { tagged, highlights } = res.body.data;
     expect(tagged.map((t) => t.asset_id)).toEqual([shown]);
