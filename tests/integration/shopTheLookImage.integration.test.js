@@ -90,7 +90,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())',
       { ...ids, name: `Shop ${ids.show.slice(0, 8)}`, slug: `shop-${ids.show.slice(0, 8)}` });
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at)
-               VALUES (:ep, :show, 'Wearable Experiments', 1, 'draft', NOW(), NOW())`, ids);
+               VALUES (:ep, :show, 'Wearable Experiments', 1, 'published', NOW(), NOW())`, ids);
     const [[profile]] = await run(`INSERT INTO social_profiles (handle, platform, vibe_sentence, display_name, created_at, updated_at)
                VALUES (:handle, 'instagram', 'A studio.', 'STUDIO BY SABLE', NOW(), NOW()) RETURNING id`, { handle: `shop_${ids.show.slice(0, 6)}` });
     profiles.push(profile.id);
