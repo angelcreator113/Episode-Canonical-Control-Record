@@ -92,8 +92,10 @@ async function madeUpCutout() {
 
   beforeAll(async () => {
     await posesMigration.up(sequelize.getQueryInterface(), Sequelize);
+    // Evoni, 2026-11-16: the routes that start a pose's processing are an ADMIN's (an editor could until
+    // then; the refusals are in processingAdminOnly.integration.test.js). The same checks, by the account that may.
     token = TokenService.generateTokenPair({
-      id: 'test-user-poses', email: 'user@poses.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-poses', email: 'user@poses.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :slug, '{}', NOW(), NOW())`,
       { show, name: `Poses ${show.slice(0, 8)}`, slug: `poses-${show.slice(0, 8)}` });

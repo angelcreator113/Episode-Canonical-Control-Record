@@ -134,7 +134,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const before = process.env.REMOVEBG_API_KEY;
     process.env.REMOVEBG_API_KEY = 'test-key-not-called';
     try {
-      const res = await auth(request(app).post(`/api/v1/ui-overlays/${show}/remove-bg/${foreign}`));
+      // Evoni, 2026-11-16: removing a background is an ADMIN's; an editor is refused before the show is looked at.
+      expect((await auth(request(app).post(`/api/v1/ui-overlays/${show}/remove-bg/${foreign}`))).status).toBe(403);
+      const adminToken = TokenService.generateTokenPair({ id: `${userId}-admin`, email: 'admin@audit.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+      const res = await request(app).post(`/api/v1/ui-overlays/${show}/remove-bg/${foreign}`).set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(404);
       const [[row]] = await run(`SELECT metadata::text AS m FROM assets WHERE id = :foreign`, { foreign });
       expect(JSON.parse(row.m).bg_removed).toBeUndefined();
