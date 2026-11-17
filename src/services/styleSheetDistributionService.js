@@ -392,7 +392,16 @@ function siteView(entry, released = false, sheet = null, pieces = []) {
     path: `/shop-the-look/${site.key}`,
     showing: Boolean(entry.include_shop_links) && (site.piece_ids || []).length > 0,
     // The look strip (Task #3120): on the site, failed to copy, or none (no bucket, or a look sent since).
-    image: site.image?.key ? 'on_site' : (site.image?.failed ? 'failed' : 'none'),
+    // on the site (she cleared this very image), not cleared (no declaration, or "unknown": text only),
+    // failed to copy, or none (no bucket).
+    image: imageCleared(site) ? 'on_site'
+      : (!isObject(site.image_rights) || !site.image_rights.cleared ? 'not_cleared' : (site.image?.failed ? 'failed' : 'none')),
+    // Her declaration, as saved; `stale` when the poses or the sheet have changed since she made it.
+    image_rights: isObject(site.image_rights) ? {
+      category: site.image_rights.category, label: IMAGE_RIGHTS[site.image_rights.category] || null, cleared: site.image_rights.cleared === true,
+      note: site.image_rights.note || null, declared_by: site.image_rights.declared_by || null, declared_at: site.image_rights.declared_at || null,
+      stale: Boolean(sheet) && (!sameRefs(site.image_rights.poses, poseRefs(sheet)) || (site.image_rights.sheet_hash || null) !== (sheet.inputs_hash || null)),
+    } : null,
   };
 }
 
@@ -472,10 +481,86 @@ async function copyLookImage(models, episodeId, siteKey, sheetHash) {
   }
 }
 
-/** The look's public image { url, alt }, or null. */
+// ── The look image's rights (Evoni, 2026-11-15) ────────────────────────────
+// The look image goes to the public bucket only when she has declared, at
+// that publish, that this exact image may be shown: one of four cleared
+// categories. "Unknown / not cleared", or no declaration, publishes the
+// look as text and links; the image is not copied and not served. An image
+// made by AI or taken from a retailer is not cleared by being so: she says
+// the intended use is permitted. The declaration is hers, recorded with
+// who and when; it is not a check of ownership or of any licence.
+//
+// It is bound to what it was made about: the front, side and back poses the
+// image is drawn from (their ids and addresses), the sheet's hash, and the
+// copy in the public bucket. The website shows an image only while its
+// declaration names that very copy. A new pose, a redrawn sheet or another
+// publish makes a new image, which needs its own declaration.
+const IMAGE_RIGHTS = {
+  original: 'Original photograph — owned or controlled',
+  licensed: 'Licensed image — permission held',
+  retailer: 'Retailer image — permission held',
+  ai_cleared: 'AI-generated image — cleared for public use',
+  unknown: 'Unknown / not cleared',
+};
+const CLEARED_RIGHTS = ['original', 'licensed', 'retailer', 'ai_cleared'];
+const RIGHTS_NOTE_MAX = 500;
+
+/** The poses the look image is drawn from, as the sheet has them: { front, side, back }, each { id, url } or null. */
+function poseRefs(sheet) {
+  const from = isObject(sheet.look_from_files) ? sheet.look_from_files : {};
+  const ref = (p) => (isObject(p) && (p.id || p.url) ? { id: p.id || null, url: text(p.url) } : null);
+  return { front: ref(from.front), side: ref(from.side), back: ref(from.back) };
+}
+// Compared field by field: the stored record comes back from the database with its keys in another order.
+const sameRefs = (a, b) => ['front', 'side', 'back'].every((angle) => {
+  const x = isObject(a) && isObject(a[angle]) ? a[angle] : null;
+  const y = isObject(b) && isObject(b[angle]) ? b[angle] : null;
+  if (!x || !y) return x === y;
+  return String(x.id || '') === String(y.id || '') && (x.url || null) === (y.url || null);
+});
+
+/**
+ * Her declaration as sent with a publish: { category, note? }. Returns the
+ * record to save (without the image it will be bound to), or null when she
+ * sent none. Throws BAD_IMAGE_RIGHTS for anything that is not one of the
+ * five categories.
+ */
+function readImageRights(body, sheet, who, at) {
+  if (body === undefined || body === null) return null;
+  if (!isObject(body) || !Object.prototype.hasOwnProperty.call(IMAGE_RIGHTS, body.category)) {
+    throw new LookbookError(`Say what the look image is: one of ${Object.keys(IMAGE_RIGHTS).join(', ')}.`, 400, 'BAD_IMAGE_RIGHTS');
+  }
+  if (body.note !== undefined && body.note !== null && typeof body.note !== 'string') {
+    throw new LookbookError('The permission note is text.', 400, 'BAD_IMAGE_RIGHTS');
+  }
+  if (typeof body.note === 'string' && body.note.length > RIGHTS_NOTE_MAX) {
+    throw new LookbookError(`The permission note is at most ${RIGHTS_NOTE_MAX} characters.`, 400, 'BAD_IMAGE_RIGHTS');
+  }
+  return {
+    category: body.category,
+    cleared: CLEARED_RIGHTS.includes(body.category),
+    // Where the permission is held (a licence, an email, a retailer's programme): hers to fill, never public.
+    note: text(body.note),
+    declared_by: who,
+    declared_at: at,
+    sheet_hash: sheet.inputs_hash || null,
+    poses: poseRefs(sheet),
+  };
+}
+
+/** May the website show this site record's image: a cleared declaration that names this very copy? */
+function imageCleared(site) {
+  const image = isObject(site.image) ? site.image : null;
+  const rights = isObject(site.image_rights) ? site.image_rights : null;
+  if (!image?.key || !rights) return false;
+  return rights.cleared === true && CLEARED_RIGHTS.includes(rights.category)
+    && rights.image_key === image.key && (rights.sheet_hash || null) === (image.sheet_hash || null);
+}
+
+/** The look's public image { url, alt }, or null: only an image she cleared (imageCleared). */
 function publicImageOf(site, title) {
   const image = isObject(site.image) ? site.image : null;
-  if (!image?.key) return null;
+  if (!image?.key || !imageCleared(site)) return null;
   const url = require('./websiteSlotService').publicUrl(image.key);
   return url ? { url, alt: `The look: ${title}` } : null;
 }
@@ -485,7 +570,7 @@ function publicImageOf(site, title) {
  * only when she publishes it). Needs the links included and at least one
  * piece with a link. Publishing again keeps the look's public key.
  */
-async function publishStyleSheetToSite(models, episodeId, user = null, { links: confirmed } = {}) {
+async function publishStyleSheetToSite(models, episodeId, user = null, { links: confirmed, imageRights: declared } = {}) {
   const metadata = await readMetadata(models.sequelize, episodeId);
   const entry = isObject(metadata[KEY]) ? { ...metadata[KEY] } : null;
   if (!entry) throw new LookbookError('Send the style sheet to Distribution before putting it on the website.', 404, 'NOT_SENT');
@@ -514,11 +599,16 @@ async function publishStyleSheetToSite(models, episodeId, user = null, { links: 
     confirmed_by: who,
     sheet_hash: sheet.inputs_hash,
   };
-  const image = await copyLookImage(models, episodeId, entry.site.key, sheet.inputs_hash);
-  // A copy that could not be made keeps the image the website already shows of this look.
-  if (image && image.key) entry.site.image = image;
-  else if (isObject(previous.image) && previous.image.key) entry.site.image = previous.image;
-  else if (image) entry.site.image = image;
+  // The image: only with her declaration that it may be shown, made at this publish. Without one, or with
+  // "unknown", nothing is copied to the public bucket and the look is text and links. No earlier image or
+  // declaration is carried over: each published image has its own.
+  const rights = readImageRights(declared, sheet, who, at);
+  if (rights) entry.site.image_rights = rights;
+  if (rights && rights.cleared) {
+    const image = await copyLookImage(models, episodeId, entry.site.key, sheet.inputs_hash);
+    if (image) entry.site.image = image;
+    if (image && image.key) rights.image_key = image.key;
+  }
   await writeMetadata(models, episodeId, { ...metadata, [KEY]: entry });
   return view(models, episodeId, entry, sheet);
 }
@@ -682,7 +772,7 @@ module.exports = {
   DISCLOSURE, AMAZON_DISCLOSURE, CAPTION_MAX, isAmazonUrl, disclosureFor, captionDraft, postText, keepStyleSheet, parseMetadata,
   getStyleSheetDistribution, sendStyleSheetToDistribution, updateStyleSheetDistribution, removeStyleSheetFromDistribution,
   publishStyleSheetToSite, takeDownStyleSheetFromSite, setPublishedLinkAvailability, listPublicLooks, publicLook,
-  httpsUrl, snapshotLinks, MATCHES,
+  httpsUrl, snapshotLinks, MATCHES, IMAGE_RIGHTS, CLEARED_RIGHTS, imageCleared,
   // The look strip, drawn as the export (styleSheetService); here so a test can stand in for the drawing.
   drawLook: (models, episodeId) => require('./styleSheetService').exportStyleSheet(models, episodeId, 'look'),
 };

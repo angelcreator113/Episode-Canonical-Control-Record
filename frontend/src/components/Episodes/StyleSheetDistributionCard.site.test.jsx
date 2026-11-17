@@ -66,7 +66,7 @@ describe('Show on the website', () => {
     expect(site.getByRole('button', { name: 'Put on the website' }).disabled).toBe(true);
     expect(site.getByTestId('ssd-review-blocker').textContent).toMatch(/Crimson Pump: open the link/);
     confirmAndPublish(site);
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL, { links: CONFIRMED }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL, { links: CONFIRMED, image_rights: { category: 'unknown' } }));
     const link = await site.findByRole('link', { name: '/shop-the-look/Ab3_k9-Zq1Lm' });
     expect(link.getAttribute('href')).toBe('/shop-the-look/Ab3_k9-Zq1Lm');
     expect(theSwitch(site).checked).toBe(true);
@@ -109,7 +109,7 @@ describe('Show on the website', () => {
     expect(failed.getByText('The look image could not be copied to the website.')).toBeTruthy();
     fireEvent.click(failed.getByRole('button', { name: 'Try the look image again' }));
     confirmAndPublish(failed, 'Publish again');
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL, { links: CONFIRMED }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL, { links: CONFIRMED, image_rights: { category: 'unknown' } }));
     await waitFor(() => expect(failed.queryByTestId('ssd-site-image')).toBeNull());
     expect(theSwitch(failed).checked).toBe(true);
     cleanup();
@@ -156,7 +156,7 @@ describe('Show on the website', () => {
     confirmAndPublish(site);
     await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL, { links: [
       { piece_id: 'w1', real_brand: 'Sam Edelman', real_product_name: 'Satin Ballet Pump', retailer: 'Zappos', url: 'https://zappos.example/felicia', affiliate: false, match: 'similar', confirmed: true },
-    ] }));
+    ], image_rights: { category: 'unknown' } }));
   });
 
   test('published: what differs is said, with the review again; a product is marked no longer available, and back', async () => {
@@ -184,5 +184,49 @@ describe('Show on the website', () => {
     expect(pump.getByLabelText('Real brand').value).toBe('Sam Edelman');
     expect(pump.getByLabelText('This product is').value).toBe('similar');
     expect(pump.getByRole('checkbox', { name: 'I opened this link and it is the right product' }).checked).toBe(false);
+  });
+  test('the look image: not cleared unless she says so; a cleared category is sent with its note; the choice never carries over', async () => {
+    api.post.mockResolvedValue({ data: { data: entry({ site: { ...PUBLISHED, image: 'on_site', image_rights: { category: 'licensed', label: 'Licensed image — permission held', cleared: true, declared_by: 'evoni@site.dev', stale: false } } }) } });
+    const site = await renderCard(entry());
+    fireEvent.click(theSwitch(site));
+    const image = within(site.getByTestId('ssd-review-image'));
+    const choice = image.getByLabelText('This image is');
+    // Five categories, and it starts on the one that publishes no image.
+    expect([...choice.options].map((o) => [o.value, o.textContent])).toEqual([
+      ['unknown', 'Unknown / not cleared'],
+      ['original', 'Original photograph — owned or controlled'],
+      ['licensed', 'Licensed image — permission held'],
+      ['retailer', 'Retailer image — permission held'],
+      ['ai_cleared', 'AI-generated image — cleared for public use'],
+    ]);
+    expect(choice.value).toBe('unknown');
+    expect(image.getByTestId('ssd-review-image-hint').textContent).toBe('The look will be published without its image: text and links only.');
+    expect(image.queryByLabelText(/Where the permission is held/)).toBeNull();
+
+    // Her own photograph needs no note; a licensed, retailer or AI image may carry where the permission is held.
+    fireEvent.change(choice, { target: { value: 'original' } });
+    expect(image.queryByLabelText(/Where the permission is held/)).toBeNull();
+    expect(image.getByTestId('ssd-review-image-hint').textContent).toMatch(/You are declaring that this image may be shown publicly/);
+    for (const category of ['retailer', 'ai_cleared', 'licensed']) {
+      fireEvent.change(choice, { target: { value: category } });
+      expect(image.getByLabelText(/Where the permission is held/)).toBeTruthy();
+    }
+    fireEvent.change(image.getByLabelText(/Where the permission is held/), { target: { value: '  Licence LIC-2291  ' } });
+    confirmAndPublish(site);
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(SITE_URL, { links: CONFIRMED, image_rights: { category: 'licensed', note: 'Licence LIC-2291' } }));
+    expect((await site.findByTestId('ssd-site-image-rights')).textContent).toMatch(/Image on the website: Licensed image — permission held, declared by evoni@site\.dev\./);
+
+    // Reviewing again starts from "not cleared": the next image needs its own declaration.
+    fireEvent.click(site.getByRole('button', { name: 'Review and publish again' }));
+    expect(within(site.getByTestId('ssd-review-image')).getByLabelText('This image is').value).toBe('unknown');
+  });
+
+  test('published without a cleared image says so; a declaration the poses have outgrown says to review', async () => {
+    const plain = await renderCard(entry({ site: { ...PUBLISHED, image: 'not_cleared', image_rights: null } }));
+    expect(plain.getByTestId('ssd-site-image').textContent).toMatch(/on the website without its image: the image has not been cleared for public use\./);
+    expect(plain.queryByTestId('ssd-site-image-rights')).toBeNull();
+    cleanup();
+    const stale = await renderCard(entry({ site: { ...PUBLISHED, image: 'on_site', image_rights: { category: 'original', label: 'Original photograph — owned or controlled', cleared: true, declared_by: 'evoni@site.dev', stale: true } } }));
+    expect(stale.getByTestId('ssd-site-image-rights').textContent).toMatch(/The poses or the sheet have changed since: review and publish again to show the new image\./);
   });
 });

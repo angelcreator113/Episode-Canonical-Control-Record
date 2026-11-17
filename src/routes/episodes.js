@@ -730,8 +730,9 @@ router.post('/:id/style-sheet/distribution/site', validateUUIDParam('id'), requi
   try {
     const models = require('../models');
     const { publishStyleSheetToSite } = require('../services/styleSheetDistributionService');
-    // The body is what she confirmed of each product: { links: [{ piece_id, real_brand, real_product_name, retailer, url, affiliate, match, confirmed }] }.
-    return res.json({ success: true, data: await publishStyleSheetToSite(models, req.params.id, req.user, { links: req.body?.links }) });
+    // The body is what she confirmed of each product: { links: [{ piece_id, real_brand, real_product_name, retailer, url, affiliate, match, confirmed }] },
+    // and what she declares of the look image: { image_rights: { category, note? } }; without it the look is text only.
+    return res.json({ success: true, data: await publishStyleSheetToSite(models, req.params.id, req.user, { links: req.body?.links, imageRights: req.body?.image_rights }) });
   } catch (err) {
     return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site');
   }
