@@ -15,6 +15,8 @@ function app(service, { authed = true } = {}) {
   jest.resetModules();
   jest.doMock('../../../src/middleware/auth', () => ({
     requireAuth: (req, res, next) => (authed ? next() : res.status(401).json({ error: 'Authentication required' })),
+    // The two reads are an ADMIN's (tests/integration/wardrobeReadAuthorization); the caller here is one.
+    authorize: () => (req, res, next) => next(),
   }));
   jest.doMock('../../../src/services/myLittleListService', () => ({
     ...jest.requireActual('../../../src/services/myLittleListService'),

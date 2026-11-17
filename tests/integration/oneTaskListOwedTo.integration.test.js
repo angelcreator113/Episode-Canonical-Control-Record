@@ -28,6 +28,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)('one task list: owed_to and the four sources (T2)', () => {
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-oneTaskListOwedTo', email: 'admin@oneTaskListOwedTo.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const shows = [];
 
   beforeAll(() => {
@@ -137,8 +141,12 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(tasks.filter((t) => t.required).map((t) => t.deliverable_id).sort()).toEqual([hostRow, brandRow].sort());
 
     // The Run Sheet and the Career Checklist both read this saved list.
-    const res = await request(app).get(`/api/v1/episodes/${result.episode.id}/todo/social`).set({ Authorization: `Bearer ${token}` });
+    const res = await request(app).get(`/api/v1/episodes/${result.episode.id}/todo/social`).set({ Authorization: `Bearer ${adminToken}` });
     expect(res.status).toBe(200);
     expect(res.body.social_tasks).toEqual(tasks);
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/todo/social`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

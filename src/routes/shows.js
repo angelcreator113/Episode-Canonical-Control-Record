@@ -475,7 +475,7 @@ router.put('/:id/financial-config', requireAuth, authorize(['ADMIN']), async (re
  * designs, each on or off for the show. Stored on Show.metadata.style_designs;
  * the Style Page, its downloads and Send to Distribution use the ones on.
  */
-router.get('/:id/style-designs', requireAuth, async (req, res) => {
+router.get('/:id/style-designs', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -1899,7 +1899,7 @@ router.get('/:id/template', requireAuth, async (req, res) => {
  * GET /api/v1/shows/:id/wardrobe
  * Get all wardrobe items belonging to a show
  */
-router.get('/:id/wardrobe', requireAuth, async (req, res) => {
+router.get('/:id/wardrobe', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
     const { character, category } = req.query;
