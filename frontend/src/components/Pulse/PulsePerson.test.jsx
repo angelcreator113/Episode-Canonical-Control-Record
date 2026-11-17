@@ -30,7 +30,7 @@ beforeEach(() => {
     { id: 'b', content_text: 'Quiet morning' },
   ];
   vi.mocked(api.get).mockImplementation(async (url) => {
-    if (url === '/api/v1/pulse-follows/profile/maren/media') return { data: { data: media } };
+    if (url.startsWith('/api/v1/pulse-follows/profile/maren/media')) return { data: { data: media } };
     if (url.startsWith('/api/v1/pulse-follows/profile/maren')) {
       return { data: { data: { profile: PROFILE, is_lala: false, followers: { count: 1200, tier: null, estimated: false }, relation, character_id: 'char-7' } } };
     }
@@ -81,6 +81,8 @@ describe('PulsePerson', () => {
     expect(tiles[0].querySelector('img').getAttribute('src')).toBe('https://cdn/dough.jpg');
     expect(tiles[1].textContent).toBe('Quiet morning');
     expect(vi.mocked(api.get).mock.calls[0][0]).toBe('/api/v1/pulse-follows/profile/maren?show_id=show-1&at=present');
+    // Their pictures are asked for with the same show and story moment (the server decides the moment a reader may read at).
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.map(([u]) => u)).toContain('/api/v1/pulse-follows/profile/maren/media?show_id=show-1&at=present'));
     expect(vi.mocked(api.get).mock.calls[1][0]).toContain('profile_id=7');
     expect(screen.queryByTestId('pp-admin')).toBeNull();
   });

@@ -22,7 +22,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const models = require('../models');
 const poses = require('../services/episodePosesService');
@@ -83,7 +83,9 @@ async function storePose(req, episode, fields, { buffer, filename, size }) {
   return row;
 }
 
-router.post('/:episodeId', requireAuth, aiRateLimiter, (req, res) => {
+// The three routes that start a pose's processing (its paid enhancement and cut-out) are an
+// ADMIN's (Evoni, 2026-11-16): the upload, filing a Lookbook photo, and running it again.
+router.post('/:episodeId', requireAuth, authorize(['ADMIN']), aiRateLimiter, (req, res) => {
   upload.single('image')(req, res, async (uploadErr) => {
     try {
       if (uploadErr) throw uploadErr;
@@ -108,7 +110,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * sort). The photo becomes a pose and is processed like an upload; it
  * leaves Style photos.
  */
-router.post('/:episodeId/from-lookbook', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:episodeId/from-lookbook', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const fields = poses.readFields(req.body || {}, { requireAll: true });
     const episode = await poses.findEpisode(models.sequelize, req.params.episodeId);
@@ -144,7 +146,7 @@ router.patch('/:episodeId/:poseId', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/:episodeId/:poseId/reprocess', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:episodeId/:poseId/reprocess', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const pose = await poses.getPose(models.sequelize, req.params.episodeId, req.params.poseId);
     if (!pose) return res.status(404).json({ success: false, error: 'Pose not found' });

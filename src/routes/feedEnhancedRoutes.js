@@ -21,11 +21,9 @@ router.get('/:showId/trending', requireAuth, async (req, res) => {
     const { getTrendingTopics } = require('../services/feedEngagementService');
     // ?at= and ?city= (Task #2987): trends as of a story moment, and one Dream City's local trends.
     let at = null;
-    if (req.query.at !== undefined && req.query.at !== '') {
-      try { at = await require('../services/storyClock').resolveAt(models, req.params.showId, String(req.query.at)); } catch (atErr) {
-        if (atErr.status === 400) return res.status(400).json({ error: atErr.message });
-        throw atErr;
-      }
+    try { at = await require('../services/readerMoment').momentFor(req, models, req.params.showId, req.query.at); } catch (atErr) {
+      if (atErr.status === 400) return res.status(400).json({ error: atErr.message });
+      throw atErr;
     }
     const city = req.query.city === undefined ? null : String(req.query.city);
     const { DREAM_CITY_KEYS } = require('../utils/feedCities');
@@ -40,7 +38,7 @@ router.get('/:showId/trending', requireAuth, async (req, res) => {
 
 // ── EVENT ENGAGEMENT ANALYSIS ───────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/event/:eventId/engagement
-router.get('/event/:eventId/engagement', requireAuth, async (req, res) => {
+router.get('/event/:eventId/engagement', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { analyzeEventEngagement } = require('../services/feedEngagementService');
@@ -70,7 +68,7 @@ router.post('/post/:postId/ripple', requireAuth, authorize(['ADMIN']), aiRateLim
 
 // ── FEED MOMENTUM FOR SHOW ──────────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/:showId/momentum
-router.get('/:showId/momentum', requireAuth, async (req, res) => {
+router.get('/:showId/momentum', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { computeFeedMomentum } = require('../services/feedEngagementService');
@@ -103,7 +101,7 @@ router.post('/:showId/chain/:eventId', requireAuth, aiRateLimiter, async (req, r
 
 // ── GET EVENT CHAIN ─────────────────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/:showId/chain/:eventId
-router.get('/:showId/chain/:eventId', requireAuth, async (req, res) => {
+router.get('/:showId/chain/:eventId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { getEventChain } = require('../services/feedEventPipelineService');
@@ -117,7 +115,7 @@ router.get('/:showId/chain/:eventId', requireAuth, async (req, res) => {
 
 // ── FEED MOMENTS ────────────────────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/:showId/moments/:episodeId
-router.get('/:showId/moments/:episodeId', requireAuth, async (req, res) => {
+router.get('/:showId/moments/:episodeId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { FeedMoment, FeedPost } = require('../models');
     if (!FeedMoment) return res.status(404).json({ error: 'FeedMoment model not available' });
@@ -217,7 +215,7 @@ router.post('/:showId/moments/:episodeId/persist', requireAuth, async (req, res)
 
 // ── VIRAL POSTS FOR SHOW ────────────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/:showId/viral
-router.get('/:showId/viral', requireAuth, async (req, res) => {
+router.get('/:showId/viral', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { FeedPost } = require('../models');
     const posts = await FeedPost.findAll({
@@ -235,7 +233,7 @@ router.get('/:showId/viral', requireAuth, async (req, res) => {
 
 // ── POST THREAD ─────────────────────────────────────────────────────────────
 // GET /api/v1/feed-enhanced/thread/:threadId
-router.get('/thread/:threadId', requireAuth, async (req, res) => {
+router.get('/thread/:threadId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { FeedPost } = require('../models');
     const posts = await FeedPost.findAll({

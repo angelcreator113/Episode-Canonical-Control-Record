@@ -103,7 +103,8 @@ const HOUR = 60 * 60 * 1000;
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, air_date, created_at, updated_at)
                VALUES (:id, :show, 'Air', 1, 'draft', :air, NOW(), NOW())`, { id: crypto.randomUUID(), show, air });
     const p = await draft({ story_order: 11 });
-    const suggest = (id, token = editor) => request(app).get(`/api/v1/feed-posts/${id}/release-time/suggest?tz_offset=0`).set('Authorization', `Bearer ${token}`);
+    // An operational read of the studio's: an ADMIN's since 2026-11-15 (tests/integration/feedPostPublicFields).
+    const suggest = (id, token = admin) => request(app).get(`/api/v1/feed-posts/${id}/release-time/suggest?tz_offset=0`).set('Authorization', `Bearer ${token}`);
     const res = await suggest(p.id);
     expect(res.status).toBe(200);
     const want = new Date(air.getTime() - 2 * 24 * HOUR);
@@ -115,5 +116,8 @@ const HOUR = 60 * 60 * 1000;
     expect((await suggest(live.id)).status).toBe(409);
     expect((await suggest(crypto.randomUUID())).status).toBe(404);
     expect((await request(app).get(`/api/v1/feed-posts/${p.id}/release-time/suggest`)).status).toBe(401);
+    const refused = await suggest(p.id, editor);
+    expect(refused.status).toBe(403);
+    expect(refused.body.at).toBeUndefined();
   });
 });
