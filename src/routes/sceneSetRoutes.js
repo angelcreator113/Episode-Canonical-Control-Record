@@ -3523,7 +3523,7 @@ router.post('/:id/apply-template', validateUUIDParam('id'), requireAuth, async (
 // WARDROBE × SCENE MATCHING — find wardrobe items matching event dress code
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.get('/:id/wardrobe-match', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/wardrobe-match', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });

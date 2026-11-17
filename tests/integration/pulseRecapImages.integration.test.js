@@ -10,6 +10,9 @@
  *   changed;
  * - one image that cannot be read is marked failed and the recap still
  *   publishes; without SITE_PUBLIC_BUCKET it publishes text only.
+ * Since 2026-11-15 an image is copied and served only while its library
+ * record is approved, public and cleared by a rights declaration
+ * (recapImageRights.integration.test.js), so each image here has one.
  */
 jest.unmock('uuid');
 
@@ -21,6 +24,7 @@ const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const recaps = require('../../src/services/pulseRecap');
 const slots = require('../../src/services/websiteSlotService');
+const media = require('../../src/services/mediaLibrary');
 
 const { sequelize } = models;
 
@@ -43,6 +47,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   let png;
   let stored;
   let downloads;
+  const seeded = [];
   const as = (req) => req.set('Authorization', `Bearer ${admin}`);
   const post = (key, parts) => models.FeedPost.create({
     show_id: ids.show, poster_handle: `${key}${tag}`, poster_display_name: key, poster_platform: 'lalaverse', post_type: 'post',
@@ -66,6 +71,14 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await models.PulseReveal.create({ show_id: ids.show, item_type: 'image', image_kind: 'post_photo', item_id: p.hidden, moment: 'story_time', story_order: 99, mode: 'hidden', source: 'set' });
     await post('words', { likes: 600 });
     await post('broken', { image_url: 'https://studio.example/private/broken.png', likes: 500 });
+    // The new rule (2026-11-15): only an approved, public, rights-cleared library picture is copied.
+    // Each image as The Pulse shows it (the teaser's own URL for the teased one) gets such a record.
+    for (const url of ['photo.png', 'teased.png', 'teased-teaser.jpg', 'hidden.png', 'broken.png'].map((f) => `https://studio.example/private/${f}`)) {
+      const { asset, reused } = await media.createAsset(models, { url, source: 'post', status: 'approved', visibility: 'public', by: `recapimg-${tag}` });
+      if (reused) await media.updateAsset(models, asset.id, { status: 'approved', visibility: 'public' });
+      else seeded.push(asset.id);
+      await media.declareRights(models, asset.id, { category: 'original' }, `recapimg-${tag}`);
+    }
   });
 
   beforeEach(() => {
@@ -91,6 +104,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     for (const [name, value] of [['SITE_PUBLIC_BUCKET', env.bucket], ['SITE_PUBLIC_CDN', env.cdn]]) {
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
     }
+    if (seeded.length) await run('DELETE FROM media_assets WHERE id IN (:seeded)', { seeded });
     await run('DELETE FROM pulse_reveals WHERE show_id = :show', ids);
     await run('DELETE FROM feed_posts WHERE show_id = :show', ids);
     await run('DELETE FROM episodes WHERE show_id = :show', ids);

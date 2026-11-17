@@ -63,7 +63,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await request(app).get(`/api/v1/pulse-numbers?show_id=${ids.show}`)).status).toBe(401);
     expect((await as(admin, request(app).get('/api/v1/pulse-numbers?show_id=nope'))).status).toBe(400);
     expect((await as(admin, request(app).get(`/api/v1/pulse-numbers?show_id=${ids.show}&status=maybe`))).status).toBe(400);
-    const res = await as(editor, request(app).get(`/api/v1/pulse-numbers?show_id=${ids.show}`));
+    const res = await as(admin, request(app).get(`/api/v1/pulse-numbers?show_id=${ids.show}`));
     expect(res.status).toBe(200);
     const row = res.body.numbers.find((n) => n.id === id);
     expect(res.body.total).toBeGreaterThanOrEqual(1);
@@ -114,5 +114,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(viral.body.numbers).toMatchObject({ status: 'viral', reason: 'Made viral', final: { likes: 1000 * VIRAL_MULTIPLE, shares: 80 * VIRAL_MULTIPLE } });
     const flop = await put(await waiting(), 'flop');
     expect(flop.body.numbers).toMatchObject({ status: 'flop', reason: 'Made a flop', final: { likes: Math.round(1000 * FLOP_FRACTION), shares: Math.round(80 * FLOP_FRACTION) } });
+  });
+  test("The Pulse's production reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/pulse-numbers?show_id=00000000-0000-4000-8000-000000000000`).set('Authorization', `Bearer ${editor}`);
+    expect(res.status).toBe(403);
   });
 });

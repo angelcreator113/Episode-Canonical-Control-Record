@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const wardrobeController = require('../controllers/wardrobeController');
 const { asyncHandler } = require('../middleware/errorHandler');
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { InsufficientCoinsError, insufficientCoinsBody } = require('../services/coinBalanceGuard');
 const { spendFromLedger, syncCoinsFromLedger } = require('../services/coinLedgerSync');
@@ -112,7 +112,7 @@ const upload = multer({
  */
 
 // Get staging items (unassigned wardrobe items)
-router.get('/staging', requireAuth, asyncHandler(wardrobeController.getStagingItems));
+router.get('/staging', requireAuth, authorize(['ADMIN']), asyncHandler(wardrobeController.getStagingItems));
 
 // ═══════════════════════════════════════════
 // GET /api/v1/wardrobe/categories-audit
@@ -263,7 +263,7 @@ router.delete('/matching-sets/:setId', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/categories-audit', requireAuth, async (req, res) => {
+router.get('/categories-audit', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { show_id } = req.query;
     const models = await getModels();
@@ -311,7 +311,7 @@ router.get('/categories-audit', requireAuth, async (req, res) => {
 // GET /api/v1/wardrobe/outfit/:episode_id
 // Returns wardrobe items linked (locked) to an episode
 // ═══════════════════════════════════════════
-router.get('/outfit/:episode_id', requireAuth, async (req, res) => {
+router.get('/outfit/:episode_id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episode_id } = req.params;
     if (!episode_id) return res.status(400).json({ error: 'episode_id is required' });
@@ -452,7 +452,7 @@ async function loadPendingOutfitPieces(sequelize, episodeId) {
 // GET /api/v1/wardrobe/outfit-score/:episodeId[?event_id=]
 // The episode's approved linked outfit (what completion scores), scored for
 // event_id when given; `pending` names the links not counted yet.
-router.get('/outfit-score/:episodeId', requireAuth, async (req, res) => {
+router.get('/outfit-score/:episodeId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId } = req.params;
     const eventId = typeof req.query.event_id === 'string' && req.query.event_id ? req.query.event_id : null;
@@ -503,7 +503,7 @@ router.post('/outfit-score/:episodeId', requireAuth, async (req, res) => {
 // Audit GATE-02 (2026-10-03): which of the show's required wardrobe slots
 // have a piece (wardrobeSlotCoverageService). The Production Checklist's
 // "Required wardrobe slots covered" reads this instead of "any piece exists".
-router.get('/slot-coverage', requireAuth, async (req, res) => {
+router.get('/slot-coverage', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = typeof req.query.show_id === 'string' && req.query.show_id ? req.query.show_id : null;
     if (!showId) return res.status(400).json({ error: 'show_id is required' });
@@ -520,16 +520,16 @@ router.get('/slot-coverage', requireAuth, async (req, res) => {
 });
 
 // List all wardrobe items
-router.get('/', requireAuth, asyncHandler(wardrobeController.listWardrobeItems));
+router.get('/', requireAuth, authorize(['ADMIN']), asyncHandler(wardrobeController.listWardrobeItems));
 
 // Create new wardrobe item
 router.post('/', requireAuth, upload.single('image'), asyncHandler(wardrobeController.createWardrobeItem));
 
 // Get item usage across shows/episodes
-router.get('/:id/usage', requireAuth, asyncHandler(wardrobeController.getItemUsage));
+router.get('/:id/usage', requireAuth, authorize(['ADMIN']), asyncHandler(wardrobeController.getItemUsage));
 
 // Get single wardrobe item
-router.get('/:id', requireAuth, asyncHandler(wardrobeController.getWardrobeItem));
+router.get('/:id', requireAuth, authorize(['ADMIN']), asyncHandler(wardrobeController.getWardrobeItem));
 
 // Update wardrobe item
 router.put('/:id', requireAuth, upload.single('image'), asyncHandler(wardrobeController.updateWardrobeItem));
@@ -2208,7 +2208,7 @@ async function getOutfitScore(models, episodeId, event = {}, characterState = nu
 // GET /api/v1/wardrobe/outfit-history/:showId
 // Returns outfit history across all episodes for a show
 // ═══════════════════════════════════════════
-router.get('/outfit-history/:showId', requireAuth, async (req, res) => {
+router.get('/outfit-history/:showId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId } = req.params;
     const models = await getModels();
@@ -2270,7 +2270,7 @@ router.get('/outfit-history/:showId', requireAuth, async (req, res) => {
 // ═══════════════════════════════════════════
 
 // GET /api/v1/wardrobe/:id/pieces — list attachment pieces for an item
-router.get('/:id/pieces', requireAuth, async (req, res) => {
+router.get('/:id/pieces', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.json({ success: true, pieces: [] });

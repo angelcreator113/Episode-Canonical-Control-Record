@@ -28,6 +28,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)("The show's logo", () => {
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-showLogo', email: 'admin@showLogo.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const ids = { show: crypto.randomUUID(), ep: crypto.randomUUID() };
   const savedBuckets = {};
   let bigPng;
@@ -122,21 +126,25 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   it('the style sheet prints the logo, and a new logo marks an approved sheet out of date', async () => {
     const sheetUrl = `/api/v1/episodes/${ids.ep}/style-sheet`;
-    let sheet = (await auth(request(app).get(sheetUrl))).body.data;
+    let sheet = (await asAdmin(request(app).get(sheetUrl))).body.data;
     expect(sheet.logo).toBeNull();
 
     await auth(request(app).post(url)).attach('image', bigPng, { filename: 'logo.png', contentType: 'image/png' });
-    sheet = (await auth(request(app).get(sheetUrl))).body.data;
+    sheet = (await asAdmin(request(app).get(sheetUrl))).body.data;
     expect(sheet.logo).toMatch(/^data:image\/png;base64,/);
 
     expect((await auth(request(app).post(`${sheetUrl}/approve`))).status).toBe(200);
-    sheet = (await auth(request(app).get(sheetUrl))).body.data;
+    sheet = (await asAdmin(request(app).get(sheetUrl))).body.data;
     expect(sheet.status).toBe('approved');
     expect(sheet.stale).toBe(false);
 
     await auth(request(app).delete(url));
-    sheet = (await auth(request(app).get(sheetUrl))).body.data;
+    sheet = (await asAdmin(request(app).get(sheetUrl))).body.data;
     expect(sheet.logo).toBeNull();
     expect(sheet.stale).toBe(true);
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/style-sheet`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

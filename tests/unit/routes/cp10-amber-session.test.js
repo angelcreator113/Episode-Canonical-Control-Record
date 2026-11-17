@@ -20,8 +20,9 @@ describe('Step 3 CP10 — amberSessionRoutes.js', () => {
     expect(SRC).toMatch(/router\.post\('\/speak',\s*requireAuth,\s*speakLimiter,/);
   });
 
-  test('readStoryLimiter preserved on POST /read-story', () => {
-    expect(SRC).toMatch(/router\.post\('\/read-story',\s*requireAuth,\s*readStoryLimiter,/);
+  // Since 2026-11-16 /read-story is an ADMIN's (Evoni); its own limiter stays, after the ADMIN check.
+  test('readStoryLimiter preserved on POST /read-story, which is an ADMIN\'s', () => {
+    expect(SRC).toMatch(/router\.post\('\/read-story',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*readStoryLimiter,/);
   });
 
   // Q12 stands for the two routes it was about: /speak and /read-story keep their own limiter and are not

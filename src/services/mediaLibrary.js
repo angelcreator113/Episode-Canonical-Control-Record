@@ -16,7 +16,12 @@
  *   createAsset(db, { url, ..., links, by })   one row per URL: an existing
  *                       live picture is reused and only gains the new links
  *   updateAsset(db, id, fields)     caption, status, visibility, usage_rights,
- *                                   details
+ *                                   details (the known detail keys replace the
+ *                                   old ones; a rights declaration is kept)
+ *   RIGHTS / rightsOf(asset) / rightsCleared(asset) / declareRights(db, id,
+ *   { category, note }, by)         the structured rights declaration, kept in
+ *                                   details.rights; usage_rights (free text)
+ *                                   is never read as approval, never changed
  *   linkAsset / unlinkLink           tag and untag (soft)
  *   removeAsset(db, id)              soft delete with its links
  *   getAsset / listFor(db, { entityType, entityId, audience })
@@ -54,6 +59,25 @@ const ENTITIES = Object.freeze({
   deal: { table: 'opportunities', id: 'uuid', label: 'name' },
   wardrobe: { table: 'wardrobe', id: 'uuid', label: 'name' },
 });
+
+// The rights declaration for one picture (Evoni, 2026-11-15): whether it may
+// be shown in public. Kept under details.rights as { category, note,
+// declared_by, declared_at }. Only an ADMIN declares; nothing is cleared
+// automatically, an AI-generated or retailer picture included. The free-text
+// usage_rights column is context only: never read as approval, never written
+// here.
+const RIGHTS = Object.freeze({
+  original: 'Original photograph — owned or controlled',
+  licensed: 'Licensed image — permission held',
+  retailer: 'Retailer image — permission held',
+  ai_cleared: 'AI-generated image — cleared for public use',
+  unknown: 'Unknown / not cleared',
+});
+const RIGHTS_CATEGORIES = Object.freeze(Object.keys(RIGHTS));
+const CLEARED_RIGHTS = Object.freeze(['original', 'licensed', 'retailer', 'ai_cleared']);
+// The categories whose declaration may carry a private note.
+const RIGHTS_NOTE_CATEGORIES = Object.freeze(['licensed', 'retailer', 'ai_cleared']);
+const RIGHTS_NOTE_MAX = 500;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -211,9 +235,73 @@ async function updateAsset(db, id, fields = {}) {
     sets.push('visibility = :visibility'); r.visibility = fields.visibility;
   }
   if ('usage_rights' in fields) { sets.push('usage_rights = :rights'); r.rights = clean(fields.usage_rights, 500); }
-  if ('details' in fields) { sets.push('details = CAST(:details AS JSONB)'); r.details = JSON.stringify(normalizeDetails(fields.details)); }
+  if ('details' in fields) {
+    // The known detail keys replace the old ones. The rights declaration is
+    // not a detail key (normalizeDetails drops it from what is sent), so it is
+    // carried over as it is: only declareRights changes it.
+    sets.push(`details = CAST(:details AS JSONB) || (CASE WHEN jsonb_typeof(details) = 'object' AND details ? 'rights'
+      THEN jsonb_build_object('rights', details->'rights') ELSE '{}'::jsonb END)`);
+    r.details = JSON.stringify(normalizeDetails(fields.details));
+  }
   if (!sets.length) throw new MediaError(400, 'Nothing to change.');
   await db.sequelize.query(`UPDATE media_assets SET ${sets.join(', ')}, updated_at = NOW() WHERE id = :id`, { replacements: r });
+  return getAsset(db, id);
+}
+
+/**
+ * The picture's rights declaration { category, label, note, declared_by,
+ * declared_at }, or null when there is none or it is not one of the five
+ * categories. Reads details.rights only: usage_rights is never a declaration.
+ */
+function rightsOf(asset) {
+  let d = asset?.details;
+  if (typeof d === 'string') {
+    try { d = JSON.parse(d); } catch (err) {
+      console.error('[mediaLibrary] a picture\'s details are not JSON:', err.message);
+      return null;
+    }
+  }
+  const r = d && typeof d === 'object' && !Array.isArray(d) ? d.rights : null;
+  if (!r || typeof r !== 'object' || Array.isArray(r) || typeof r.category !== 'string') return null;
+  if (!Object.prototype.hasOwnProperty.call(RIGHTS, r.category)) return null;
+  return {
+    category: r.category, label: RIGHTS[r.category], note: typeof r.note === 'string' && r.note ? r.note : null,
+    declared_by: typeof r.declared_by === 'string' ? r.declared_by : null,
+    declared_at: typeof r.declared_at === 'string' ? r.declared_at : null,
+  };
+}
+
+/** True only for a declaration in one of the four cleared categories. */
+function rightsCleared(asset) {
+  const r = rightsOf(asset);
+  return Boolean(r && CLEARED_RIGHTS.includes(r.category));
+}
+
+/** A declaration as given, checked: one of the five categories; a note of up to 500 characters, for licensed, retailer or AI-cleared only. */
+function normalizeRights(input) {
+  const { category, note } = input && typeof input === 'object' ? input : {};
+  if (typeof category !== 'string' || !Object.prototype.hasOwnProperty.call(RIGHTS, category)) {
+    throw new MediaError(400, `category must be one of ${RIGHTS_CATEGORIES.join(', ')}.`);
+  }
+  if (note != null && typeof note !== 'string') throw new MediaError(400, 'note must be text.');
+  const text = (note || '').trim();
+  if (text.length > RIGHTS_NOTE_MAX) throw new MediaError(400, `note must be ${RIGHTS_NOTE_MAX} characters or fewer.`);
+  if (text && !RIGHTS_NOTE_CATEGORIES.includes(category)) throw new MediaError(400, `A note goes with ${RIGHTS_NOTE_CATEGORIES.join(', ')} only.`);
+  return { category, note: text || null };
+}
+
+/**
+ * An ADMIN's rights declaration for this exact picture, written to
+ * details.rights and merged: every other details key, and usage_rights,
+ * stay as they are. Returns the picture.
+ */
+async function declareRights(db, id, input, by = null) {
+  const { category, note } = normalizeRights(input);
+  await getAsset(db, id);
+  const rights = { category, note, declared_by: by ? String(by).slice(0, 255) : null, declared_at: new Date().toISOString() };
+  const merged = "(CASE WHEN jsonb_typeof(details) = 'object' THEN details ELSE '{}'::jsonb END) || jsonb_build_object('rights', CAST(:rights AS JSONB))";
+  await db.sequelize.query(`UPDATE media_assets SET details = ${merged}, updated_at = NOW() WHERE id = :id AND deleted_at IS NULL`,
+    { replacements: { id, rights: JSON.stringify(rights) } });
   return getAsset(db, id);
 }
 
@@ -450,6 +538,7 @@ module.exports = {
   isPrivateCameraRoll, TAG_ROLES,
   STATUSES, VISIBILITIES, ROLES, SOURCES, ENTITIES, DETAIL_KEYS, MediaError,
   visibilityWhere, audienceOf, normalizeLink, normalizeDetails, checkUrl,
+  RIGHTS, RIGHTS_CATEGORIES, CLEARED_RIGHTS, RIGHTS_NOTE_CATEGORIES, RIGHTS_NOTE_MAX, rightsOf, rightsCleared, normalizeRights, declareRights,
   createAsset, updateAsset, removeAsset, linkAsset, unlinkLink, getAsset, listFor, assetsByUrl, taggables, bringExisting,
   SOURCE_ROLES, addSources, sourcesOf, sourceUseCounts,
 };

@@ -32,11 +32,16 @@ const SCRIPT = [
 
 (shouldSkip ? describe.skip : describe)('Script post moments draft feed posts', () => {
   let token;
+  let editorToken;
   const shows = [];
 
   beforeAll(() => {
+    // Script post drafts are an ADMIN's to read and to make (Evoni, 2026-11-15).
     token = TokenService.generateTokenPair({
-      id: 'test-user-post-drafts', email: 'evoni@post-drafts.dev', name: 'Post Drafts', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-post-drafts', email: 'evoni@post-drafts.dev', name: 'Post Drafts', groups: ['ADMIN'], role: 'ADMIN',
+    }).accessToken;
+    editorToken = TokenService.generateTokenPair({
+      id: 'test-editor-post-drafts', email: 'editor@post-drafts.dev', name: 'Post Drafts Editor', groups: ['USER', 'EDITOR'], role: 'USER',
     }).accessToken;
   });
 
@@ -51,6 +56,15 @@ const SCRIPT = [
 
   const url = (ep) => `/api/v1/feed-posts/episodes/${ep}/script-drafts`;
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
+
+  it('reading the drafts is an ADMIN\'s: an editor is refused and no token is 401', async () => {
+    const ids = await seed();
+    const refused = await request(app).get(url(ids.ep)).set('Authorization', `Bearer ${editorToken}`);
+    expect(refused.status).toBe(403);
+    expect(refused.body.data).toBeUndefined();
+    expect((await request(app).get(url(ids.ep))).status).toBe(401);
+    expect(await drafts(ids.show)).toEqual([]);
+  });
   const drafts = async (show) => {
     const [rows] = await run(
       `SELECT fp.id, fp.status, fp.content_text, fp.episode_id, fp.timeline_position, fp.story_order, fm.beat_number

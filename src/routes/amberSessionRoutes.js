@@ -355,8 +355,10 @@ const readStoryLimiter = rateLimit({
 // Takes full story text, chunks into paragraphs, synthesizes each via
 // ElevenLabs, concatenates audio buffers, returns single audio/mpeg.
 // Body: { text: "...", voice_id?: "..." }
+// An ADMIN's (Evoni, 2026-11-16): a paid ElevenLabs call of up to 30 chunks in
+// a voice the caller names, and no screen calls it. /speak is not changed.
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/read-story', requireAuth, readStoryLimiter, async (req, res) => {
+router.post('/read-story', requireAuth, authorize(['ADMIN']), readStoryLimiter, async (req, res) => {
   const { text, voice_id } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'text required' });
   if (!ELEVENLABS_API_KEY) return res.status(503).json({ error: 'ElevenLabs not configured' });

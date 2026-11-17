@@ -79,7 +79,9 @@ const SCRIPT = '## BEAT: 1 · Opening Ritual\nLala: "Bestie, come style me."\n\n
   const sent = (name) => mockSend.mock.calls.map(([c]) => c).filter((c) => c.name === name);
 
   beforeAll(async () => {
-    token = TokenService.generateTokenPair({ id: 'test-user-retake', email: 'retake@clips.dev', name: 'Retake', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    // Evoni, 2026-11-16: footage is uploaded by an ADMIN (an editor could until then; the refusals are in
+    // footageAdminOnly.integration.test.js). What this suite checks is the same, by the account that may upload.
+    token = TokenService.generateTokenPair({ id: 'test-user-retake', email: 'retake@clips.dev', name: 'Retake', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :n, :n, NOW(), NOW())', { id: show, n: `retake-${show.slice(0, 8)}` });
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, script_content, script_locked_beats, created_at, updated_at)
                VALUES (:ep, :show, 'Filmed once', 1, 'draft', :script, '[1]'::jsonb, NOW(), NOW())`, { ep, show, script: SCRIPT });

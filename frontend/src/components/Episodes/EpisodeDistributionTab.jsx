@@ -93,6 +93,29 @@ const STATUS_OPTIONS = [
   { value: 'unlisted', label: 'Unlisted', color: 'var(--text-secondary)' }
 ];
 
+// What a draft changes on the page (Evoni, 2026-11-16): the drafted words and the show's account, as the server
+// does (services/distributionService GENERATED_COPY_FIELDS). Everything else on a platform is hers and may be
+// an edit she has not saved yet: its status, schedule, link, thumbnail, switch and caption are left as they are.
+export const GENERATED_COPY_FIELDS = ['title', 'description', 'hashtags', 'tags', 'generated_at', 'account_name', 'account_url'];
+
+/**
+ * The page's platforms with a draft applied. Only the platforms the draft names change, and only their copy
+ * fields. A platform drafted for the first time (it has no `generated_at`) is switched on, as before, and
+ * takes the server's defaults for what it does not have; one drafted before keeps its switch as she left it.
+ */
+export function applyGeneratedCopy(current, generated) {
+  const next = { ...(current || {}) };
+  for (const [platform, content] of Object.entries(generated || {})) {
+    if (!content || typeof content !== 'object') continue;
+    const mine = next[platform] || {};
+    const copy = {};
+    for (const field of GENERATED_COPY_FIELDS) if (content[field] !== undefined) copy[field] = content[field];
+    const firstDraft = !mine.generated_at;
+    next[platform] = { ...(firstDraft ? content : {}), ...mine, ...copy, ...(firstDraft ? { enabled: true } : {}) };
+  }
+  return next;
+}
+
 function EpisodeDistributionTab({ episode, onUpdate, onOpenTab }) {
   const [distributionData, setDistributionData] = useState({});
   const [selectedPlatform, setSelectedPlatform] = useState('youtube');
@@ -188,13 +211,7 @@ function EpisodeDistributionTab({ episode, onUpdate, onOpenTab }) {
       if (data.success && data.data?.platforms) {
         // Merge generated data into current state
         const generated = data.data.platforms;
-        setDistributionData(prev => {
-          const merged = { ...prev };
-          for (const [platform, content] of Object.entries(generated)) {
-            merged[platform] = { ...merged[platform], ...content, enabled: true };
-          }
-          return merged;
-        });
+        setDistributionData(prev => applyGeneratedCopy(prev, generated));
         setHasChanges(true);
         setSaveNote(null);
         // Drafted from the viewer teaser when the episode has one

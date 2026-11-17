@@ -605,7 +605,8 @@ router.post('/bulk/delete', requireAuth, async (req, res) => {
  * POST /api/v1/assets/bulk/process-background
  * Bulk background removal
  */
-router.post('/bulk/process-background', requireAuth, async (req, res) => {
+// The four processing routes in this file are an ADMIN's (Evoni, 2026-11-16): paid background removal.
+router.post('/bulk/process-background', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { assetIds } = req.body;
 
@@ -1000,7 +1001,7 @@ router.put('/:id/reject', requireAuth, authorize(['ADMIN']), async (req, res) =>
  * PUT /api/v1/assets/:id/process
  * Process asset background removal
  */
-router.put('/:id/process', requireAuth, async (req, res) => {
+router.put('/:id/process', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1035,7 +1036,7 @@ router.put('/:id/process', requireAuth, async (req, res) => {
  * POST /api/v1/assets/:id/process-background
  * On-demand background removal
  */
-router.post('/:id/process-background', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/process-background', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await AssetService.processAssetBackgroundRemoval(id);
@@ -1221,7 +1222,7 @@ router.get('/:id/download/:type', optionalAuth, validateUUIDParam('id'), async (
  * Process an asset with transformations (background removal, enhancement, etc.)
  * Body: { asset_id, template_id, processing: { removeBackground, smoothSkin, autoEnhance }, provider }
  */
-router.post('/process', requireAuth, async (req, res) => {
+router.post('/process', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { asset_id, template_id, processing = {}, provider = 'runway' } = req.body;
 

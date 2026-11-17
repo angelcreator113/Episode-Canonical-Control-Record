@@ -111,7 +111,7 @@ describe('Style sheet in Distribution', () => {
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith(URL_, { include_shop_links: true }));
     const disclosure = await screen.findByTestId('ssd-disclosure');
     expect(disclosure.textContent).toContain(DISCLOSURE);
-    expect(disclosure.textContent).toContain('Added because Shop the Look links are included');
+    expect(disclosure.textContent).toContain('Added because an affiliate link is included');
     expect(disclosure.querySelector('input, textarea, button')).toBeNull();
     expect(screen.getByLabelText('Caption').value).not.toContain(DISCLOSURE);
   });

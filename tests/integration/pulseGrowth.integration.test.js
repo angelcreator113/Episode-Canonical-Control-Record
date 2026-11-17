@@ -31,6 +31,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const ids = { show: uuid(), ep1: uuid(), ep2: uuid(), ep3: uuid() };
   const p = {};
   let token;
+  // The Pulse's production reads are an ADMIN's (Evoni, 2026-11-15; pulseOperationalReads). This suite reads
+  // them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-growth', email: 'admin@growth.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({ id: 'test-user-growth', email: 'ed@growth.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
@@ -81,8 +84,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   test('the route needs a sign-in and a show id', async () => {
     expect((await request(app).get(`/api/v1/pulse-followers/growth?show_id=${ids.show}`)).status).toBe(401);
-    expect((await request(app).get('/api/v1/pulse-followers/growth?show_id=nope').set('Authorization', `Bearer ${token}`)).status).toBe(400);
-    const res = await request(app).get(`/api/v1/pulse-followers/growth?show_id=${ids.show}`).set('Authorization', `Bearer ${token}`);
+    expect((await request(app).get('/api/v1/pulse-followers/growth?show_id=nope').set('Authorization', `Bearer ${adminToken}`)).status).toBe(400);
+    const res = await request(app).get(`/api/v1/pulse-followers/growth?show_id=${ids.show}`).set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
@@ -153,7 +156,11 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       ],
     });
     // The route sends it too; nothing in The Pulse writes Influence.
-    const res = await request(app).get(`/api/v1/pulse-followers/growth?show_id=${ids.show}`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get(`/api/v1/pulse-followers/growth?show_id=${ids.show}`).set('Authorization', `Bearer ${adminToken}`);
     expect(res.body.influence.now).toBe(5);
+  });
+  test("The Pulse's production reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/pulse-followers/growth?show_id=00000000-0000-4000-8000-000000000000`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });
