@@ -38,6 +38,7 @@ import { computeEventPackageReadiness, computeEventState, describeMissing } from
 import { checklistFixTarget, loadProductionChecks } from '../Episodes/EpisodeProductionChecklist';
 import { checklistSummary, primaryAction } from '../../lib/episodeNextAction';
 import useNextSlot from '../../hooks/useNextSlot';
+import { IN_PRODUCTION, episodesInProduction, resumeEpisode, rememberedEpisodeId } from '../../utils/activeEpisode';
 import './ShowOverview.css';
 import { packageHref } from '../../lib/eventFlow';
 
@@ -46,8 +47,11 @@ import { packageHref } from '../../lib/eventFlow';
 // other pages can use them without importing this one. They are exported
 // from here as before.
 export { checklistSummary, primaryAction };
+// The working statuses and the episodes in production live in
+// utils/activeEpisode (the official production episode and the episode to
+// resume are worked out there). They are exported from here as before.
+export { IN_PRODUCTION, episodesInProduction };
 
-export const IN_PRODUCTION = ['draft', 'scripted', 'in_build', 'in_review'];
 const STATUS_LABEL = { draft: 'Draft', scripted: 'Scripted', in_build: 'In build', in_review: 'In review', scheduled: 'Scheduled', published: 'Published', archived: 'Archived' };
 const STAT_LABEL = { coins: 'Coins', reputation: 'Reputation', brand_trust: 'Brand Trust', influence: 'Influence', stress: 'Stress' };
 const STAT_ORDER = ['coins', 'reputation', 'brand_trust', 'influence', 'stress'];
@@ -55,13 +59,6 @@ const STAT_ICON = { coins: Coins, reputation: Star, brand_trust: Heart, influenc
 const SECTION_ICON = { brief: ClipboardList, world: MapPin, scene: Clapperboard, wardrobe: Shirt, lookbook: Sparkles, overlays: Smartphone, onscreen: Layers, social: Hash, intelligence: Brain };
 
 const time = (d) => (d ? new Date(d).getTime() || 0 : 0);
-
-/** The episodes in production, in episode order. */
-export function episodesInProduction(episodes) {
-  return (episodes || [])
-    .filter((e) => IN_PRODUCTION.includes(e.status) && e.evaluation_status !== 'accepted')
-    .sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
-}
 
 /** Events whose setup is incomplete, with what each is missing. */
 export function eventsNeedingAttention(events) {
@@ -267,7 +264,7 @@ const fmtLength = (s) => {
   return Number.isFinite(n) && n > 0 ? `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}` : null;
 };
 
-function NowProducing({ showId, episodes, episode, onPick, checksState, producingId = null }) {
+function NowProducing({ showId, episodes, episode, onPick, checksState, producingId = null, resume = null }) {
   const [menu, setMenu] = useState(false);
   const thumb = useThumbnail(episode);
   const seasons = seasonsOf(episodes);
@@ -301,6 +298,10 @@ function NowProducing({ showId, episodes, episode, onPick, checksState, producin
           <span className="pov-chip is-status">{STATUS_LABEL[status] || status}</span>
           {!producing && producingId && (
             <button type="button" className="pov-link" onClick={() => onPick(null)} data-testid="sov-back-to-producing">Back to the episode in production</button>
+          )}
+          {/* The episode last opened, when it is a later unfinished one: a way back to it, never "Now producing". */}
+          {resume && (
+            <Link className="pov-link" to={`/episodes/${resume.id}`} data-testid="sov-resume">Resume {episodeCode(resume)} (last opened)</Link>
           )}
         </div>
         <div className="pov-switch">
@@ -487,6 +488,11 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
   const episode = useMemo(() => episodes.find((e) => e.id === pickedId) || defaultEpisode(episodes), [episodes, pickedId]);
   // The show's episode in production: the same rule the header chip uses.
   const producingId = useMemo(() => episodesInProduction(episodes)[0]?.id || null, [episodes]);
+  // The episode to resume, offered on the card only when it is not the one in production.
+  const resume = useMemo(() => {
+    const ep = resumeEpisode(episodes, rememberedEpisodeId());
+    return ep && producingId && ep.id !== producingId ? ep : null;
+  }, [episodes, producingId]);
   const checksState = useProductionChecks(episode, showId);
   const attentionRows = useMemo(() => orderAttention(attention, checksState.linkedEvent?.id), [attention, checksState.linkedEvent?.id]);
   const state = charState?.state || {};
@@ -507,7 +513,7 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
 
       <div className="pov-layout">
         <div className="pov-col">
-          <NowProducing showId={showId} episodes={episodes} episode={episode} onPick={setPickedId} checksState={checksState} producingId={producingId} />
+          <NowProducing showId={showId} episodes={episodes} episode={episode} onPick={setPickedId} checksState={checksState} producingId={producingId} resume={resume} />
 
           <section className="pov-card" data-testid="sov-attention">
             <div className="pov-card-head">
