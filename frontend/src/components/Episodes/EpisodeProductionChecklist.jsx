@@ -257,20 +257,103 @@ function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable,
  * The production checks for one episode: what the checklist shows, also read
  * by Producer Mode's Overview (the redesign, 2026-10-05) so both show the
  * same checklist. Resolves to { checks, notes, coverage, sceneStep,
- * linkedEvent }; a check whose source cannot be read is false.
+ * linkedEvent, read }; a check whose source cannot be read is false.
+ *
+ * Since PR-07 of docs/design/2026-11-studio-home-episode-command-center.md
+ * the reads are made together, and the checks are then worked out from what
+ * came back in the order they always were, so the checks, the notes and the
+ * console lines do not depend on which answer arrives first.
+ *
+ * options.loaded (optional): what the caller already holds, used in place
+ * of its read. A key that is absent or undefined is read; any other value,
+ * null and [] included, is taken as the answer.
+ *   brief        the episode brief, or null
+ *   linkedEvent  the episode's anchor event, or null (ignored with no show,
+ *                where no event is looked for)
+ *   sceneSets    the scene sets linked to the episode
+ *   lalaState    Lala's state, or null
+ *
+ * read: what the checks used, by name, whether it was read here or given in
+ * `loaded`. A read that failed or was not made has no key; one that answered
+ * with nothing is null or []. read.supplied lists the keys that came from
+ * `loaded`; it describes the others and is not itself data.
  */
-export async function loadProductionChecks(episode, showId) {
+export async function loadProductionChecks(episode, showId, options) {
   let planCoverage = null;
   let sceneStep = null;
   let linkedEvent = null;
   const results = {};
   const checkNotes = {};
+  const read = { supplied: [] };
 
+  const loaded = options?.loaded || {};
+  const given = (key) => Object.prototype.hasOwnProperty.call(loaded, key) && loaded[key] !== undefined;
+
+  // ── The reads, started together ──
+  // Each settles to { ok, value } or { ok: false, error }; none rejects, and
+  // nothing is logged or decided here. `sync` marks a read whose call threw
+  // before it was a request, which the blocks below treat as they always did.
+  const start = (make) => {
+    try {
+      return Promise.resolve(make()).then((value) => ({ ok: true, value }), (error) => ({ ok: false, error }));
+    } catch (error) {
+      return Promise.resolve({ ok: false, error, sync: true });
+    }
+  };
+  /**
+   * The answer of a read, or its error thrown where the read used to be
+   * awaited. The blocks below still `await` it, though it has already
+   * settled, so a malformed answer is reported in the words it always was.
+   */
+  const take = (settled) => {
+    if (!settled.ok) throw settled.error;
+    return settled.value;
+  };
+
+  const pending = {
+    brief: given('brief') ? null : start(() => api.get(`/api/v1/episode-brief/${episode.id}`)),
+    // The episode's source event (Task #1906): anchor from the brief, never
+    // a scan of the show's event list. Only looked for when there is a show.
+    anchor: !showId ? null : (given('linkedEvent') ? null : start(() => getEpisodeAnchorEvent(episode.id))),
+    sceneSets: given('sceneSets') ? null : start(() => api.get(`/api/v1/episodes/${episode.id}/scene-sets`)),
+    plan: start(() => api.get(`/api/v1/episode-brief/${episode.id}/plan`)),
+    slotCoverage: start(() => api.get(`/api/v1/wardrobe/slot-coverage?show_id=${showId}`)),
+    outfit: start(() => api.get(`/api/v1/wardrobe/outfit/${episode.id}`)),
+    lalaState: given('lalaState') ? null : start(() => api.get(`/api/v1/characters/lala/state?show_id=${showId}`)),
+    overlays: showId ? start(() => api.get(`/api/v1/ui-overlays/${showId}`)) : null,
+    // The episode's social tasks (episode_todo_lists, the To-Do tab and the
+    // script read them), or a social checklist image.
+    socialTasks: start(() => api.get(`/api/v1/episodes/${episode.id}/todo/social`).then((r) => r.data?.social_tasks || [])),
+    socialAssets: start(() => api.get(`/api/v1/assets?asset_type=SOCIAL_CHECKLIST&episode_id=${episode.id}&limit=1`).then((r) => r.data?.data || [])),
+    episode: start(() => api.get(`/api/v1/episodes/${episode.id}`)),
+    placements: start(() => api.get(`/api/v1/episodes/${episode.id}/timeline/placements`)),
+    lookbook: start(() => api.get(`/api/v1/episodes/${episode.id}/lookbook`)),
+    styleSheet: start(() => api.get(`/api/v1/episodes/${episode.id}/style-sheet`).catch((err) => { throw err; })),
+    showBrain: start(() => api.get('/api/v1/franchise-brain/entries?category=franchise_law&status=active&limit=1')),
+  };
+  // The venue's image needs the event, so it follows that read alone. With
+  // no event read (it failed, or there is no show) it is not asked for.
+  if (showId) {
+    const event = given('linkedEvent') ? Promise.resolve({ ok: true, value: loaded.linkedEvent }) : pending.anchor;
+    pending.venue = event.then((got) => (got.ok ? start(() => venueImageGenerated(got.value)) : { ok: false, error: got.error }));
+  }
+  const names = Object.keys(pending).filter((name) => pending[name]);
+  const answers = await Promise.all(names.map((name) => pending[name]));
+  const got = Object.fromEntries(names.map((name, i) => [name, answers[i]]));
+
+  // ── The checks, in the order they always were, from what came back ──
   try {
     // ── Check Episode Brief ──
     try {
-      const { data } = await api.get(`/api/v1/episode-brief/${episode.id}`);
-      const brief = data.data;
+      let brief;
+      if (given('brief')) {
+        brief = loaded.brief;
+        read.supplied.push('brief');
+      } else {
+        const { data } = await take(got.brief);
+        brief = data.data;
+      }
+      read.brief = brief ?? null;
       results.arc_position      = !!(brief?.arc_number && brief?.position_in_arc);
       results.archetype         = !!brief?.episode_archetype;
       results.designed_intent   = !!brief?.designed_intent;
@@ -283,14 +366,19 @@ export async function loadProductionChecks(episode, showId) {
     // ── Check Event, Venue, Invitation, Outfit ──
     try {
       if (showId) {
-        // The episode's source event (Task #1906): anchor from the
-        // brief, never a scan of the show's event list.
-        linkedEvent = await getEpisodeAnchorEvent(episode.id);
+        if (given('linkedEvent')) {
+          linkedEvent = loaded.linkedEvent;
+          read.supplied.push('linkedEvent');
+        } else {
+          linkedEvent = take(got.anchor);
+        }
+        read.linkedEvent = linkedEvent ?? null;
         results.event_linked = !!linkedEvent;
         results.invitation_exists = !!linkedEvent?.invitation_asset_id;
         const auto = linkedEvent?.canon_consequences?.automation || {};
         results.venue_set = !!(linkedEvent?.venue_name || auto.venue_name || linkedEvent?.scene_set_id);
-        results.venue_image = await venueImageGenerated(linkedEvent);
+        results.venue_image = take(got.venue);
+        read.venueSetHasImage = results.venue_image;
       } else {
         results.event_linked = false;
       }
@@ -302,8 +390,15 @@ export async function loadProductionChecks(episode, showId) {
     // scene plan or the event (checked again below, once the plan is read;
     // Evoni, 2026-10-09: the checklist did not cross out what was done) ──
     try {
-      const { data } = await api.get(`/api/v1/episodes/${episode.id}/scene-sets`);
-      const sets = data?.data || data?.sceneSets || [];
+      let sets;
+      if (given('sceneSets')) {
+        sets = loaded.sceneSets || [];
+        read.supplied.push('sceneSets');
+      } else {
+        const { data } = await take(got.sceneSets);
+        sets = data?.data || data?.sceneSets || [];
+      }
+      read.sceneSets = sets;
       results.scene_sets = (Array.isArray(sets) && sets.length > 0) || !!linkedEvent?.scene_set_id;
     } catch (err) {
       console.error('[EpisodeProductionChecklist] episode scene sets read failed:', err.response?.status || err.message);
@@ -312,11 +407,12 @@ export async function loadProductionChecks(episode, showId) {
 
     // ── Check Scene Plan ──
     try {
-      const { data } = await api.get(`/api/v1/episode-brief/${episode.id}/plan`);
+      const { data } = await take(got.plan);
       const plan = data?.data || [];
       // Audit GATE-01 (2026-10-03): generated means the server's coverage
       // says every canonical beat is planned once; never a row count.
       const coverage = data?.coverage || null;
+      read.plan = { beats: plan, coverage, readiness: data?.readiness ?? null };
       planCoverage = coverage;
       results.scene_plan        = Boolean(coverage?.complete);
       if (plan.length > 0 && !coverage) checkNotes.scene_plan = 'Beat coverage was not reported';
@@ -343,8 +439,9 @@ export async function loadProductionChecks(episode, showId) {
     // ── Check Wardrobe (audit GATE-02, 2026-10-03): the show's required
     // slots, each with a piece, not "any piece exists" ──
     try {
-      const { data } = await api.get(`/api/v1/wardrobe/slot-coverage?show_id=${showId}`);
+      const { data } = await take(got.slotCoverage);
       const slotCoverage = data?.data || null;
+      read.slotCoverage = slotCoverage;
       results.wardrobe_inventory = (slotCoverage?.inventory || 0) > 0;
       results.wardrobe_ready = Boolean(slotCoverage?.covered);
       if (slotCoverage && !slotCoverage.covered) checkNotes.wardrobe_ready = slotCoverage.text;
@@ -358,7 +455,8 @@ export async function loadProductionChecks(episode, showId) {
     // ── Outfit picked: the outfit locked on the Wardrobe tab, the one the
     // script writer reads (it read the event's planned pieces only) ──
     try {
-      const { data } = await api.get(`/api/v1/wardrobe/outfit/${episode.id}`);
+      const { data } = await take(got.outfit);
+      read.outfit = data?.items ?? null;
       results.outfit_picked = (data?.items?.length || 0) > 0;
     } catch (err) {
       console.error('[EpisodeProductionChecklist] locked outfit read failed:', err.response?.status || err.message);
@@ -367,8 +465,16 @@ export async function loadProductionChecks(episode, showId) {
 
     // ── Check Character state ──
     try {
-      const { data } = await api.get(`/api/v1/characters/lala/state?show_id=${showId}`);
-      results.character_state = !!(data?.state || data?.data);
+      let state;
+      if (given('lalaState')) {
+        state = loaded.lalaState;
+        read.supplied.push('lalaState');
+      } else {
+        const { data } = await take(got.lalaState);
+        state = data?.state || data?.data;
+      }
+      read.lalaState = state ?? null;
+      results.character_state = !!state;
     } catch {
       results.character_state = false;
     }
@@ -376,7 +482,8 @@ export async function loadProductionChecks(episode, showId) {
     // ── Check UI Overlays ──
     try {
       if (showId) {
-        const { data } = await api.get(`/api/v1/ui-overlays/${showId}`);
+        const { data } = await take(got.overlays);
+        read.overlays = data ?? null;
         results.overlays_generated = (data?.generated_count || 0) >= 5;
       }
     } catch {
@@ -386,18 +493,26 @@ export async function loadProductionChecks(episode, showId) {
     // ── Check Social Checklist ──
     try {
       results.social_checklist = false;
-      // The episode's social tasks (episode_todo_lists, the To-Do tab and the
-      // script read them), or a social checklist image.
-      const [tasks, assets] = await Promise.all([
-        api.get(`/api/v1/episodes/${episode.id}/todo/social`).then((r) => r.data?.social_tasks || []).catch((err) => {
-          console.error('[EpisodeProductionChecklist] social tasks read failed:', err.response?.status || err.message);
-          return [];
-        }),
-        api.get(`/api/v1/assets?asset_type=SOCIAL_CHECKLIST&episode_id=${episode.id}&limit=1`).then((r) => r.data?.data || []).catch((err) => {
-          console.error('[EpisodeProductionChecklist] social checklist asset read failed:', err.response?.status || err.message);
-          return [];
-        }),
-      ]);
+      // A call that threw before it was a request stops the pair, as it did
+      // when the two were written side by side.
+      if (got.socialTasks.sync) throw got.socialTasks.error;
+      if (got.socialAssets.sync) throw got.socialAssets.error;
+      let tasks;
+      if (got.socialTasks.ok) {
+        tasks = got.socialTasks.value;
+        read.socialTasks = tasks;
+      } else {
+        console.error('[EpisodeProductionChecklist] social tasks read failed:', got.socialTasks.error.response?.status || got.socialTasks.error.message);
+        tasks = [];
+      }
+      let assets;
+      if (got.socialAssets.ok) {
+        assets = got.socialAssets.value;
+        read.socialAssets = assets;
+      } else {
+        console.error('[EpisodeProductionChecklist] social checklist asset read failed:', got.socialAssets.error.response?.status || got.socialAssets.error.message);
+        assets = [];
+      }
       results.social_checklist = tasks.length > 0 || assets.length > 0;
     } catch (err) {
       console.error('[EpisodeProductionChecklist] social checklist check failed:', err.message);
@@ -410,14 +525,16 @@ export async function loadProductionChecks(episode, showId) {
     // Evoni, 2026-10-09: "title has already been created").
     let titleRow = episode;
     try {
-      const { data } = await api.get(`/api/v1/episodes/${episode.id}`);
+      const { data } = await take(got.episode);
       titleRow = data?.data || data?.episode || data || episode;
+      read.episode = titleRow ?? null;
     } catch (err) {
       console.error('[Checklist] episode re-read failed:', err.response?.status || err.message);
     }
     results.title_overlay = !!(titleRow.title_overlay_asset_id || titleRow.title_card_asset_id || episode.title_overlay_asset_id || episode.title_card_asset_id);
     try {
-      const { data } = await api.get(`/api/v1/episodes/${episode.id}/timeline/placements`);
+      const { data } = await take(got.placements);
+      read.placements = data?.data ?? null;
       results.overlays_placed = (data?.data?.length || 0) > 0;
     } catch (err) {
       console.error('[Checklist] overlay placements read failed:', err.response?.status || err.message);
@@ -427,15 +544,20 @@ export async function loadProductionChecks(episode, showId) {
     // ── Check the Style Page card: ready x of 12 (the server's rule, read
     //    through lib/styleReadiness), and the style sheet's status ──
     try {
-      const [lbRes, sheetRes] = await Promise.all([
-        api.get(`/api/v1/episodes/${episode.id}/lookbook`),
-        api.get(`/api/v1/episodes/${episode.id}/style-sheet`).catch((err) => {
-          console.error('[Checklist] style sheet read failed:', err.response?.status || err.message);
-          return null;
-        }),
-      ]);
-      const lookbook = lbRes?.data?.data || {};
+      if (got.lookbook.sync) throw got.lookbook.error;
+      if (got.styleSheet.sync) throw got.styleSheet.error;
+      let sheetRes;
+      if (got.styleSheet.ok) {
+        sheetRes = got.styleSheet.value;
+      } else {
+        console.error('[Checklist] style sheet read failed:', got.styleSheet.error.response?.status || got.styleSheet.error.message);
+        sheetRes = null;
+      }
       const sheet = sheetRes?.data?.data || null;
+      if (got.styleSheet.ok) read.styleSheet = sheet;
+      const lbRes = take(got.lookbook);
+      const lookbook = lbRes?.data?.data || {};
+      read.lookbook = lookbook;
       const { done, total, missing } = styleReadiness({ sheet });
       results.lookbook_ready = done >= total;
       if (!results.lookbook_ready) checkNotes.lookbook_ready = `Style sheet ready ${done} of ${total}${missing.length ? ` · missing: ${missing.join(', ')}` : ''}`;
@@ -453,9 +575,10 @@ export async function loadProductionChecks(episode, showId) {
 
     // ── Check Show Brain ──
     try {
-      const { data } = await api.get('/api/v1/franchise-brain/entries?category=franchise_law&status=active&limit=1');
+      const { data } = await take(got.showBrain);
       // The route answers { entries, count }; it read data.data, never there.
       const entries = data?.entries || data?.data || [];
+      read.showBrain = entries;
       results.show_brain = Array.isArray(entries) ? entries.length > 0 : false;
     } catch {
       results.show_brain = false;
@@ -463,7 +586,7 @@ export async function loadProductionChecks(episode, showId) {
   } catch (err) {
     console.error('[Checklist] Error:', err);
   }
-  return { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep, linkedEvent };
+  return { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep, linkedEvent, read };
 }
 
 export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate, onChecks, onOpenTab }) {
