@@ -6,9 +6,9 @@
 
 | State | Pull requests |
 |---|---|
-| Merged to `main` | PR-00 (#3872, these documents), PR-01 (#3873, request-count pins), PR-02 (#3874, shared next action and next slot), PR-03 (#3875, the production episode and the episode to resume), PR-04 (#3876, the resume location, the show, a deleted episode), PR-05 (#3877, return paths A; a race in its tests was corrected in #3879) |
+| Merged to `main` | PR-00 (#3872, these documents), PR-01 (#3873, request-count pins), PR-02 (#3874, shared next action and next slot), PR-03 (#3875, the production episode and the episode to resume), PR-04 (#3876, the resume location, the show, a deleted episode), PR-05 (#3877, return paths A; a race in its tests was corrected in #3879), PR-06 (#3880, return paths B; `main` at `a597e9a60d3ce72670af9c2bafdcac4347311b55`, where Validate passed) |
 | Open, awaiting Evoni's review; not merged | None |
-| Planned, not started | PR-06 to PR-09 (the rest of R1); PR-10 to PR-13 (R2, slot-aware planning); PR-14 to PR-16 (R3, Studio Home); PR-17 and PR-18 (R4, Episode Command Center); PR-19 to PR-22 (R5, sidebar and show navigation) |
+| Planned, not started | PR-07 to PR-09 (the rest of R1); PR-10 to PR-13 (R2, slot-aware planning); PR-14 to PR-16 (R3, Studio Home); PR-17 and PR-18 (R4, Episode Command Center); PR-19 to PR-22 (R5, sidebar and show navigation) |
 
 Merged means merged to `main`; nothing here says any of it is deployed to production. Studio Home, the Episode Command Center, slot-aware planning and the sidebar changes do not exist yet. Where what was built differs from the design below, §4's clarification says how; known limits are in §13.
 
@@ -517,3 +517,39 @@ Found on 2026-11-18 while auditing return paths for PR-05. Evoni's ruling of tha
 - The Season Overview's results links ("Episode results") open the Run Sheet and Evaluate, whose way back is the episode, not the Season page.
 - The Episodes board and the editor open Edit details, which returns to the Episode Overview, not to where it was opened.
 - The script writer's link to the Run Sheet has the same way back.
+
+Added on 2026-11-18, from PR-06's scope audit (Evoni's ruling of that day: deferred, and not included in PR-06):
+
+- Producer Mode's "Now producing" thumbnail link opens Thumbnail Studio with no origin, so the studio's way back is the episode, not Producer Mode.
+- The Season page's Episodes board "Edit Thumbnail" link opens Thumbnail Studio with no origin, so the studio's way back is the episode, not the board.
+
+### 13.5 Teleprompter: "Start at" after Exit (PR-06's Exit audit)
+
+Observed on 2026-11-18, read from source and confirmed by a test and a browser walk. PR-06 did not change it.
+
+- Exit (the X, Esc, the phone's Back) closes the reader and shows the setup screen. The episode and the address are kept.
+- "Start at" still shows the beat the reader was opened on. It does not move to the beat last reached while reading.
+- Evoni's note of 2026-11-18: "Start at" should preserve the original starting beat after Exit. That is what it does today, so nothing is to be built for it. Whether it should ever follow the beat last reached is not decided and is not scheduled.
+
+### 13.6 Tooling: the frontend ESLint configuration does not load
+
+Found on 2026-11-18 during PR-05; checked again that day after PR-06 merged.
+
+- Run locally in `frontend/`, `npx eslint` (ESLint 9.39.2) stops before linting any file: it "couldn't find an eslint.config.(js|mjs|cjs) file" and points to its migration guide. `frontend/` holds the older `.eslintrc.cjs` and `.eslintrc.json`.
+- So no frontend lint result was produced for PR-05 or PR-06.
+- The repository's `npm run lint`, which CI runs as the ESLint check, covers `src/` and `tests/` (the backend) only, so CI does not lint the frontend either.
+- What the fix should be (a new configuration file, or a pinned older ESLint) has not been looked into. Nothing in this plan fixes it.
+
+### 13.7 How the items in this section are classed
+
+Recorded on 2026-11-18. **None of the items in §13 is implemented.** Listing one here schedules nothing; each needs its own approval.
+
+| Class | Items |
+|---|---|
+| Confirmed defect (behaviour that is wrong today) | §13.3: the separate episode pages still open a deleted episode. §13.3: two windows writing the locations key at once can lose one update. §13.2: the Shows card counts treat an unrecognised status as in production, while Continue does not |
+| Deferred UX improvement (works, could be better) | All of §13.4 (ways back that return to the episode instead of where they were opened from, including the two added from PR-06). §13.2: story order ignores the season number. §13.1: `useNextSlot` does not guard against a late or out-of-order answer (to settle before PR-16 uses it). §13.3: the show is remembered after its read answers, not when the page opens |
+| Observed behaviour, no change decided | §13.5: the Teleprompter's "Start at" after Exit |
+| Tooling limitation | §13.6: the frontend ESLint configuration does not load |
+| Housekeeping and notes for later pull requests | §13.1: the bundle-size check for PR-18, and the hook's `[ShowOverview]` log label. §13.2: the borrowed class on Home's "In production" line. §13.3: a deleted episode's other per-episode keys are left; nothing uses the saved location yet (PR-16, PR-18) |
+
+The classes are this document's reading of each item, made on 2026-11-18; the items themselves are unchanged above.
