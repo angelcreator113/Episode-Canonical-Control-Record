@@ -31,6 +31,8 @@ import { getEpisodeEvents } from '../../services/episodeEventsApi';
 import EpisodeOverviewTab, { SOURCE_EVENT_PROTECTED, LINKED_EVENT_LOCKED, unlinkLockReason } from './EpisodeOverviewTab';
 import { nextStep } from '../../lib/episodeOverview';
 import { isAppPath } from '../../utils/sceneSets';
+import { FromEventCard } from './EpisodeOverviewSummary';
+import { parseFrom, returnLink } from '../../lib/eventFlow';
 
 const SOURCE = { id: 'ev-1', name: 'Studio Session', used_in_episode_id: 'ep-1', link: { anchor: true, stamped: true } };
 // Episode 1 today: the brief names the event, the event's own link to the episode is missing.
@@ -415,3 +417,60 @@ describe('at a phone width (the stylesheet\'s rules)', () => {
     expect(css).toMatch(/\.eov-protected-note \{ flex: 1 0 100%;[^}]*overflow-wrap: anywhere; \}/);
   });
 });
+
+// ── The Event Package knows it was opened from this episode (PR-05) ───────
+describe('the Overview\'s event package links carry the episode as their origin (PR-05)', () => {
+  const EP = '11111111-2222-4333-8444-555555555555';
+  const FROM = { ready: 1, total: 3, items: [
+    { key: 'event', label: 'Event', detail: 'Studio Session', done: true },
+    { key: 'location', label: 'Place', detail: 'no scene set yet', done: false, fix: 'package', fixLabel: 'Choose a scene set' },
+    { key: 'cast', label: 'Cast', detail: 'none featured', done: false, fix: 'package', fixLabel: 'Choose featured attendees' },
+    { key: 'look', label: 'Look', detail: 'none', done: false, fix: 'wardrobe', fixLabel: 'Choose a look' },
+  ] };
+  const renderCard = (episodeId) => render(<MemoryRouter><FromEventCard from={FROM} showId="show-1" eventId="ev-1" episodeId={episodeId} onOpenTab={() => {}} /></MemoryRouter>);
+  const href = (id) => screen.getByTestId(id).getAttribute('href');
+
+  test('each linked event\'s "Open the event package" names this episode, and the package returns to it', async () => {
+    linked = [SOURCE, SECOND];
+    renderTab({ id: EP });
+    for (const id of ['ev-1', 'ev-2']) {
+      const link = await screen.findByTestId(`overview-event-package-${id}`);
+      expect(link.getAttribute('href')).toBe(`/shows/show-1/events/${id}?from=episode:${EP}`);
+      const origin = parseFrom(new URLSearchParams(link.getAttribute('href').split('?')[1]).get('from'));
+      expect(returnLink(origin, { showId: 'show-1' })).toMatchObject({ href: `/episodes/${EP}`, label: 'Back to the episode' });
+    }
+  });
+
+  test('"From the event": the package link and each fix link name this episode and keep their section', () => {
+    renderCard(EP);
+    expect(href('episode-planning-package')).toBe(`/shows/show-1/events/ev-1?from=episode:${EP}`);
+    expect(href('episode-planning-fix-location')).toBe(`/shows/show-1/events/ev-1?from=episode:${EP}#epp-sec-place`);
+    expect(href('episode-planning-fix-cast')).toBe(`/shows/show-1/events/ev-1?from=episode:${EP}#epp-sec-people`);
+    // The section anchor is after the origin, so both are read: the origin from the query, the section from the hash.
+    const url = new URL(href('episode-planning-fix-location'), 'http://app.test');
+    expect(url.hash).toBe('#epp-sec-place');
+    expect(parseFrom(url.searchParams.get('from'))).toEqual({ kind: 'episode', id: EP, tab: null });
+    // The look is fixed inside the episode, on a button, as before.
+    expect(screen.getByTestId('episode-planning-fix-look').tagName).toBe('BUTTON');
+  });
+
+  test('an id the origin does not accept, or none: the plain address, as before', async () => {
+    for (const id of ['ep-1', null, undefined, '']) {
+      const view = renderCard(id);
+      expect(href('episode-planning-package')).toBe('/shows/show-1/events/ev-1');
+      expect(href('episode-planning-fix-location')).toBe('/shows/show-1/events/ev-1#epp-sec-place');
+      view.unmount();
+    }
+    renderTab();
+    expect((await screen.findByTestId('overview-event-package-ev-1')).getAttribute('href')).toBe('/shows/show-1/events/ev-1');
+  });
+
+  test('the links are still links, and nothing is written or asked for to build them', async () => {
+    renderTab({ id: EP });
+    const link = await screen.findByTestId('overview-event-package-ev-1');
+    expect(link.tagName).toBe('A');
+    expect(isAppPath(link.getAttribute('href'))).toBe(true);
+    expect(writes()).toBe(0);
+  });
+});
+

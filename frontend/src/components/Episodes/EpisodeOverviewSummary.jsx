@@ -8,6 +8,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, Check, CircleDashed, Pencil, Lock } from 'lucide-react';
 import { briefState } from '../../lib/episodeOverview';
+import { packageHref } from '../../lib/eventFlow';
 import './EpisodeOverviewSummary.css';
 
 /**
@@ -139,8 +140,10 @@ export function StoryBriefCard({
   );
 }
 
-export function FromEventCard({ from, showId, eventId, onOpenTab }) {
+export function FromEventCard({ from, showId, eventId, episodeId = null, onOpenTab }) {
   if (!from) return null;
+  // The Event Package, carrying this episode as where it was opened from (PR-05), so its "back" returns here.
+  const pkg = packageHref(showId, eventId, episodeId ? { kind: 'episode', id: episodeId } : null);
   return (
     <section className="eos-card eos-from" data-testid="episode-planning">
       <div className="eos-card-head">
@@ -155,7 +158,7 @@ export function FromEventCard({ from, showId, eventId, onOpenTab }) {
               <strong>{it.label}</strong>
               <span>{it.detail}</span>
               {it.fix === 'package' && (
-                <Link className="eos-link" to={`/shows/${showId}/events/${eventId}${PACKAGE_SECTION[it.key] ? `#${PACKAGE_SECTION[it.key]}` : ''}`} data-testid={`episode-planning-fix-${it.key}`}>{it.fixLabel}</Link>
+                <Link className="eos-link" to={`${pkg}${PACKAGE_SECTION[it.key] ? `#${PACKAGE_SECTION[it.key]}` : ''}`} data-testid={`episode-planning-fix-${it.key}`}>{it.fixLabel}</Link>
               )}
               {it.fix === 'wardrobe' && (
                 <button type="button" className="eos-link" onClick={() => onOpenTab?.('wardrobe')} data-testid={`episode-planning-fix-${it.key}`}>{it.fixLabel}</button>
@@ -164,7 +167,7 @@ export function FromEventCard({ from, showId, eventId, onOpenTab }) {
           </li>
         ))}
       </ul>
-      <Link className="eos-link eos-from-open" to={`/shows/${showId}/events/${eventId}`} data-testid="episode-planning-package">
+      <Link className="eos-link eos-from-open" to={pkg} data-testid="episode-planning-package">
         Open the event package <ArrowRight size={13} aria-hidden="true" />
       </Link>
     </section>

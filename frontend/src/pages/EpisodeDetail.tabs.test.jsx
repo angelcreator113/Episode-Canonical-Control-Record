@@ -291,5 +291,17 @@ describe('EpisodeDetail: the Script tab keeps its work', () => {
       expect(where()).toBe('/episodes/ep-1?tab=scripts');
     } finally { confirm.mockRestore(); }
   });
+
+  test('"Edit Episode" asks first while the script has unsaved edits, and stays when she says no (PR-05: the prompt is kept)', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      renderAt('/episodes/ep-1?tab=scripts');
+      fireEvent.click(await screen.findByTestId('script-edit'));
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(screen.getByRole('button', { name: /Edit Episode/ }));
+      expect(confirm).toHaveBeenCalledWith('The script has unsaved changes. Leave without saving?');
+      expect(where()).toBe('/episodes/ep-1?tab=scripts');
+    } finally { confirm.mockRestore(); }
+  });
 });
 

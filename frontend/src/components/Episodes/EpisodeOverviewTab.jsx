@@ -5,6 +5,7 @@ import { CalendarHeart, Tv, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, 
 import api from '../../services/api';
 import { getEpisodeEvents } from '../../services/episodeEventsApi';
 import { seasonPageHref } from '../../lib/seasonPage';
+import { packageHref } from '../../lib/eventFlow';
 import { purposeLines } from '../../lib/seasonArc';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import EpisodeTeaserSection from './EpisodeTeaserSection';
@@ -725,7 +726,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
           onEdit={() => setIsEditing(true)} archetypes={ARCHETYPES} intents={INTENTS}
           outcomes={outcomes}
         />
-        <FromEventCard from={fromEvent} showId={showId} eventId={source?.event?.id} onOpenTab={onOpenTab} />
+        <FromEventCard from={fromEvent} showId={showId} eventId={source?.event?.id} episodeId={episode?.id} onOpenTab={onOpenTab} />
       </div>
 
       {/* Viewer teaser (P12, Task #2386) */}
@@ -764,7 +765,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
                         read-only once Start Episode has locked the terms. */}
                     {(ev.show_id || showId) && (
                       <Link
-                        to={`/shows/${ev.show_id || showId}/events/${ev.id}`}
+                        to={packageHref(ev.show_id || showId, ev.id, episode?.id ? { kind: 'episode', id: episode.id } : null)}
                         data-testid={`overview-event-package-${ev.id}`}
                         className="eov-link"
                       >

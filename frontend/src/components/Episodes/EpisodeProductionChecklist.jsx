@@ -4,6 +4,7 @@ import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { nextStep } from '../../utils/sceneSteps';
 import { sceneSetsPath } from '../../utils/sceneSets';
+import { withReturn, tabOrigin } from '../../utils/returnPath';
 import { ProductionSummary, EpisodeTimeline, SectionCard, CheckBox } from './ChecklistHub';
 import { SECTION_GUIDE, sectionCount, sectionGuideText } from '../../lib/checklistHub';
 import { closetBeat } from '../../lib/scriptMoments';
@@ -669,10 +670,11 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
           </button>
           {/* In the app, with no page reload. */}
           <button type="button" className="ckh-open" data-testid="ckh-scene-plan" onClick={() => navigate(`/episodes/${episode.id}/plan`)}>Scene Plan</button>
-          {/* Episode Run Sheet — producer-facing tracker at /episodes/:id/todo (issue #1605). */}
-          <Link className="ckh-open" to={`/episodes/${episode.id}/todo`}>Episode Run Sheet</Link>
+          {/* Episode Run Sheet — producer-facing tracker at /episodes/:id/todo (issue #1605).
+              It and Evaluate carry this tab as where they were opened from (PR-05). */}
+          <Link className="ckh-open" to={withReturn(`/episodes/${episode.id}/todo`, tabOrigin(episode.id, 'checklist'))}>Episode Run Sheet</Link>
           {/* Final step — Evaluate Episode (issue #1601). */}
-          <Link className="ckh-evaluate" to={`/episodes/${episode.id}/evaluate`}>Evaluate Episode</Link>
+          <Link className="ckh-evaluate" to={withReturn(`/episodes/${episode.id}/evaluate`, tabOrigin(episode.id, 'checklist'))}>Evaluate Episode</Link>
         </div>
       </div>
     </div>
