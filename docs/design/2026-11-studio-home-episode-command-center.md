@@ -1,6 +1,16 @@
 # Studio Home and Episode Command Center — the authoritative plan
 
-**Status.** The one authoritative plan for the Studio Home, Episode Command Center, resume, slot-aware planning and sidebar work. Compiled on 2026-11-17 from Evoni's decisions of that day (§2). **Nothing in it is implemented.** It is a roadmap, not execution authorization: each pull request needs its own approval (§2.4).
+**Status.** The one authoritative plan for the Studio Home, Episode Command Center, resume, slot-aware planning and sidebar work. Compiled on 2026-11-17 from Evoni's decisions of that day (§2). It is a roadmap, not execution authorization: each pull request needs its own approval (§2.4).
+
+**Progress, as of 2026-11-18.** Most of the plan is not implemented.
+
+| State | Pull requests |
+|---|---|
+| Merged to `main` | PR-00 (#3872, these documents), PR-01 (#3873, request-count pins), PR-02 (#3874, shared next action and next slot), PR-03 (#3875, the production episode and the episode to resume), PR-04 (#3876, the resume location, the show, a deleted episode), PR-05 (#3877, return paths A; a race in its tests was corrected in #3879) |
+| Open, awaiting Evoni's review; not merged | None |
+| Planned, not started | PR-06 to PR-09 (the rest of R1); PR-10 to PR-13 (R2, slot-aware planning); PR-14 to PR-16 (R3, Studio Home); PR-17 and PR-18 (R4, Episode Command Center); PR-19 to PR-22 (R5, sidebar and show navigation) |
+
+Merged means merged to `main`; nothing here says any of it is deployed to production. Studio Home, the Episode Command Center, slot-aware planning and the sidebar changes do not exist yet. Where what was built differs from the design below, §4's clarification says how; known limits are in §13.
 
 **Basis.** `origin/main` at `8ca49577f544b3e593ae47ff88b7df64068239ab`.
 
@@ -111,6 +121,22 @@ It stands. S4 follows its order (existing episodes → world events → specials
 ---
 
 ## 4. One active episode, and resume
+
+> **Clarification, 2026-11-18: what was built differs from §4.2 to §4.4 below, by Evoni's rulings.** The text below is the design as approved on 2026-11-17 and is kept unchanged. PR-03 (#3875) and PR-04 (#3876) were built to her rulings of 2026-11-17 and 2026-11-18, which take precedence where they differ:
+>
+> - **Four things, kept apart.** The *official production episode*; the *resume episode*; the *resume location*; and the *next production task* (the existing checklist-driven recommendation, `primaryAction`). There is no single `activeEpisode` function.
+> - **Official production episode** (`productionEpisode`): the first unfinished episode in story order. It is worked out from the show's episodes alone, so opening another episode never changes it. It is not the episode with the latest `updated_at` (§4.2 rule 3).
+> - **Resume episode** (`resumeEpisode`): the episode last opened in this browser while it is an unfinished episode in that show's list; otherwise the official production episode.
+> - **Unfinished** is Producer Mode's existing rule: status `draft`, `scripted`, `in_build` or `in_review`, and `evaluation_status` not `accepted`. A season slot with no episode record is never eligible.
+> - **"Last opened"** is the browser's existing `working-episode-id`, with one reader and one writer (`utils/activeEpisode.js`). There are no per-show pointers (§4.4, "Multiple shows").
+> - **Producer Mode's card** still opens on the official production episode as "Now producing"; when a later unfinished episode was opened last, it offers "Resume … (last opened)". Home and the Shows page continue the resume episode and name the production episode when it differs.
+> - **Resume location:** one browser key, `working-episode-locations`, holding the last working tab and a time for each of the 20 most recently visited episodes. It records tabs only (Script, and the views of Production and Results), not a path (§4.3): the editor, plan, run sheet, evaluate and teleprompter pages are not recorded. The Overview is never recorded. Voice is recorded and read back only while it is open to this admin; a saved Voice location is passed over while it is not, and is not deleted.
+> - **The address decides.** A saved location never changes an address. No control reads it yet; the "Resume" controls are PR-16 and PR-18.
+> - **The show** is remembered in its existing key (`primeStudios.activeShowId`) once the episode, or the Season page's own show read, has answered.
+> - **A deleted episode:** the single-episode read does return a soft-deleted episode, marked `deleted_at`, and the Episode page uses that (§4.4 said it would never be used): it shows "not found", and forgets that episode's location and "last opened". It forgets only on a confirmed answer (the mark, or the server's 404), never on a network error, a server failure, a refusal or a timeout.
+> - **Not built:** the `storage` listener and window event of §4.4 ("Multiple tabs").
+>
+> Known limits of what was built are in §13.
 
 ### 4.1 Today
 
@@ -449,9 +475,45 @@ Every pull request follows the repo's loop (`DEVELOPMENT_WORKFLOW.md`) and the e
 
 - Nothing in this plan was run. S4's atomicity is read from `generateEpisodeFromEvent`, `assignOnStart` and the lock-order document.
 - Whether the single-episode read returns `deleted_at` to the page (PR 04).
+  - **Resolved, 2026-11-18 (PR-04, #3876):** it does. The Episode page treats an episode the read returns marked `deleted_at` as not found; the page's tests cover it.
 - Whether a read exposes follow-ups and the last approved story record to the episode page (R4). If not, that part is omitted; no endpoint is added.
 - Whether Start on development completes with the fallback title (§8.2).
 - Whether the development environment may run a branch before merge.
 - Whether responses are compressed by the web server.
 - Request counts are exact from source; durations are unmeasured.
 - The standing of the blueprint's transition step 1 fixes.
+
+---
+
+## 13. Follow-ups recorded from merged pull requests
+
+Recorded on 2026-11-18. Each item is in the words of its pull request's merge commit. None is scheduled by being listed here; each needs its own approval.
+
+### 13.1 PR-02 (#3874) — shared next action and next slot
+
+- "useNextSlot does not guard against an answer that arrives after its page was left, or an older answer after a newer one (before Studio Home uses it, PR-16)."
+- "lib/episodeNextAction imports the checklist component file; check the Episode page's bundle when the Overview uses it (PR-18)."
+- "the hook's error log still begins [ShowOverview]."
+
+### 13.2 PR-03 (#3875) — the production episode and the episode to resume
+
+- "the Shows card counts treat an unrecognised status as in production, while Continue does not;"
+- "story order uses the episode number alone and ignores the season number;"
+- "Home's "In production" line borrows the class of the card's "No episode yet" sentence."
+
+### 13.3 PR-04 (#3876) — the resume location, the show, a deleted episode
+
+- "two windows writing the locations key at once can lose one update (one stale location; nothing else is affected);"
+- "the separate episode pages (editor, scene planner, run sheet, evaluate, edit details) still open a deleted episode; the fix is a server change;"
+- "a deleted episode's other per-episode keys are left;"
+- "nothing uses the saved location yet;"
+- "the show is remembered after its read answers, not when the page opens."
+
+### 13.4 Navigation gaps found in PR-05's scope audit
+
+Found on 2026-11-18 while auditing return paths for PR-05. Evoni's ruling of that day: deferred, and not to be included in PR-05.
+
+- Event Package links from the Money, Checklist and Scenes tabs carry no origin, so the package's way back is Season › Events, not the episode.
+- The Season Overview's results links ("Episode results") open the Run Sheet and Evaluate, whose way back is the episode, not the Season page.
+- The Episodes board and the editor open Edit details, which returns to the Episode Overview, not to where it was opened.
+- The script writer's link to the Run Sheet has the same way back.
