@@ -16,20 +16,10 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { Film, Search, CircleAlert, TriangleAlert, CircleCheck, Clock } from 'lucide-react';
 import { episodeAPI } from '../services/api';
 import { episodeEditApi, readFailure } from '../lib/episodeEditApi';
+import { rememberedEpisodeId, rememberEpisode } from '../utils/activeEpisode';
 import './EditorHub.css';
 
 const AT_ONCE = 4;
-export const WORKING_KEY = 'working-episode-id';
-
-const readWorking = () => {
-  try { return localStorage.getItem(WORKING_KEY); } catch (err) { console.warn('[EditorHub] storage unavailable:', err?.message); return null; }
-};
-const remember = (ep) => {
-  try {
-    localStorage.setItem(WORKING_KEY, ep.id);
-    localStorage.setItem('working-episode-title', ep.title || 'Untitled');
-  } catch (err) { console.warn('[EditorHub] storage unavailable:', err?.message); }
-};
 
 /** The episode list's rows, in show then episode order: [{ show, episodes }]. */
 export function groupByShow(episodes) {
@@ -76,7 +66,7 @@ export default function EditorHub() {
   const [states, setStates] = useState({});
   const [off, setOff] = useState(false);
   const [query, setQuery] = useState('');
-  const working = useMemo(readWorking, []);
+  const working = useMemo(rememberedEpisodeId, []);
 
   useEffect(() => {
     if (requested) return undefined;
@@ -201,7 +191,7 @@ export default function EditorHub() {
                 </div>
                 <div className="ehub-actions">
                   <Link className="ehub-btn" to={`/episodes/${ep.id}?tab=edit`}>Details</Link>
-                  <Link className="ehub-btn is-primary" to={`/episodes/${ep.id}/editor`} onClick={() => remember(ep)}
+                  <Link className="ehub-btn is-primary" to={`/episodes/${ep.id}/editor`} onClick={() => rememberEpisode(ep)}
                     aria-label={`Open episode ${ep.episode_number ?? ''} ${ep.title || ''} in the editor`.replace(/\s+/g, ' ')}>Open</Link>
                 </div>
               </li>

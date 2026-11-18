@@ -53,6 +53,7 @@ import { beatOrder } from '../lib/storyClock';
 import './EpisodeDetail.css';
 import useSideScroll from '../hooks/useSideScroll';
 import { deleteFailureText } from '../lib/frozenEpisode';
+import { rememberEpisode } from '../utils/activeEpisode';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
 // migration extension per v2.20 §9.11 (file already partial-migrated
@@ -442,8 +443,7 @@ const EpisodeDetail = () => {
   // Set this as the "working episode" for Studio tools (Timeline, Scene Composer)
   useEffect(() => {
     if (episodeId && episode) {
-      localStorage.setItem('working-episode-id', episodeId);
-      localStorage.setItem('working-episode-title', episode.title || episode.episodeTitle || 'Untitled');
+      rememberEpisode({ id: episodeId, title: episode.title, episodeTitle: episode.episodeTitle });
     }
   }, [episodeId, episode]);
 

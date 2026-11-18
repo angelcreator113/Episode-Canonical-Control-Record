@@ -111,6 +111,8 @@ import {
   removeEpisodeLibrarySceneApi,
 } from './EpisodeDetail';
 import EpisodeDetail from './EpisodeDetail';
+import episodeService from '../services/episodeService';
+import { productionEpisode, resumeEpisode, rememberedEpisodeId } from '../utils/activeEpisode';
 
 const renderEpisodeDetail = (entry = '/episodes/ep-1') => render(
   <MemoryRouter initialEntries={[entry]}>
@@ -355,5 +357,93 @@ describe('EpisodeDetail — source event link (Task #2356)', () => {
 
     await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
     expect(screen.queryByTestId('ed-source-event')).toBeNull();
+  });
+});
+
+// PR-03 (Evoni, 2026-11-18): opening an episode remembers it as the one last
+// opened, under the browser key the page has always written. That is the
+// episode to resume; it is never the show's official production episode.
+const realSetItem = Storage.prototype.setItem;
+
+describe('EpisodeDetail — opening an episode remembers it, and only that', () => {
+  const E1 = { id: 'ep-1', title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' }, status: 'in_build', episode_number: 1, season_number: 1 };
+  const E2 = { id: 'ep-2', title: 'Second Look', show_id: 'show-1', show: { id: 'show-1' }, status: 'draft', episode_number: 2, season_number: 1 };
+  const SHOW = [E2, E1];
+  const workingKeys = () => Object.keys(window.localStorage).filter((k) => k.startsWith('working-episode')).sort();
+  const open = (episode) => {
+    vi.mocked(episodeService.getEpisode).mockResolvedValueOnce(episode);
+    return renderEpisodeDetail(`/episodes/${episode.id}`);
+  };
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    window.localStorage.clear();
+  });
+
+  test('opening Episode 2 writes the existing working-episode-id key, with its title beside it', async () => {
+    expect(rememberedEpisodeId()).toBeNull();
+    open(E2);
+    await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+
+    await waitFor(() => expect(window.localStorage.getItem('working-episode-id')).toBe('ep-2'));
+    expect(window.localStorage.getItem('working-episode-title')).toBe('Second Look');
+    expect(rememberedEpisodeId()).toBe('ep-2');
+  });
+
+  test('Episode 1 is still the official production episode; Episode 2 is only the one to resume', async () => {
+    open(E2);
+    await waitFor(() => expect(window.localStorage.getItem('working-episode-id')).toBe('ep-2'));
+
+    expect(productionEpisode(SHOW).id).toBe('ep-1');
+    expect(resumeEpisode(SHOW, rememberedEpisodeId()).id).toBe('ep-2');
+  });
+
+  test('no new storage key: the two the page has always written, and nothing else', async () => {
+    const written = [];
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function setItem(key, value) {
+      written.push(String(key));
+      // Keep the write, so what is stored can be read back below.
+      return Reflect.apply(realSetItem, this, [key, value]);
+    });
+    try {
+      open(E2);
+      await waitFor(() => expect(window.localStorage.getItem('working-episode-id')).toBe('ep-2'));
+    } finally { spy.mockRestore(); }
+
+    expect(workingKeys()).toEqual(['working-episode-id', 'working-episode-title']);
+    // Everything the page stored while opening the episode.
+    expect([...new Set(written)].sort()).toEqual(['working-episode-id', 'working-episode-title']);
+    expect(Object.keys(window.localStorage).sort()).toEqual(['working-episode-id', 'working-episode-title']);
+  });
+
+  test('opening Episode 1 afterwards replaces the same key; it does not add one', async () => {
+    const first = open(E2);
+    await waitFor(() => expect(window.localStorage.getItem('working-episode-id')).toBe('ep-2'));
+    first.unmount();
+
+    open(E1);
+    await waitFor(() => expect(window.localStorage.getItem('working-episode-id')).toBe('ep-1'));
+    expect(window.localStorage.getItem('working-episode-title')).toBe('Episode One');
+    expect(workingKeys()).toEqual(['working-episode-id', 'working-episode-title']);
+    expect(productionEpisode(SHOW).id).toBe('ep-1');
+    expect(resumeEpisode(SHOW, rememberedEpisodeId()).id).toBe('ep-1');
+  });
+
+  test('an episode with no title is remembered as "Untitled"', async () => {
+    open({ ...E2, title: '' });
+    await waitFor(() => expect(window.localStorage.getItem('working-episode-id')).toBe('ep-2'));
+    expect(window.localStorage.getItem('working-episode-title')).toBe('Untitled');
+  });
+
+  test('storage that cannot be written: the episode still opens', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      open(E2);
+      await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Second Look');
+    } finally { spy.mockRestore(); warn.mockRestore(); }
+    expect(workingKeys()).toEqual([]);
   });
 });

@@ -24,6 +24,7 @@ import { API_URL } from '../config/api';
 import apiClient from '../services/api';
 import { activeShowId } from '../utils/activeShow';
 import { stageOf, episodeCode } from '../lib/episodePipeline';
+import { productionEpisode, resumeEpisode, rememberedEpisodeId } from '../utils/activeEpisode';
 import './ShowManagement.css';
 
 // The Show model's statuses, in tab order. in_development reads as
@@ -66,8 +67,14 @@ export const showStats = (shows) => ({
   episodes: shows.reduce((n, s) => n + s.episodes, 0),
 });
 
-/** What is happening in a show: episodes by stage, the one to continue, the next air date. */
-export function showActivity(episodes, now = Date.now()) {
+/**
+ * What is happening in a show: episodes by stage, the one to continue, the
+ * one officially in production, the next air date. `current` is the episode
+ * to resume and `producing` the show's official production episode
+ * (utils/activeEpisode); they differ only when the episode last opened is a
+ * later unfinished one.
+ */
+export function showActivity(episodes, now = Date.now(), rememberedId = null) {
   const eps = (episodes || []).filter((e) => stageOf(e));
   const t = (d) => (d ? new Date(d).getTime() || 0 : 0);
   const going = eps.filter((e) => stageOf(e) !== 'released');
@@ -75,7 +82,8 @@ export function showActivity(episodes, now = Date.now()) {
   return {
     released: eps.length - going.length,
     inProgress: going.length,
-    current: [...going].sort((a, b) => t(b.updated_at) - t(a.updated_at))[0] || null,
+    current: resumeEpisode(eps, rememberedId),
+    producing: productionEpisode(eps),
     nextAir: next ? { date: next.air_date, code: episodeCode(next) } : null,
   };
 }
@@ -156,6 +164,11 @@ function ShowCard({ show, tag, working, activity, onOpen, onEdit, onDelete }) {
             <PlayCircle size={15} aria-hidden /> Continue {episodeCode(activity.current)}<span className="sm-continue-title"> · {activity.current.title || 'Untitled'}</span>
           </Link>
         )}
+        {activity?.current && activity.producing && activity.producing.id !== activity.current.id && (
+          <p className="sm-card-stages" data-testid="sm-in-production">
+            In production: <Link className="sm-airs" to={`/episodes/${activity.producing.id}`}>{episodeCode(activity.producing)}</Link>
+          </p>
+        )}
         {show.description && <p className="sm-card-desc">{show.description}</p>}
         <div className="sm-card-actions">
           <button type="button" className="sm-btn-open" onClick={onOpen}><Play size={16} aria-hidden /> Open Show</button>
@@ -202,8 +215,9 @@ const ShowManagement = () => {
       setShows(list);
       setError(null);
       // What is happening in each show; a show whose read fails just shows its count.
+      const remembered = rememberedEpisodeId();
       const reads = await Promise.allSettled(list.map((sh) => apiClient.get(`${API_URL}/episodes?show_id=${sh.id}&page=1&limit=100`)));
-      setActivity(Object.fromEntries(list.map((sh, i) => [sh.id, reads[i].status === 'fulfilled' ? showActivity(reads[i].value?.data?.data) : null])));
+      setActivity(Object.fromEntries(list.map((sh, i) => [sh.id, reads[i].status === 'fulfilled' ? showActivity(reads[i].value?.data?.data, Date.now(), remembered) : null])));
     } catch (err) {
       console.error('Error fetching shows:', err);
       setError('Failed to load shows. Please try again.');
