@@ -1161,6 +1161,7 @@ const EpisodeDetail = () => {
               onOpenTab={openTab}
               onMarkReady={() => changeStatus('in_review')}
               statusSaving={statusSaving}
+              returnTab={locationTab}
             />
           </Suspense>
         )}

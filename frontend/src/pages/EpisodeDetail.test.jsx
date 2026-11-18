@@ -914,3 +914,56 @@ describe('EpisodeDetail — Edit details carries the tab it is opened from (PR-0
     expect(Object.keys(window.localStorage).sort()).toEqual(keys);
   });
 });
+
+describe('EpisodeDetail — the Production header\'s Thumbnail step carries the open tab (PR-06)', () => {
+  const EP = '11111111-2222-4333-8444-555555555555';
+  const EPISODE = { id: EP, title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' }, status: 'in_build', episode_number: 1, season_number: 1 };
+  const mount = (entry) => render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes><Route path="/episodes/:episodeId" element={<EpisodeDetail />} /></Routes>
+    </MemoryRouter>,
+  );
+  const thumbnailHref = async () => within(await screen.findByTestId('eph-step-thumbnail')).getByRole('link').getAttribute('href');
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    window.localStorage.clear();
+    vi.mocked(episodeService.getEpisode).mockReset();
+    vi.mocked(episodeService.getEpisode).mockResolvedValue(EPISODE);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    // The page is taken down before the mocks lose their answers.
+    cleanup();
+    vi.restoreAllMocks();
+    vi.mocked(episodeService.getEpisode).mockReset();
+    vi.mocked(episodeService.getEpisode).mockResolvedValue({ id: 'ep-1', title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' } });
+  });
+
+  test('on each Production view, the step\'s address names that view', async () => {
+    for (const [tab, label] of [['wardrobe', 'Wardrobe'], ['checklist', 'Checklist'], ['money', 'Money'], ['files', 'Files'], ['beatplan', 'Plan']]) {
+      const view = mount(`/episodes/${EP}?tab=${tab}`);
+      const href = await thumbnailHref();
+      expect(href).toBe(`/template-studio/youtube?episode=${EP}&from=${encodeURIComponent(`/episodes/${EP}?tab=${tab}`)}&fromLabel=${label}`);
+      expect(readReturn(new URLSearchParams(href.split('?')[1]), { episodeId: EP, fallback: { href: 'x', text: 'x' } }))
+        .toEqual({ href: `/episodes/${EP}?tab=${tab}`, text: `Back to ${label}`, origin: true });
+      view.unmount();
+    }
+  });
+
+  test('Production opened by its main key, or an old one, names the view it opens on', async () => {
+    for (const param of ['production', 'assets']) {
+      const view = mount(`/episodes/${EP}?tab=${param}`);
+      expect(await thumbnailHref()).toBe(`/template-studio/youtube?episode=${EP}&from=${encodeURIComponent(`/episodes/${EP}?tab=scenes`)}&fromLabel=Scenes`);
+      view.unmount();
+    }
+  });
+
+  test('nothing new is stored by showing the step', async () => {
+    mount(`/episodes/${EP}?tab=wardrobe`);
+    await thumbnailHref();
+    expect(Object.keys(window.localStorage).sort()).toEqual(['primeStudios.activeShowId', 'working-episode-id', 'working-episode-locations', 'working-episode-title']);
+  });
+});
+

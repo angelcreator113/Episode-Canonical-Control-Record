@@ -24,6 +24,7 @@ import {
   putEpisodeDistributionApi,
   generateEpisodeDistributionApi,
 } from './EpisodeDistributionTab';
+import { readReturn } from '../../utils/returnPath';
 
 describe('EpisodeDistributionTab — Track 6 CP11 module-scope helpers', () => {
   beforeEach(() => {
@@ -99,7 +100,12 @@ describe('EpisodeDistributionTab — thumbnail', () => {
     const box = await screen.findByTestId('distribution-thumbnail');
     expect(box.querySelector('img').getAttribute('src')).toBe('https://b.s3.amazonaws.com/t.png');
     const link = screen.getByRole('link', { name: 'Edit in Thumbnail Studio' });
-    expect(link.getAttribute('href')).toBe('/template-studio/youtube?show=show-1&episode=ep-1');
+    // The editor is told it was opened from this tab (PR-06), so its way back returns here.
+    expect(link.getAttribute('href')).toBe('/template-studio/youtube?show=show-1&episode=ep-1&from=%2Fepisodes%2Fep-1%3Ftab%3Ddistribution&fromLabel=Distribution');
+    const origin = new URLSearchParams(link.getAttribute('href').split('?')[1]);
+    expect(origin.get('show')).toBe('show-1');
+    expect(origin.get('episode')).toBe('ep-1');
+    expect(readReturn(origin, { episodeId: 'ep-1', fallback: { href: 'x', text: 'x' } })).toEqual({ href: '/episodes/ep-1?tab=distribution', text: 'Back to Distribution', origin: true });
     expect(screen.queryByRole('button', { name: /Upload Thumbnail|Remove/ })).toBeNull();
   });
 
@@ -109,7 +115,7 @@ describe('EpisodeDistributionTab — thumbnail', () => {
       distribution_metadata: { youtube: { enabled: true, title: 'x', hashtags: [] } },
     });
     expect((await screen.findByRole('link', { name: 'Make it in Thumbnail Studio' })).getAttribute('href'))
-      .toBe('/template-studio/youtube?show=show-1&episode=ep-2');
+      .toBe('/template-studio/youtube?show=show-1&episode=ep-2&from=%2Fepisodes%2Fep-2%3Ftab%3Ddistribution&fromLabel=Distribution');
   });
 });
 
