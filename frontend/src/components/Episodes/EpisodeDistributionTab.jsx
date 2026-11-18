@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import apiClient from '../../services/api';
 import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
+import { tabOrigin } from '../../utils/returnPath';
 import StyleSheetDistributionCard from './StyleSheetDistributionCard';
 import { ResultsShare } from './EpisodeResultsSummary';
 import { useReleaseSchedule, datetimeLocal, whenText, onSchedule } from '../../lib/releaseSchedule';
@@ -516,7 +517,7 @@ function EpisodeDistributionTab({ episode, onUpdate, onOpenTab }) {
                       </div>
                     )}
                   </div>
-                  <Link className="btn-secondary thumbnail-edit-link" to={thumbnailStudioHref({ showId: episode.show_id || episode.showId, episodeId: episode.id })}>
+                  <Link className="btn-secondary thumbnail-edit-link" to={thumbnailStudioHref({ showId: episode.show_id || episode.showId, episodeId: episode.id, ...tabOrigin(episode.id, 'distribution') })}>
                     {platformData.thumbnail_url || episode.thumbnail_url ? 'Edit in Thumbnail Studio' : 'Make it in Thumbnail Studio'}
                   </Link>
                 </div>
