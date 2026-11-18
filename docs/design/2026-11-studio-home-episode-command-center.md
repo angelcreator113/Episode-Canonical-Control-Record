@@ -1,6 +1,16 @@
 # Studio Home and Episode Command Center — the authoritative plan
 
-**Status.** The one authoritative plan for the Studio Home, Episode Command Center, resume, slot-aware planning and sidebar work. Compiled on 2026-11-17 from Evoni's decisions of that day (§2). **Nothing in it is implemented.** It is a roadmap, not execution authorization: each pull request needs its own approval (§2.4).
+**Status.** The one authoritative plan for the Studio Home, Episode Command Center, resume, slot-aware planning and sidebar work. Compiled on 2026-11-17 from Evoni's decisions of that day (§2). It is a roadmap, not execution authorization: each pull request needs its own approval (§2.4).
+
+**Progress, as of 2026-11-18.** Most of the plan is not implemented.
+
+| State | Pull requests |
+|---|---|
+| Merged to `main` | PR-00 (#3872, these documents), PR-01 (#3873, request-count pins), PR-02 (#3874, shared next action and next slot), PR-03 (#3875, the production episode and the episode to resume), PR-04 (#3876, the resume location, the show, a deleted episode) |
+| Open, awaiting Evoni's review; not merged | PR-05 (#3877, return paths A) |
+| Planned, not started | PR-06 to PR-09 (the rest of R1); PR-10 to PR-13 (R2, slot-aware planning); PR-14 to PR-16 (R3, Studio Home); PR-17 and PR-18 (R4, Episode Command Center); PR-19 to PR-22 (R5, sidebar and show navigation) |
+
+Merged means merged to `main`; nothing here says any of it is deployed to production. Studio Home, the Episode Command Center, slot-aware planning and the sidebar changes do not exist yet. Where what was built differs from the design below, §4's clarification says how; known limits are in §13.
 
 **Basis.** `origin/main` at `8ca49577f544b3e593ae47ff88b7df64068239ab`.
 
