@@ -45,6 +45,7 @@ import { packageHref } from '../lib/eventFlow';
 import { episodeSeasonHref } from '../lib/episodePlace';
 import { EP_TABS, resolveEpisodeTab, withEpisodeTab, pillGroups, pillFor, gatedTab } from '../utils/episodeTabs';
 import { isAdmin } from '../utils/authGroups';
+import { withReturn, tabOrigin } from '../utils/returnPath';
 import { voiceStudioOn } from '../lib/voiceStudioApi';
 import { closetBeat } from '../lib/scriptMoments';
 import { checklistProgress, coinsLabel } from '../lib/episodeShell';
@@ -476,6 +477,8 @@ const EpisodeDetail = () => {
   // remembers it for a control that says "Resume".
   const locationTab = epSubTab || activeTab;
   const voiceOpen = admin && voiceStudio;
+  // Edit details, carrying the tab it is opened from so Save and Back return to it (PR-05). From the Overview nothing is added.
+  const editDetailsHref = episode?.id ? withReturn(`/episodes/${episode.id}/edit`, tabOrigin(episode.id, locationTab) || {}) : null;
   useEffect(() => {
     if (loadedEpisodeId) rememberEpisodeLocation(loadedEpisodeId, locationTab, { voiceStudio: voiceOpen });
   }, [loadedEpisodeId, locationTab, voiceOpen]);
@@ -786,7 +789,7 @@ const EpisodeDetail = () => {
       return {
         title: 'Publish your episode',
         description: 'Everything looks good! Ready to publish?',
-        action: () => leaveTo(`/episodes/${episode.id}/edit`),
+        action: () => leaveTo(editDetailsHref),
         buttonText: 'Update Status'
       };
     }
@@ -818,7 +821,7 @@ const EpisodeDetail = () => {
     }
     
     if (episode.status !== 'published' && primaryAction?.title !== 'Publish your episode') {
-      steps.push({ title: 'Publish Episode', status: 'pending', action: () => leaveTo(`/episodes/${episode.id}/edit`) });
+      steps.push({ title: 'Publish Episode', status: 'pending', action: () => leaveTo(editDetailsHref) });
     } else if (episode.status === 'published') {
       steps.push({ title: 'Publish Episode', status: 'complete' });
     }
@@ -1019,7 +1022,7 @@ const EpisodeDetail = () => {
                   <div className="ed-dropdown">
                     <button
                       onClick={() => {
-                        leaveTo(`/episodes/${episode.id}/edit`);
+                        leaveTo(editDetailsHref);
                         setShowMoreActions(false);
                       }}
                       className="ed-dropdown-item"

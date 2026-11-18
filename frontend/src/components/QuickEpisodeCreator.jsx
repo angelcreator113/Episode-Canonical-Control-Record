@@ -17,10 +17,11 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
 import LoadingSkeleton from './LoadingSkeleton';
+import { readReturn } from '../utils/returnPath';
 
 const STORAGE_KEY_PREFIX = 'quick_episode_draft_';
 
@@ -88,6 +89,12 @@ export default function QuickEpisodeCreator() {
   const { showId, episodeId: editEpisodeId } = useParams();
   const navigate = useNavigate();
   const isEditMode = Boolean(editEpisodeId);
+  // Edit details returns to the tab it was opened from, when the address says (PR-05);
+  // else the episode, as before. A new episode has no origin.
+  const [searchParams] = useSearchParams();
+  const editReturn = isEditMode
+    ? readReturn(searchParams, { episodeId: editEpisodeId, fallback: { href: `/episodes/${editEpisodeId}`, text: 'Go back' } })
+    : null;
 
   // ─── State ───
   const [show, setShow] = useState(null);
@@ -473,7 +480,7 @@ export default function QuickEpisodeCreator() {
 
       // Clear draft and navigate to episode detail
       clearDraft();
-      navigate(`/episodes/${episodeId}`);
+      navigate(editReturn ? editReturn.href : `/episodes/${episodeId}`);
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || (isEditMode ? 'Failed to update episode' : 'Failed to create episode'));
     } finally {
@@ -523,9 +530,11 @@ Lala arrives at ${evName}.
       <div style={S.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
-            onClick={() => navigate(isEditMode ? `/episodes/${editEpisodeId}` : `/shows/${resolvedShowId || showId}`)}
+            onClick={() => navigate(isEditMode ? editReturn.href : `/shows/${resolvedShowId || showId}`)}
             style={S.backBtn}
-            title="Go back"
+            title={isEditMode ? editReturn.text : 'Go back'}
+            aria-label={isEditMode ? editReturn.text : 'Go back'}
+            data-testid="qec-back"
           >←</button>
           <div>
             <div style={S.headerLabel}>{isEditMode ? 'EDIT EPISODE' : 'QUICK CREATE'}</div>

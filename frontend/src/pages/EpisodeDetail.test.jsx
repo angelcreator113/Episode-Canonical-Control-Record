@@ -20,7 +20,7 @@
  */
 
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -114,6 +114,7 @@ import EpisodeDetail from './EpisodeDetail';
 import episodeService from '../services/episodeService';
 import { productionEpisode, resumeEpisode, rememberedEpisodeId, episodeLocation, rememberEpisode, rememberEpisodeLocation } from '../utils/activeEpisode';
 import { activeShowId } from '../utils/activeShow';
+import { readReturn } from '../utils/returnPath';
 
 const renderEpisodeDetail = (entry = '/episodes/ep-1') => render(
   <MemoryRouter initialEntries={[entry]}>
@@ -827,5 +828,89 @@ describe('EpisodeDetail — the resume location, the show, and a deleted episode
       await screen.findByText('Episode Not Found');
       allKept();
     });
+  });
+});
+
+describe('EpisodeDetail — Edit details carries the tab it is opened from (PR-05)', () => {
+  const EP = '11111111-2222-4333-8444-555555555555';
+  const EPISODE = { id: EP, title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' }, status: 'in_build', episode_number: 1, season_number: 1 };
+  const Where = () => { const l = useLocation(); return <p data-testid="where">{l.pathname + l.search}</p>; };
+  const mount = (entry) => render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route path="/episodes/:episodeId" element={<><EpisodeDetail /><Where /></>} />
+        <Route path="*" element={<Where />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const where = () => screen.getByTestId('where').textContent;
+  const openEdit = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('button', { name: /Edit Episode/ }));
+  };
+  const origin = (tab, label) => `?from=${encodeURIComponent(`/episodes/${EP}?tab=${tab}`)}&fromLabel=${encodeURIComponent(label)}`;
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    window.localStorage.clear();
+    vi.mocked(episodeService.getEpisode).mockReset();
+    vi.mocked(episodeService.getEpisode).mockResolvedValue(EPISODE);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    // The page is taken down before the mocks lose their answers.
+    cleanup();
+    vi.restoreAllMocks();
+    vi.mocked(episodeService.getEpisode).mockReset();
+    vi.mocked(episodeService.getEpisode).mockResolvedValue({ id: 'ep-1', title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' } });
+  });
+
+  test('from the Overview: the plain address, as before', async () => {
+    for (const entry of [`/episodes/${EP}`, `/episodes/${EP}?tab=overview`, `/episodes/${EP}?tab=nope`]) {
+      const view = mount(entry);
+      await openEdit();
+      await waitFor(() => expect(where()).toBe(`/episodes/${EP}/edit`));
+      view.unmount();
+    }
+  });
+
+  test('from a working tab: the address carries that tab and its name', async () => {
+    for (const [tab, label] of [['scripts', 'Script'], ['wardrobe', 'Wardrobe'], ['checklist', 'Checklist'], ['money', 'Money'], ['beatplan', 'Plan'], ['files', 'Files'], ['distribution', 'Distribution']]) {
+      const view = mount(`/episodes/${EP}?tab=${tab}`);
+      await openEdit();
+      await waitFor(() => expect(where()).toBe(`/episodes/${EP}/edit${origin(tab, label)}`));
+      view.unmount();
+    }
+  });
+
+  // Results' Summary and Story need more than this file mocks; tabOrigin's own tests cover every tab.
+  test('a main tab, or an old key, carries the view it opens on', async () => {
+    for (const [param, tab, label] of [['production', 'scenes', 'Scenes'], ['assets', 'scenes', 'Scenes']]) {
+      const view = mount(`/episodes/${EP}?tab=${param}`);
+      await openEdit();
+      await waitFor(() => expect(where()).toBe(`/episodes/${EP}/edit${origin(tab, label)}`));
+      view.unmount();
+    }
+  });
+
+  test('what the address carries is read back by Edit details as that tab', async () => {
+    mount(`/episodes/${EP}?tab=checklist`);
+    await openEdit();
+    await waitFor(() => expect(where()).toContain('/edit?from='));
+    const back = readReturn(new URLSearchParams(where().split('?')[1]), { episodeId: EP, fallback: { href: 'x', text: 'x' } });
+    expect(back).toEqual({ href: `/episodes/${EP}?tab=checklist`, text: 'Back to Checklist', origin: true });
+  });
+
+  test('opening Edit details makes no request and stores nothing new', async () => {
+    mount(`/episodes/${EP}?tab=checklist`);
+    await screen.findByRole('button', { name: 'More actions' });
+    await new Promise((r) => setTimeout(r, 20));
+    const calls = ['get', 'post', 'put', 'patch', 'delete'].map((m) => vi.mocked(api[m]).mock.calls.length);
+    const keys = Object.keys(window.localStorage).sort();
+    await openEdit();
+    await waitFor(() => expect(where()).toContain('/edit?from='));
+    expect(['get', 'post', 'put', 'patch', 'delete'].map((m) => vi.mocked(api[m]).mock.calls.length)).toEqual(calls);
+    expect(Object.keys(window.localStorage).sort()).toEqual(keys);
   });
 });
