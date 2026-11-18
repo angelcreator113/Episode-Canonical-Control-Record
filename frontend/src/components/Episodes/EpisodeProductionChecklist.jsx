@@ -412,7 +412,6 @@ export async function loadProductionChecks(episode, showId, options) {
       // Audit GATE-01 (2026-10-03): generated means the server's coverage
       // says every canonical beat is planned once; never a row count.
       const coverage = data?.coverage || null;
-      read.plan = { beats: plan, coverage, readiness: data?.readiness ?? null };
       planCoverage = coverage;
       results.scene_plan        = Boolean(coverage?.complete);
       if (plan.length > 0 && !coverage) checkNotes.scene_plan = 'Beat coverage was not reported';
@@ -430,6 +429,8 @@ export async function loadProductionChecks(episode, showId, options) {
       sceneStep = nextStep(plan, readiness, coverage);
       // Locking the beats is not a checklist step (2026-10-09).
       if (sceneStep?.kind === 'lock') sceneStep = { kind: 'script', text: 'Write the script' };
+      // Recorded only now: a plan the block could not work through is not one to reuse.
+      read.plan = { beats: plan, coverage, readiness: readiness ?? null };
     } catch (err) {
       console.error('[EpisodeProductionChecklist] plan read failed:', err.response?.status || err.message);
       results.scene_plan = results.scene_images = false;
@@ -491,12 +492,17 @@ export async function loadProductionChecks(episode, showId, options) {
     }
 
     // ── Check Social Checklist ──
+    // A call that threw before it was a request stops the pair, as it did
+    // when the two were written side by side. If the tasks read was already
+    // on its way and fails, its line follows the pair's, as it did.
+    let tasksLineAfter = false;
     try {
       results.social_checklist = false;
-      // A call that threw before it was a request stops the pair, as it did
-      // when the two were written side by side.
       if (got.socialTasks.sync) throw got.socialTasks.error;
-      if (got.socialAssets.sync) throw got.socialAssets.error;
+      if (got.socialAssets.sync) {
+        tasksLineAfter = !got.socialTasks.ok;
+        throw got.socialAssets.error;
+      }
       let tasks;
       if (got.socialTasks.ok) {
         tasks = got.socialTasks.value;
@@ -517,6 +523,7 @@ export async function loadProductionChecks(episode, showId, options) {
     } catch (err) {
       console.error('[EpisodeProductionChecklist] social checklist check failed:', err.message);
       results.social_checklist = false;
+      if (tasksLineAfter) console.error('[EpisodeProductionChecklist] social tasks read failed:', got.socialTasks.error.response?.status || got.socialTasks.error.message);
     }
 
     // ── Check the Overlays card: the title overlay, and overlays placed on the video ──
@@ -553,16 +560,17 @@ export async function loadProductionChecks(episode, showId, options) {
         console.error('[Checklist] style sheet read failed:', got.styleSheet.error.response?.status || got.styleSheet.error.message);
         sheetRes = null;
       }
-      const sheet = sheetRes?.data?.data || null;
-      if (got.styleSheet.ok) read.styleSheet = sheet;
       const lbRes = take(got.lookbook);
       const lookbook = lbRes?.data?.data || {};
-      read.lookbook = lookbook;
+      const sheet = sheetRes?.data?.data || null;
       const { done, total, missing } = styleReadiness({ sheet });
       results.lookbook_ready = done >= total;
       if (!results.lookbook_ready) checkNotes.lookbook_ready = `Style sheet ready ${done} of ${total}${missing.length ? ` · missing: ${missing.join(', ')}` : ''}`;
       results.style_sheet_approved = lookbook.sheet_status === 'approved';
       if (!results.style_sheet_approved) checkNotes.style_sheet_approved = 'Draft';
+      // Recorded only now, and the sheet only when its own read answered.
+      read.lookbook = lookbook;
+      if (got.styleSheet.ok) read.styleSheet = sheet;
     } catch (err) {
       console.error('[Checklist] Lookbook read failed:', err.response?.status || err.message);
       results.lookbook_ready = false;

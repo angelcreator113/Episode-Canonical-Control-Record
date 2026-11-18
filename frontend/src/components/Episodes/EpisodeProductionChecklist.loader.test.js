@@ -325,18 +325,38 @@ const line = (args) => args.map((a) => (a instanceof Error ? `Error(${a.message}
  * it rejects with. Gives the result, the addresses asked for (sorted), and
  * the console lines in order.
  */
-async function run(loader, { bodies = DONE, fail = {}, episode = EPISODE, showId = SHOW, options, raw = null } = {}) {
+async function run(loader, { bodies = DONE, fail = {}, sync = {}, episode = EPISODE, showId = SHOW, options, raw = null } = {}) {
   const asked = [];
-  vi.mocked(api.get).mockReset();
-  vi.mocked(api.get).mockImplementation(raw || (async (url) => {
+  const old = loader === sequentialLoader;
+  const answer = raw || ((url) => {
     const k = keyOf(url);
-    if (k in fail) throw fail[k];
-    return { data: bodies[k] };
-  }));
-  const calls = vi.mocked(api.get).mock.calls;
+    // `sync`: the call itself throws, before there is a request. `fail`: the request is rejected.
+    if (k in sync) throw sync[k];
+    if (k in fail) {
+      const rejected = Promise.reject(fail[k]);
+      // The frozen copy can leave one rejected read with nobody listening (the lookbook, when the
+      // style sheet's call throws). A listener of the test's own keeps that from failing the run.
+      // The loader in the app gets no such help: a read it left unheard would fail this file.
+      if (old) rejected.catch(() => {});
+      return rejected;
+    }
+    return Promise.resolve({ data: bodies[k] });
+  });
+  const client = (url) => { asked.push(keyOf(url)); return answer(url); };
+  // The frozen copy is given the client plainly: a mock function hands back a promise of its own
+  // making, which the listener above would not reach. The loader in the app gets the mock.
+  const mock = api.get;
+  if (old) api.get = client;
+  else vi.mocked(api.get).mockReset().mockImplementation(client);
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-  const result = options === undefined ? await loader(episode, showId) : await loader(episode, showId, options);
-  calls.forEach(([url]) => asked.push(keyOf(url)));
+  let result;
+  try {
+    result = options === undefined ? await loader(episode, showId) : await loader(episode, showId, options);
+    // A line a read writes after the loader has answered (the old loader could leave one behind).
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  } finally {
+    api.get = mock;
+  }
   const logs = errors.mock.calls.map(line);
   errors.mockRestore();
   return { result, asked: asked.slice().sort(), logs };
@@ -743,7 +763,8 @@ describe('read: what the checks used', () => {
   for (const k of READS) {
     test(`${k} fails: its key is left out, and the others are there`, async () => {
       const { result } = await run(loadProductionChecks, { fail: { [k]: http(500) } });
-      const gone = { events: ['linkedEvent', 'venueSetHasImage'], venue: [], lookbook: ['lookbook'] }[k] || [k];
+      // The Style Page block needs the lookbook: without it nothing of the block is recorded.
+      const gone = { events: ['linkedEvent', 'venueSetHasImage'], venue: [], lookbook: ['lookbook', 'styleSheet'] }[k] || [k];
       for (const key of gone) expect(key in result.read).toBe(false);
       // The venue read reports "no image" when it fails (its own rule), so its key stays, as false.
       if (k === 'venue') expect(result.read.venueSetHasImage).toBe(false);
@@ -781,3 +802,152 @@ describe('read: what the checks used', () => {
     expect(Object.keys(result)).toEqual(['checks', 'notes', 'coverage', 'sceneStep', 'linkedEvent', 'read']);
   });
 });
+
+describe('read does not offer what could not be used', () => {
+  const has = (result, key) => key in result.read;
+
+  test('a plan the block could not work through is not recorded, though its read answered', async () => {
+    const bodies = FIXTURES['a plan that is not a list (the block stops part-way)'];
+    const { before, now } = await sameAsBefore({ bodies });
+    // The old loader treated it as a failed read: the check is open and the line says so.
+    expect(now.result.checks.scene_plan).toBe(false);
+    expect(before.logs.some((l) => l.includes('plan read failed'))).toBe(true);
+    expect(has(now.result, 'plan')).toBe(false);
+    // A plan whose readiness cannot be read through is the same.
+    const odd = await sameAsBefore({ bodies: { ...DONE, plan: { data: [{ beat_number: 1 }], readiness: { total: 2, ready: 1 } } } });
+    expect(odd.now.logs.some((l) => l.includes('plan read failed'))).toBe(true);
+    expect(has(odd.now.result, 'plan')).toBe(false);
+  });
+
+  test('an answer with no body at all is a failed read: no key', async () => {
+    // The response itself is missing (not { data: … }), for each read in turn.
+    for (const k of READS) {
+      const raw = (url) => Promise.resolve(keyOf(url) === k ? undefined : { data: DONE[keyOf(url)] });
+      const now = await run(loadProductionChecks, { raw });
+      const before = await run(sequentialLoader, { raw });
+      expect(five(now.result)).toEqual(five(before.result));
+      expect(now.logs).toEqual(before.logs);
+      const KEY = { events: 'linkedEvent', venue: null, socialTasks: 'socialTasks', socialAssets: 'socialAssets' }[k];
+      const key = KEY === undefined ? k : KEY;
+      // The lookbook and the style sheet are read through `?.`, as before: a missing response is "nothing there", not a failure.
+      if (key && !['lookbook', 'styleSheet', 'linkedEvent'].includes(key)) expect(has(now.result, key)).toBe(false);
+    }
+  });
+
+  test('a body that answers but holds nothing is "none", exactly as the checks read it', async () => {
+    // { data: undefined } for every read: the checks say "nothing there"; `read` says the same and no more.
+    const { now } = await sameAsBefore({ bodies: FIXTURES['every body missing (undefined)'] });
+    expect(has(now.result, 'brief')).toBe(false); // the brief's body is needed: without it the block fails
+    expect(now.result.read).toMatchObject({ linkedEvent: null, sceneSets: [], slotCoverage: null, outfit: null, lalaState: null, socialTasks: [], socialAssets: [], placements: null, lookbook: {}, styleSheet: null, showBrain: [] });
+    expect(now.result.read.plan).toEqual({ beats: [], coverage: null, readiness: null });
+  });
+
+  test('the Style Page: nothing of the block is recorded when the lookbook fails; the sheet alone failing leaves the lookbook', async () => {
+    const noLookbook = await sameAsBefore({ fail: { lookbook: http(500) } });
+    expect(has(noLookbook.now.result, 'lookbook')).toBe(false);
+    expect(has(noLookbook.now.result, 'styleSheet')).toBe(false);
+    const noSheet = await sameAsBefore({ fail: { styleSheet: http(500) } });
+    expect(has(noSheet.now.result, 'lookbook')).toBe(true);
+    expect(has(noSheet.now.result, 'styleSheet')).toBe(false);
+  });
+
+  test('whatever is recorded gives the same checks when handed back', async () => {
+    for (const bodies of Object.values(FIXTURES)) {
+      const first = await run(loadProductionChecks, { bodies });
+      const again = await run(loadProductionChecks, { bodies, options: { loaded: first.result.read } });
+      expect(five(again.result)).toEqual(five(first.result));
+    }
+  });
+
+  test('a failed read handed back is still read: an absent key is never taken as "none"', async () => {
+    const fail = { brief: http(500), sceneSets: http(500), lalaState: http(500), events: http(500) };
+    const first = await run(loadProductionChecks, { fail });
+    for (const key of ['brief', 'linkedEvent', 'sceneSets', 'lalaState']) expect(has(first.result, key)).toBe(false);
+    const again = await run(loadProductionChecks, { options: { loaded: first.result.read } });
+    // The reads are made again, and this time answer.
+    expect(again.asked).toEqual(READS.slice().sort());
+    expect(five(again.result)).toEqual(five((await run(sequentialLoader, {})).result));
+  });
+});
+
+describe('the two pairs, when one or both fail', () => {
+  const PAIRS = [['socialTasks', 'socialAssets'], ['lookbook', 'styleSheet']];
+  const WAYS = { answers: null, 'is rejected': 'fail', 'throws before asking': 'sync' };
+  const line1 = (logs, text) => logs.filter((l) => l.includes(text));
+
+  for (const [first, second] of PAIRS) {
+    for (const [a, aWay] of Object.entries(WAYS)) {
+      for (const [b, bWay] of Object.entries(WAYS)) {
+        if (!aWay && !bWay) continue;
+        test(`${first} ${a}, ${second} ${b}: the same result and the same console lines`, async () => {
+          for (const bodies of [DONE, EMPTY]) {
+            const scenario = { bodies, fail: {}, sync: {} };
+            if (aWay) scenario[aWay][first] = aWay === 'sync' ? new TypeError(`${first} threw`) : http(500);
+            if (bWay) scenario[bWay][second] = bWay === 'sync' ? new TypeError(`${second} threw`) : new Error('Network Error');
+            const before = await run(sequentialLoader, scenario);
+            const now = await run(loadProductionChecks, scenario);
+            expect(five(now.result)).toEqual(five(before.result));
+            expect(now.logs).toEqual(before.logs);
+            // Every address the old loader asked for is asked for; where the old one stopped at a
+            // throw, the new one has also asked for the other of the pair.
+            for (const k of before.asked) expect(now.asked).toContain(k);
+            expect(now.asked.filter((k) => !before.asked.includes(k)).every((k) => k === second)).toBe(true);
+            // Neither of the pair is offered for reuse unless its block finished with it.
+            if (aWay) expect(first in now.result.read).toBe(false);
+            if (bWay) expect(second in now.result.read).toBe(false);
+          }
+        });
+      }
+    }
+  }
+
+  test('both of the social pair rejected: both lines, tasks first, and the check is open', async () => {
+    const { now } = await sameAsBefore({ fail: { socialTasks: http(500), socialAssets: http(503) } });
+    expect(now.logs).toEqual(['[EpisodeProductionChecklist] social tasks read failed: 500', '[EpisodeProductionChecklist] social checklist asset read failed: 503']);
+    expect(now.result.checks.social_checklist).toBe(false);
+  });
+
+  test('both of the Style Page pair rejected: the sheet\'s line, then the lookbook\'s, and the note', async () => {
+    const { now } = await sameAsBefore({ fail: { lookbook: http(500), styleSheet: http(404) } });
+    expect(now.logs).toEqual(['[Checklist] style sheet read failed: 404', '[Checklist] Lookbook read failed: 500']);
+    expect(now.result.checks).toMatchObject({ lookbook_ready: false, style_sheet_approved: false });
+    expect(now.result.notes.lookbook_ready).toBe('The Style Page could not be read');
+  });
+
+  test('both of a pair throw before asking: one line for the pair, as before', async () => {
+    const social = await run(loadProductionChecks, { sync: { socialTasks: new TypeError('a'), socialAssets: new TypeError('b') } });
+    expect(line1(social.logs, 'social')).toEqual(['[EpisodeProductionChecklist] social checklist check failed: a']);
+    const style = await run(loadProductionChecks, { sync: { lookbook: new TypeError('c'), styleSheet: new TypeError('d') } });
+    expect(style.logs).toEqual(['[Checklist] Lookbook read failed: c']);
+  });
+
+  test('the assets call throws while the tasks read is failing: the pair\'s line, then the tasks\' line', async () => {
+    const scenario = { fail: { socialTasks: http(500) }, sync: { socialAssets: new TypeError('assets threw') } };
+    const before = await run(sequentialLoader, scenario);
+    const now = await run(loadProductionChecks, scenario);
+    expect(before.logs).toEqual(['[EpisodeProductionChecklist] social checklist check failed: assets threw', '[EpisodeProductionChecklist] social tasks read failed: 500']);
+    expect(now.logs).toEqual(before.logs);
+  });
+});
+
+describe('a rejected read is always listened to', () => {
+  // The harness gives the loader no safety net (see `run`): a rejected read it started and never
+  // listened to is an unhandled rejection, which fails this file.
+  test('two hundred random mixes of rejected reads and calls that throw', async () => {
+    const random = seeded(99);
+    for (let n = 0; n < 200; n += 1) {
+      const fail = {};
+      const sync = {};
+      for (const k of READS) {
+        const r = random();
+        if (r < 0.3) fail[k] = http(500);
+        else if (r < 0.4) sync[k] = new TypeError(`${k} threw`);
+      }
+      const now = await run(loadProductionChecks, { fail, sync });
+      expect(typeof now.result.checks).toBe('object');
+    }
+    // Long enough for a rejection nobody listened to to be reported.
+    await new Promise((resolve) => { setTimeout(resolve, 20); });
+  });
+});
+
