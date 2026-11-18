@@ -725,3 +725,72 @@ describe('No season yet', () => {
     expect(screen.getByTestId('season-setup-form')).toBeTruthy();
   });
 });
+
+// PR-04 (Evoni, 2026-11-18): the show being worked on follows the Season
+// page, in the show's existing key, once the show itself has been read.
+describe('The Season page remembers its show', () => {
+  const SHOW_KEY = 'primeStudios.activeShowId';
+  beforeEach(() => { window.localStorage.clear(); });
+
+  test('once the show has loaded, it is the remembered show; no other key is written', async () => {
+    renderPage();
+    await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1'));
+    expect(Object.keys(window.localStorage).filter((k) => /activeShow|working-episode/.test(k))).toEqual([SHOW_KEY]);
+  });
+
+  test('it replaces a show remembered before', async () => {
+    window.localStorage.setItem(SHOW_KEY, 'show-9');
+    renderPage('?tab=roadmap');
+    await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1'));
+  });
+
+  test('a show that cannot be read is not remembered, and the one remembered before stays', async () => {
+    window.localStorage.setItem(SHOW_KEY, 'show-9');
+    const base = vi.mocked(api.get).getMockImplementation();
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows/show-1') throw Object.assign(new Error('Request failed with status code 500'), { response: { status: 500 } });
+      return base(url);
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderPage();
+      await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalledWith('/api/v1/world/show-1/season/roadmap'));
+      await screen.findByTestId('where');
+      await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalledWith('/api/v1/opportunities/show-1'));
+      expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-9');
+    } finally { error.mockRestore(); }
+  });
+
+  test('it is not remembered before the show has answered', async () => {
+    window.localStorage.setItem(SHOW_KEY, 'show-9');
+    const base = vi.mocked(api.get).getMockImplementation();
+    let answer;
+    vi.mocked(api.get).mockImplementation((url) => (url === '/api/v1/shows/show-1'
+      ? new Promise((resolve) => { answer = () => resolve({ data: { data: { id: 'show-1', name: 'Styling Adventures with Lala' } } }); })
+      : base(url)));
+    renderPage();
+    await waitFor(() => expect(typeof answer).toBe('function'));
+    expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-9');
+    answer();
+    await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1'));
+  });
+
+  test('it is written once: a later choice of show elsewhere is not put back by moving between tabs', async () => {
+    renderPage();
+    await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1'));
+    // Another window chooses another show.
+    window.localStorage.setItem(SHOW_KEY, 'show-2');
+    fireEvent.click(screen.getByRole('tab', { name: /Roadmap/ }));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toContain('tab=roadmap'));
+    expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-2');
+  });
+
+  test('storage that cannot be written does not stop the page', async () => {
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderPage();
+      expect(await screen.findByText('Soft Luxury Ascension')).toBeTruthy();
+    } finally { set.mockRestore(); error.mockRestore(); }
+  });
+});

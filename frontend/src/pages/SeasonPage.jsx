@@ -86,6 +86,7 @@ import CareerGoals, { NarrativeDebt, SeasonPhasesHistory } from '../components/S
 import CareerBrands from '../components/Career/CareerBrands';
 import { SEASON_TABS, tabForAddress, seasonStats, heroChips, slotsLine, goalsLine, eventsLine, seasonPageHref } from '../lib/seasonPage';
 import { episodesInProduction } from '../components/Show/ShowOverview';
+import { rememberShow } from '../utils/activeShow';
 import { useReleaseSchedule, nextReleaseOf } from '../lib/releaseSchedule';
 import { useGoalCoverage } from '../lib/goalCoverage';
 import { attentionItems, tabBadges, seasonEpisodes, showsAllSeasons, ALL_SEASONS_PARAM } from '../lib/seasonAttention';
@@ -358,6 +359,11 @@ export default function SeasonPage() {
   // Whether the events and episodes have been read, and which reads failed:
   // the Events tab's library uses these instead of fetching its own.
   const [showData, setShowData] = useState({ loaded: false, failed: [] });
+  // The show whose own read has answered (PR-04): it is remembered as the
+  // show being worked on only then, and only while it is still the show in
+  // the address, so a late answer for another show changes nothing.
+  const [loadedShowId, setLoadedShowId] = useState(null);
+  useEffect(() => { if (loadedShowId && loadedShowId === showId) rememberShow(showId); }, [loadedShowId, showId]);
   const panelRef = useRef(null);
   const tabsRef = useRef(null);
 
@@ -367,7 +373,7 @@ export default function SeasonPage() {
   const loadShowData = useCallback(async () => {
     const failed = [];
     await Promise.all([
-      api.get(`/api/v1/shows/${showId}`).then((r) => setShowName(r.data?.data?.name || r.data?.name || null))
+      api.get(`/api/v1/shows/${showId}`).then((r) => { setShowName(r.data?.data?.name || r.data?.name || null); setLoadedShowId(showId); })
         .catch((err) => console.error('[SeasonPage] show load failed:', err)),
       fetchAllEpisodes(api, showId).then((list) => { setEpisodes(list.items || []); setEpisodesTotal(list.total ?? (list.items || []).length); })
         .catch((err) => { console.error('[SeasonPage] episodes load failed:', err); failed.push('episodes'); }),

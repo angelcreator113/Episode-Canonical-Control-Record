@@ -19,9 +19,9 @@
  * the same default-export mock.
  */
 
-import { vi, describe, beforeEach, test, expect } from 'vitest';
+import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({ isAuthenticated: true, loading: false }),
@@ -112,7 +112,8 @@ import {
 } from './EpisodeDetail';
 import EpisodeDetail from './EpisodeDetail';
 import episodeService from '../services/episodeService';
-import { productionEpisode, resumeEpisode, rememberedEpisodeId } from '../utils/activeEpisode';
+import { productionEpisode, resumeEpisode, rememberedEpisodeId, episodeLocation, rememberEpisode, rememberEpisodeLocation } from '../utils/activeEpisode';
+import { activeShowId } from '../utils/activeShow';
 
 const renderEpisodeDetail = (entry = '/episodes/ep-1') => render(
   <MemoryRouter initialEntries={[entry]}>
@@ -399,7 +400,7 @@ describe('EpisodeDetail — opening an episode remembers it, and only that', () 
     expect(resumeEpisode(SHOW, rememberedEpisodeId()).id).toBe('ep-2');
   });
 
-  test('no new storage key: the two the page has always written, and nothing else', async () => {
+  test('opening on the Overview stores the two episode keys and the show (its existing key), and nothing else', async () => {
     const written = [];
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function setItem(key, value) {
       written.push(String(key));
@@ -412,9 +413,12 @@ describe('EpisodeDetail — opening an episode remembers it, and only that', () 
     } finally { spy.mockRestore(); }
 
     expect(workingKeys()).toEqual(['working-episode-id', 'working-episode-title']);
-    // Everything the page stored while opening the episode.
-    expect([...new Set(written)].sort()).toEqual(['working-episode-id', 'working-episode-title']);
-    expect(Object.keys(window.localStorage).sort()).toEqual(['working-episode-id', 'working-episode-title']);
+    // Everything the page stored while opening the episode. Since PR-04 the
+    // show being worked on follows the episode, in the key it always had;
+    // the Overview is not a working location, so no location is stored.
+    const all = ['primeStudios.activeShowId', 'working-episode-id', 'working-episode-title'];
+    expect([...new Set(written)].sort()).toEqual(all);
+    expect(Object.keys(window.localStorage).sort()).toEqual(all);
   });
 
   test('opening Episode 1 afterwards replaces the same key; it does not add one', async () => {
@@ -445,5 +449,383 @@ describe('EpisodeDetail — opening an episode remembers it, and only that', () 
       expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Second Look');
     } finally { spy.mockRestore(); warn.mockRestore(); }
     expect(workingKeys()).toEqual([]);
+  });
+});
+
+// PR-04 (Evoni, 2026-11-18): the last working location inside each episode,
+// the show that follows the episode, and a deleted episode as not found.
+// The address alone decides the tab: nothing here ever changes it.
+describe('EpisodeDetail — the resume location, the show, and a deleted episode', () => {
+  const E1 = { id: 'ep-1', title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' }, status: 'in_build', episode_number: 1, season_number: 1 };
+  const E2 = { id: 'ep-2', title: 'Second Look', show_id: 'show-1', show: { id: 'show-1' }, status: 'draft', episode_number: 2, season_number: 1 };
+  const OTHER = { id: 'ep-9', title: 'Other Show', show_id: 'show-2', show: { id: 'show-2' }, status: 'draft', episode_number: 1, season_number: 1 };
+  const BY_ID = { 'ep-1': E1, 'ep-2': E2, 'ep-9': OTHER };
+  const SHOW_KEY = 'primeStudios.activeShowId';
+  const LOCATIONS = 'working-episode-locations';
+
+  const Where = () => {
+    const l = useLocation();
+    const navigate = useNavigate();
+    return (
+      <>
+        <p data-testid="where">{l.pathname + l.search}</p>
+        <button type="button" onClick={() => navigate(-1)}>history back</button>
+        <button type="button" onClick={() => navigate(1)}>history forward</button>
+      </>
+    );
+  };
+  const mount = (entry) => render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route path="/episodes/:episodeId" element={<><EpisodeDetail /><Where /></>} />
+        <Route path="*" element={<Where />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const where = () => screen.getByTestId('where').textContent;
+  const loaded = () => waitFor(() => expect(screen.getByTitle('Overview')).toBeTruthy());
+  const failWith = (err) => vi.mocked(episodeService.getEpisode).mockRejectedValue(err);
+  const http = (status) => Object.assign(new Error(`Request failed with status code ${status}`), { response: { status } });
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    window.localStorage.clear();
+    mockToast.showError.mockClear();
+    vi.mocked(episodeService.getEpisode).mockReset();
+    vi.mocked(episodeService.getEpisode).mockImplementation(async (id) => BY_ID[id] || E1);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // The file's own default, for the tests that rely on it.
+    vi.mocked(episodeService.getEpisode).mockReset();
+    vi.mocked(episodeService.getEpisode).mockResolvedValue({ id: 'ep-1', title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' } });
+  });
+
+  describe('what is remembered', () => {
+    test('each working tab and view, by the key in the address', async () => {
+      for (const tab of ['scripts', 'wardrobe', 'lookbook', 'phone', 'overlays', 'money', 'checklist', 'scenes', 'beatplan', 'files', 'edit', 'summary', 'evaluation', 'story', 'distribution']) {
+        window.localStorage.clear();
+        const view = mount(`/episodes/ep-1?tab=${tab}`);
+        await loaded();
+        await waitFor(() => expect(episodeLocation('ep-1')?.tab).toBe(tab));
+        expect(where()).toBe(`/episodes/ep-1?tab=${tab}`);
+        view.unmount();
+      }
+    });
+
+    test('a main tab is remembered as the view it opens on, and an old key as where it lands', async () => {
+      for (const [param, tab] of [['production', 'scenes'], ['results', 'summary'], ['assets', 'scenes']]) {
+        window.localStorage.clear();
+        const view = mount(`/episodes/ep-1?tab=${param}`);
+        await loaded();
+        await waitFor(() => expect(episodeLocation('ep-1')?.tab).toBe(tab));
+        // The address is left as it was typed.
+        expect(where()).toBe(`/episodes/ep-1?tab=${param}`);
+        view.unmount();
+      }
+    });
+
+    test('the Overview is not remembered: no tab, ?tab=overview, the old Brief key, or a tab that does not exist', async () => {
+      for (const entry of ['/episodes/ep-1', '/episodes/ep-1?tab=overview', '/episodes/ep-1?tab=brief', '/episodes/ep-1?tab=not-a-tab', '/episodes/ep-1?tab=']) {
+        window.localStorage.clear();
+        const view = mount(entry);
+        await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+        await waitFor(() => expect(rememberedEpisodeId()).toBe('ep-1'));
+        expect(window.localStorage.getItem(LOCATIONS)).toBeNull();
+        view.unmount();
+      }
+    });
+
+    test('opening the Overview does not replace a saved working location', async () => {
+      rememberEpisodeLocation('ep-1', 'wardrobe', {}, 1000);
+      mount('/episodes/ep-1');
+      await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+      await waitFor(() => expect(rememberedEpisodeId()).toBe('ep-1'));
+      expect(episodeLocation('ep-1')).toEqual({ tab: 'wardrobe', at: 1000 });
+    });
+
+    test('Voice is not remembered for someone who is not an admin, and what was saved stays', async () => {
+      rememberEpisodeLocation('ep-1', 'files', {}, 1000);
+      mount('/episodes/ep-1?tab=voice');
+      await loaded();
+      await waitFor(() => expect(rememberedEpisodeId()).toBe('ep-1'));
+      expect(episodeLocation('ep-1', { voiceStudio: true })).toEqual({ tab: 'files', at: 1000 });
+      // The address is honoured all the same.
+      expect(where()).toBe('/episodes/ep-1?tab=voice');
+      expect(api.get).not.toHaveBeenCalledWith('/api/v1/voice-studio/status');
+    });
+
+    test('each episode keeps its own, in one show and across shows', async () => {
+      for (const [id, tab] of [['ep-1', 'wardrobe'], ['ep-2', 'scripts'], ['ep-9', 'distribution']]) {
+        const view = mount(`/episodes/${id}?tab=${tab}`);
+        await loaded();
+        await waitFor(() => expect(episodeLocation(id)?.tab).toBe(tab));
+        view.unmount();
+      }
+      expect(episodeLocation('ep-1').tab).toBe('wardrobe');
+      expect(episodeLocation('ep-2').tab).toBe('scripts');
+      expect(episodeLocation('ep-9').tab).toBe('distribution');
+      // Last opened is the last one; the official production episode is still the first unfinished.
+      expect(rememberedEpisodeId()).toBe('ep-9');
+      expect(productionEpisode([E2, E1]).id).toBe('ep-1');
+    });
+
+    test('nothing is remembered under an address whose episode has not loaded', async () => {
+      // The answer is for another episode than the address names.
+      vi.mocked(episodeService.getEpisode).mockResolvedValue(E1);
+      mount('/episodes/ep-2?tab=wardrobe');
+      await loaded();
+      expect(window.localStorage.getItem(LOCATIONS)).toBeNull();
+      expect(window.localStorage.getItem(SHOW_KEY)).toBeNull();
+    });
+
+    test('storage that cannot be written does not stop the tab opening', async () => {
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mount('/episodes/ep-1?tab=checklist');
+      await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
+      expect(where()).toBe('/episodes/ep-1?tab=checklist');
+    });
+  });
+
+  describe('the address decides; a saved location never moves the page', () => {
+    beforeEach(() => { rememberEpisodeLocation('ep-1', 'wardrobe', {}, 1000); });
+
+    test('a plain link opens the Overview, and the address is not changed', async () => {
+      mount('/episodes/ep-1');
+      await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+      await waitFor(() => expect(rememberedEpisodeId()).toBe('ep-1'));
+      expect(where()).toBe('/episodes/ep-1');
+      expect(screen.getByTitle('Overview').className).toContain('ed-tab-active');
+    });
+
+    test('a link that names a tab opens that tab, whatever was saved', async () => {
+      mount('/episodes/ep-1?tab=checklist');
+      await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
+      expect(where()).toBe('/episodes/ep-1?tab=checklist');
+      await waitFor(() => expect(episodeLocation('ep-1').tab).toBe('checklist'));
+    });
+
+    test('opening it again at the same address (a refresh) shows the same tab', async () => {
+      const first = mount('/episodes/ep-1?tab=files');
+      await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
+      first.unmount();
+      mount('/episodes/ep-1?tab=files');
+      await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
+      expect(where()).toBe('/episodes/ep-1?tab=files');
+    });
+
+    test('a click, then Back and Forward: the page follows the address each time, and the last one visited is what is saved', async () => {
+      mount('/episodes/ep-1?tab=files');
+      await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
+      fireEvent.click(within(screen.getByTestId('ed-subtabs')).getByRole('button', { name: 'Checklist' }));
+      await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
+      expect(where()).toBe('/episodes/ep-1?tab=checklist');
+      await waitFor(() => expect(episodeLocation('ep-1').tab).toBe('checklist'));
+
+      fireEvent.click(screen.getByRole('button', { name: 'history back' }));
+      await waitFor(() => expect(screen.getByTestId('episode-assets')).toBeTruthy());
+      expect(where()).toBe('/episodes/ep-1?tab=files');
+      await waitFor(() => expect(episodeLocation('ep-1').tab).toBe('files'));
+
+      fireEvent.click(screen.getByRole('button', { name: 'history forward' }));
+      await waitFor(() => expect(screen.getByTestId('episode-checklist')).toBeTruthy());
+      expect(where()).toBe('/episodes/ep-1?tab=checklist');
+      await waitFor(() => expect(episodeLocation('ep-1').tab).toBe('checklist'));
+    });
+
+    test('going from a working tab to the Overview keeps the working tab as the saved location', async () => {
+      mount('/episodes/ep-1?tab=files');
+      await waitFor(() => expect(episodeLocation('ep-1').tab).toBe('files'));
+      fireEvent.click(screen.getByTitle('Overview'));
+      await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+      expect(where()).toBe('/episodes/ep-1?tab=overview');
+      expect(episodeLocation('ep-1').tab).toBe('files');
+    });
+  });
+
+  describe('the show follows the episode', () => {
+    test('opening an episode remembers its show, in the show\'s existing key', async () => {
+      mount('/episodes/ep-9');
+      await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-2'));
+      expect(Object.keys(window.localStorage).filter((k) => /show/i.test(k))).toEqual([SHOW_KEY]);
+    });
+
+    test('an episode with no show leaves the remembered show alone', async () => {
+      window.localStorage.setItem(SHOW_KEY, 'show-1');
+      vi.mocked(episodeService.getEpisode).mockResolvedValue({ id: 'ep-1', title: 'Loose', status: 'draft' });
+      mount('/episodes/ep-1');
+      await waitFor(() => expect(rememberedEpisodeId()).toBe('ep-1'));
+      expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1');
+    });
+
+    test('it is written once per episode: a later choice of show elsewhere is not put back by moving between tabs', async () => {
+      mount('/episodes/ep-1?tab=files');
+      await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1'));
+      // Another window chooses another show.
+      window.localStorage.setItem(SHOW_KEY, 'show-2');
+      fireEvent.click(within(screen.getByTestId('ed-subtabs')).getByRole('button', { name: 'Checklist' }));
+      await waitFor(() => expect(episodeLocation('ep-1').tab).toBe('checklist'));
+      fireEvent.click(screen.getByTitle('Overview'));
+      await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+      expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-2');
+    });
+
+    test('a show named in the address still comes first', async () => {
+      mount('/episodes/ep-9');
+      await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-2'));
+      const shows = [{ id: 'show-1' }, { id: 'show-2' }];
+      expect(activeShowId({ pathname: '/shows/show-1/season', shows })).toBe('show-1');
+      expect(activeShowId({ pathname: '/', shows })).toBe('show-2');
+    });
+
+    test('an episode that fails to load does not change the remembered show', async () => {
+      window.localStorage.setItem(SHOW_KEY, 'show-1');
+      failWith(http(500));
+      mount('/episodes/ep-9');
+      await screen.findByText('Episode Not Found');
+      expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1');
+    });
+  });
+
+  describe('a deleted episode is not found', () => {
+    const seed = () => {
+      window.localStorage.setItem(SHOW_KEY, 'show-1');
+      window.localStorage.setItem('authToken', 'token');
+      window.localStorage.setItem('esp-draft-ep-2', 'an unsaved script');
+      rememberEpisode(E2);
+      rememberEpisodeLocation('ep-1', 'wardrobe', {}, 1000);
+      rememberEpisodeLocation('ep-2', 'scripts', {}, 2000);
+      rememberEpisodeLocation('ep-9', 'money', {}, 3000);
+    };
+    const othersKept = () => {
+      expect(episodeLocation('ep-1')).toEqual({ tab: 'wardrobe', at: 1000 });
+      expect(episodeLocation('ep-9')).toEqual({ tab: 'money', at: 3000 });
+      expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1');
+      expect(window.localStorage.getItem('authToken')).toBe('token');
+      expect(window.localStorage.getItem('esp-draft-ep-2')).toBe('an unsaved script');
+    };
+
+    test('the read answers with it marked deleted: it is not shown, the list of shows opens, and only it is forgotten', async () => {
+      seed();
+      vi.mocked(episodeService.getEpisode).mockResolvedValue({ ...E2, deleted_at: '2026-11-10T09:00:00.000Z' });
+      mount('/episodes/ep-2?tab=scripts');
+
+      await waitFor(() => expect(where()).toBe('/shows'));
+      expect(mockToast.showError).toHaveBeenCalledWith('Episode not found — it may have been deleted.');
+      expect(screen.queryByTitle('Overview')).toBeNull();
+      expect(rememberedEpisodeId()).toBeNull();
+      expect(window.localStorage.getItem('working-episode-title')).toBeNull();
+      expect(episodeLocation('ep-2')).toBeNull();
+      othersKept();
+    });
+
+    test('a deleted episode that was not the one last opened: "last opened" is left alone', async () => {
+      seed();
+      vi.mocked(episodeService.getEpisode).mockResolvedValue({ ...E1, deleted_at: '2026-11-10T09:00:00.000Z' });
+      mount('/episodes/ep-1');
+      await waitFor(() => expect(where()).toBe('/shows'));
+      expect(rememberedEpisodeId()).toBe('ep-2');
+      expect(episodeLocation('ep-1')).toBeNull();
+      expect(episodeLocation('ep-2')).toEqual({ tab: 'scripts', at: 2000 });
+    });
+
+    test('an episode that is not deleted opens as before (deleted_at empty or absent)', async () => {
+      for (const deleted_at of [null, undefined, '']) {
+        vi.mocked(episodeService.getEpisode).mockResolvedValue({ ...E2, deleted_at });
+        const view = mount('/episodes/ep-2');
+        await waitFor(() => expect(screen.getByTestId('episode-overview')).toBeTruthy());
+        expect(where()).toBe('/episodes/ep-2');
+        view.unmount();
+      }
+    });
+
+    test('the server says it does not exist (404): the list of shows opens, and only it is forgotten', async () => {
+      seed();
+      failWith(http(404));
+      mount('/episodes/ep-2');
+      await waitFor(() => expect(where()).toBe('/shows'));
+      expect(rememberedEpisodeId()).toBeNull();
+      expect(episodeLocation('ep-2')).toBeNull();
+      othersKept();
+    });
+
+    test('deleting it from the page forgets it, and only it', async () => {
+      seed();
+      episodeService.deleteEpisode = vi.fn().mockResolvedValue({});
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      mount('/episodes/ep-2?tab=overview');
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(await screen.findByText('Delete Episode'));
+      await waitFor(() => expect(where()).toBe('/shows/show-1/season?tab=episodes'));
+      expect(episodeService.deleteEpisode).toHaveBeenCalledWith('ep-2');
+      expect(rememberedEpisodeId()).toBeNull();
+      expect(episodeLocation('ep-2')).toBeNull();
+      othersKept();
+    });
+
+    test('a delete that is refused forgets nothing', async () => {
+      seed();
+      episodeService.deleteEpisode = vi.fn().mockRejectedValue(http(409));
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      mount('/episodes/ep-2?tab=overview');
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(await screen.findByText('Delete Episode'));
+      await waitFor(() => expect(episodeService.deleteEpisode).toHaveBeenCalled());
+      await waitFor(() => expect(mockToast.showError).toHaveBeenCalled());
+      expect(rememberedEpisodeId()).toBe('ep-2');
+      expect(episodeLocation('ep-2')).toEqual({ tab: 'scripts', at: 2000 });
+    });
+  });
+
+  describe('a failure that is not "it does not exist" forgets nothing', () => {
+    const seed = () => {
+      rememberEpisode(E2);
+      rememberEpisodeLocation('ep-2', 'scripts', {}, 2000);
+      window.localStorage.setItem(SHOW_KEY, 'show-1');
+    };
+    const allKept = () => {
+      expect(rememberedEpisodeId()).toBe('ep-2');
+      expect(window.localStorage.getItem('working-episode-title')).toBe('Second Look');
+      expect(episodeLocation('ep-2')).toEqual({ tab: 'scripts', at: 2000 });
+      expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1');
+    };
+
+    test('a network error, a server failure, a refusal and a timeout: the error is shown and everything is kept', async () => {
+      const failures = [
+        new Error('Network Error'),
+        http(500), http(502), http(503),
+        http(401), http(403),
+        Object.assign(new Error('timeout of 180000ms exceeded'), { code: 'ECONNABORTED' }),
+      ];
+      for (const err of failures) {
+        window.localStorage.clear();
+        seed();
+        failWith(err);
+        const view = mount('/episodes/ep-2?tab=wardrobe');
+        await screen.findByText('Episode Not Found');
+        expect(where()).toBe('/episodes/ep-2?tab=wardrobe');
+        allKept();
+        view.unmount();
+      }
+    });
+
+    test('an error that only reads like "404", with no answer from the server, redirects as before but forgets nothing', async () => {
+      seed();
+      failWith(new Error('Not Found'));
+      mount('/episodes/ep-2');
+      await waitFor(() => expect(where()).toBe('/shows'));
+      allKept();
+    });
+
+    test('an address that is not an episode id forgets nothing', async () => {
+      seed();
+      failWith(new Error('Invalid episode ID: nope'));
+      mount('/episodes/nope');
+      await screen.findByText('Episode Not Found');
+      allKept();
+    });
   });
 });

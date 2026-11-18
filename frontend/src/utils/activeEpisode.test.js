@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   IN_PRODUCTION, episodesInProduction, productionEpisode, resumeEpisode, rememberedEpisodeId, rememberEpisode,
+  RESUMABLE_TABS, MAX_EPISODE_LOCATIONS, rememberEpisodeLocation, episodeLocation, forgetEpisode,
 } from './activeEpisode';
 import * as fromShowOverview from '../components/Show/ShowOverview';
 
@@ -217,5 +218,189 @@ describe('one definition, one reader and writer', () => {
     };
     walk(root);
     expect(hits).toEqual([path.join('utils', 'activeEpisode.js')]);
+  });
+});
+
+// PR-04 (Evoni, 2026-11-18): the last working location inside each episode.
+describe('the resume location: the last working tab inside an episode', () => {
+  const KEY = 'working-episode-locations';
+  const stored = () => JSON.parse(window.localStorage.getItem(KEY) || '{}');
+  const OPEN = { voiceStudio: true };
+  let warn;
+  beforeEach(() => { window.localStorage.clear(); warn = vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  test('the places of work are Script and every view of Production and Results; the Overview is not one', () => {
+    expect(RESUMABLE_TABS).toEqual([
+      'scripts',
+      'wardrobe', 'lookbook', 'phone', 'overlays', 'money', 'checklist', 'scenes', 'beatplan', 'files', 'voice', 'edit',
+      'summary', 'evaluation', 'story', 'distribution',
+    ]);
+    expect(RESUMABLE_TABS).not.toContain('overview');
+  });
+
+  test('each place of work is remembered and read back, with when', () => {
+    for (const tab of RESUMABLE_TABS) {
+      window.localStorage.clear();
+      expect(rememberEpisodeLocation('e1', tab, OPEN, 1000)).toBe(true);
+      expect(episodeLocation('e1', OPEN)).toEqual({ tab, at: 1000 });
+    }
+  });
+
+  test('the Overview is never remembered, and does not replace what was', () => {
+    expect(rememberEpisodeLocation('e1', 'overview')).toBe(false);
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+    rememberEpisodeLocation('e1', 'wardrobe', {}, 1000);
+    expect(rememberEpisodeLocation('e1', 'overview', {}, 2000)).toBe(false);
+    expect(episodeLocation('e1')).toEqual({ tab: 'wardrobe', at: 1000 });
+  });
+
+  test('what is not a tab is not remembered: a main tab\'s own key, an old key, a misspelling, nothing', () => {
+    rememberEpisodeLocation('e1', 'money', {}, 1000);
+    for (const bad of ['production', 'results', 'brief', 'assets', 'Wardrobe', 'wardrobe ', 'nonsense', '', null, undefined, 7, {}, ['wardrobe']]) {
+      expect(rememberEpisodeLocation('e1', bad, OPEN, 2000)).toBe(false);
+    }
+    expect(episodeLocation('e1')).toEqual({ tab: 'money', at: 1000 });
+    expect(rememberEpisodeLocation('', 'wardrobe')).toBe(false);
+    expect(rememberEpisodeLocation(null, 'wardrobe')).toBe(false);
+    expect(Object.keys(stored())).toEqual(['e1']);
+  });
+
+  test('Voice is remembered only while it is open, and what was remembered before stays', () => {
+    rememberEpisodeLocation('e1', 'files', {}, 1000);
+    expect(rememberEpisodeLocation('e1', 'voice', {}, 2000)).toBe(false);
+    expect(rememberEpisodeLocation('e1', 'voice', { voiceStudio: false }, 2000)).toBe(false);
+    expect(rememberEpisodeLocation('e1', 'voice', { voiceStudio: 'yes' }, 2000)).toBe(false);
+    expect(episodeLocation('e1', OPEN)).toEqual({ tab: 'files', at: 1000 });
+    expect(rememberEpisodeLocation('e1', 'voice', OPEN, 3000)).toBe(true);
+    expect(episodeLocation('e1', OPEN)).toEqual({ tab: 'voice', at: 3000 });
+  });
+
+  test('a saved Voice location is passed over while Voice is not open, and is not deleted', () => {
+    rememberEpisodeLocation('e1', 'voice', OPEN, 1000);
+    const before = window.localStorage.getItem(KEY);
+    expect(episodeLocation('e1')).toBeNull();
+    expect(episodeLocation('e1', { voiceStudio: false })).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBe(before);
+    // Open again: it is there.
+    expect(episodeLocation('e1', OPEN)).toEqual({ tab: 'voice', at: 1000 });
+  });
+
+  test('each episode keeps its own, across episodes and shows', () => {
+    rememberEpisodeLocation('show-a-e1', 'wardrobe', {}, 1000);
+    rememberEpisodeLocation('show-a-e2', 'scripts', {}, 2000);
+    rememberEpisodeLocation('show-b-e1', 'distribution', {}, 3000);
+    rememberEpisodeLocation('show-a-e1', 'beatplan', {}, 4000);
+    expect(episodeLocation('show-a-e1')).toEqual({ tab: 'beatplan', at: 4000 });
+    expect(episodeLocation('show-a-e2')).toEqual({ tab: 'scripts', at: 2000 });
+    expect(episodeLocation('show-b-e1')).toEqual({ tab: 'distribution', at: 3000 });
+    expect(episodeLocation('never-opened')).toBeNull();
+    expect(episodeLocation(null)).toBeNull();
+    // One browser key holds them all.
+    expect(Object.keys(window.localStorage)).toEqual([KEY]);
+  });
+
+  test('an id is matched as text', () => {
+    rememberEpisodeLocation(12, 'money', {}, 1000);
+    expect(episodeLocation('12')).toEqual({ tab: 'money', at: 1000 });
+    expect(episodeLocation(12)).toEqual({ tab: 'money', at: 1000 });
+  });
+
+  test('only the 20 most recently visited episodes are kept', () => {
+    expect(MAX_EPISODE_LOCATIONS).toBe(20);
+    for (let i = 1; i <= 25; i += 1) rememberEpisodeLocation(`e${i}`, 'wardrobe', {}, i * 1000);
+    expect(Object.keys(stored())).toHaveLength(20);
+    for (let i = 1; i <= 5; i += 1) expect(episodeLocation(`e${i}`)).toBeNull();
+    for (let i = 6; i <= 25; i += 1) expect(episodeLocation(`e${i}`)).toEqual({ tab: 'wardrobe', at: i * 1000 });
+    // Visiting an old one again keeps it, and the least recent goes.
+    rememberEpisodeLocation('e6', 'money', {}, 99000);
+    rememberEpisodeLocation('e-new', 'scripts', {}, 100000);
+    expect(episodeLocation('e6')).toEqual({ tab: 'money', at: 99000 });
+    expect(episodeLocation('e7')).toBeNull();
+    expect(Object.keys(stored())).toHaveLength(20);
+  });
+
+  test('a stored location that is no longer a tab reads as none, and is left as it is', () => {
+    window.localStorage.setItem(KEY, JSON.stringify({ e1: { tab: 'retired-tab', at: 5 }, e2: { tab: 'overview', at: 6 }, e3: { tab: 'money', at: 7 } }));
+    const before = window.localStorage.getItem(KEY);
+    expect(episodeLocation('e1')).toBeNull();
+    expect(episodeLocation('e2')).toBeNull();
+    expect(episodeLocation('e3')).toEqual({ tab: 'money', at: 7 });
+    expect(window.localStorage.getItem(KEY)).toBe(before);
+  });
+
+  test('a stored value that is not what this file wrote reads as nothing, without an error', () => {
+    for (const junk of ['not json', '[]', '"text"', '42', 'null', '{"e1":"wardrobe"}', '{"e1":{"tab":7}}', '{"e1":null}']) {
+      window.localStorage.setItem(KEY, junk);
+      expect(episodeLocation('e1')).toBeNull();
+    }
+    // The next visit writes a clean value.
+    window.localStorage.setItem(KEY, 'not json');
+    expect(rememberEpisodeLocation('e1', 'wardrobe', {}, 1000)).toBe(true);
+    expect(stored()).toEqual({ e1: { tab: 'wardrobe', at: 1000 } });
+  });
+
+  test('storage that cannot be read or written: nothing remembered, nothing thrown', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    expect(episodeLocation('e1')).toBeNull();
+    expect(() => forgetEpisode('e1')).not.toThrow();
+    vi.restoreAllMocks();
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    expect(() => rememberEpisodeLocation('e1', 'wardrobe')).not.toThrow();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  test('forgetting an episode removes its location and "last opened", and nothing else', () => {
+    window.localStorage.setItem('primeStudios.activeShowId', 'show-a');
+    window.localStorage.setItem('esp-draft-e2', 'an unsaved script');
+    window.localStorage.setItem('authToken', 'token');
+    rememberEpisode({ id: 'e2', title: 'Second Look' });
+    rememberEpisodeLocation('e1', 'wardrobe', {}, 1000);
+    rememberEpisodeLocation('e2', 'scripts', {}, 2000);
+    rememberEpisodeLocation('e3', 'money', {}, 3000);
+
+    forgetEpisode('e2');
+
+    expect(episodeLocation('e2')).toBeNull();
+    expect(rememberedEpisodeId()).toBeNull();
+    expect(window.localStorage.getItem('working-episode-title')).toBeNull();
+    // The other episodes, and the rest of the browser's state.
+    expect(episodeLocation('e1')).toEqual({ tab: 'wardrobe', at: 1000 });
+    expect(episodeLocation('e3')).toEqual({ tab: 'money', at: 3000 });
+    expect(window.localStorage.getItem('primeStudios.activeShowId')).toBe('show-a');
+    expect(window.localStorage.getItem('esp-draft-e2')).toBe('an unsaved script');
+    expect(window.localStorage.getItem('authToken')).toBe('token');
+  });
+
+  test('forgetting an episode that is not the one last opened leaves "last opened" alone', () => {
+    rememberEpisode({ id: 'e1', title: 'Episode One' });
+    rememberEpisodeLocation('e1', 'wardrobe', {}, 1000);
+    rememberEpisodeLocation('e2', 'scripts', {}, 2000);
+    forgetEpisode('e2');
+    expect(rememberedEpisodeId()).toBe('e1');
+    expect(window.localStorage.getItem('working-episode-title')).toBe('Episode One');
+    expect(episodeLocation('e1')).toEqual({ tab: 'wardrobe', at: 1000 });
+    // Nothing to forget: no change, no error.
+    forgetEpisode('never-opened');
+    forgetEpisode(null);
+    expect(rememberedEpisodeId()).toBe('e1');
+  });
+
+  test('forgetting the last location removes the key, so nothing empty is left behind', () => {
+    rememberEpisodeLocation('e1', 'wardrobe', {}, 1000);
+    forgetEpisode('e1');
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  test('a location changes neither the official production episode nor the episode to resume', () => {
+    rememberEpisode(E2);
+    rememberEpisodeLocation('e3', 'wardrobe', {}, 1000);
+    rememberEpisodeLocation('e1', 'scripts', {}, 2000);
+    expect(productionEpisode(SHOW_A)).toBe(E1);
+    expect(resumeEpisode(SHOW_A, rememberedEpisodeId())).toBe(E2);
+    forgetEpisode('e3');
+    expect(productionEpisode(SHOW_A)).toBe(E1);
+    expect(resumeEpisode(SHOW_A, rememberedEpisodeId())).toBe(E2);
   });
 });
