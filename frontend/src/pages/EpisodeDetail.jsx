@@ -53,7 +53,8 @@ import { beatOrder } from '../lib/storyClock';
 import './EpisodeDetail.css';
 import useSideScroll from '../hooks/useSideScroll';
 import { deleteFailureText } from '../lib/frozenEpisode';
-import { rememberEpisode } from '../utils/activeEpisode';
+import { rememberEpisode, rememberEpisodeLocation, forgetEpisode } from '../utils/activeEpisode';
+import { rememberShow } from '../utils/activeShow';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
 // migration extension per v2.20 §9.11 (file already partial-migrated
@@ -410,12 +411,24 @@ const EpisodeDetail = () => {
       setError(null);
       const data = await episodeService.getEpisode(episodeId);
       if (seq !== loadSeqRef.current) return;
+      // A deleted episode is not found (PR-04): the read still answers with
+      // it, marked deleted. It is not shown, and it is forgotten as the
+      // episode last opened; nothing else in the browser is touched.
+      if (data?.deleted_at) {
+        forgetEpisode(episodeId);
+        toast.showError('Episode not found — it may have been deleted.');
+        navigate('/shows', { replace: true });
+        return;
+      }
       setEpisode(data);
     } catch (err) {
       console.error('[EpisodeDetail] episode load failed:', err);
       if (seq !== loadSeqRef.current) return;
       const msg = err.message || '';
       if (msg.includes('Not Found') || msg.includes('404')) {
+        // Forgotten only on the server's own "not found" (404). A network
+        // error, a server failure or a refusal leaves what is remembered.
+        if (err?.response?.status === 404) forgetEpisode(episodeId);
         toast.showError('Episode not found — it may have been deleted.');
         navigate('/shows', { replace: true });
         return;
@@ -446,6 +459,26 @@ const EpisodeDetail = () => {
       rememberEpisode({ id: episodeId, title: episode.title, episodeTitle: episode.episodeTitle });
     }
   }, [episodeId, episode]);
+
+  // The episode on the page is the one the address names (not the last
+  // one, still on screen while the next loads).
+  const loadedEpisodeId = episode && String(episode.id) === String(episodeId) ? String(episode.id) : null;
+  // The show being worked on follows the episode (PR-04): remembered once
+  // per episode loaded, never again on a save, so a later choice of show in
+  // another window is not put back by this one.
+  const loadedShowId = loadedEpisodeId ? (episode.show_id || episode.showId || null) : null;
+  useEffect(() => {
+    if (loadedEpisodeId && loadedShowId) rememberShow(loadedShowId);
+  }, [loadedEpisodeId, loadedShowId]);
+  // The episode's last working location (PR-04): the tab now open, when it
+  // is a place of work. The Overview is never recorded, nor Voice unless it
+  // is open to this admin. The address alone decides the tab; this only
+  // remembers it for a control that says "Resume".
+  const locationTab = epSubTab || activeTab;
+  const voiceOpen = admin && voiceStudio;
+  useEffect(() => {
+    if (loadedEpisodeId) rememberEpisodeLocation(loadedEpisodeId, locationTab, { voiceStudio: voiceOpen });
+  }, [loadedEpisodeId, locationTab, voiceOpen]);
 
   // ── End-of-show suggestions overlay ──────────────────────────────────────
   // Auto-opens only on the WRAP TRANSITION — evaluation_status going to
@@ -1007,6 +1040,7 @@ const EpisodeDetail = () => {
                           const after = showIdForLinks ? episodeSeasonHref(showIdForLinks, episode, 'episodes') : '/episodes';
                           try {
                             await episodeService.deleteEpisode(episode.id);
+                            forgetEpisode(episode.id);
                             toast.showSuccess('Episode deleted');
                             navigate(after);
                           } catch (err) {
