@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
@@ -49,7 +49,8 @@ beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
-afterEach(() => { vi.restoreAllMocks(); });
+// The page is taken down before the mocks lose their answers, so no effect still pending runs against an empty client.
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe('Edit details: Back', () => {
   test('no origin: back to the episode, as before, and nothing is written', async () => {

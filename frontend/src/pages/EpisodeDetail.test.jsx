@@ -20,7 +20,7 @@
  */
 
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 vi.mock('../contexts/AuthContext', () => ({
@@ -859,6 +859,8 @@ describe('EpisodeDetail — Edit details carries the tab it is opened from (PR-0
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
   afterEach(() => {
+    // The page is taken down before the mocks lose their answers.
+    cleanup();
     vi.restoreAllMocks();
     vi.mocked(episodeService.getEpisode).mockReset();
     vi.mocked(episodeService.getEpisode).mockResolvedValue({ id: 'ep-1', title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' } });
