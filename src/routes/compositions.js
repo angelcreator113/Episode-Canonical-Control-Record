@@ -18,6 +18,7 @@ const VersioningService = require('../services/VersioningService');
 const FilterService = require('../services/FilterService');
 const { models } = require('../models');
 const { requireAuth } = require('../middleware/auth');
+const { anyDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 const { authenticateJWT, requireGroup } = require('../middleware/jwtAuth');
 const { S3Client, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { fromIni } = require('@aws-sdk/credential-providers');
@@ -52,6 +53,9 @@ const getS3Client = async () => {
 };
 
 const router = express.Router();
+
+// The asset fields CompositionService.updateComposition stores from a request.
+const COMPOSITION_ASSET_FIELDS = ['lala_asset_id', 'guest_asset_id', 'justawomen_asset_id'];
 
 /**
  * Validate UUID format
@@ -289,6 +293,10 @@ router.post('/', requireAuth, async (req, res) => {
       }
     }
 
+    // Before the composition is created: no role may carry a document
+    // presentation (text roles hold words, not ids, and are passed over).
+    if (await anyDocumentPresentation(Object.values(assetData))) return refuseDocumentPresentation(res);
+
     // Create composition record
     const composition = await models.ThumbnailComposition.create({
       episode_id,
@@ -437,6 +445,7 @@ router.put('/:id', authenticateJWT, async (req, res) => {
         error: 'composition_config is required',
       });
     }
+    if (await anyDocumentPresentation(COMPOSITION_ASSET_FIELDS.map((f) => composition_config[f]))) return refuseDocumentPresentation(res);
 
     const composition = await CompositionService.updateComposition(id, composition_config);
 
@@ -878,6 +887,7 @@ router.post('/:id/generate-formats', requireAuth, async (req, res) => {
  */
 router.patch('/:id', requireAuth, async (req, res) => {
   try {
+    if (await anyDocumentPresentation(COMPOSITION_ASSET_FIELDS.map((f) => (req.body || {})[f]))) return refuseDocumentPresentation(res);
     const composition = await CompositionService.updateComposition(req.params.id, req.body);
 
     res.json({
@@ -905,6 +915,7 @@ router.post('/:id/assets', requireAuth, async (req, res) => {
         error: 'Missing required fields: asset_id and role',
       });
     }
+    if (await anyDocumentPresentation(asset_id)) return refuseDocumentPresentation(res);
 
     // Create or update composition_asset record
     const compositionAsset = await models.CompositionAsset.findOne({

@@ -409,6 +409,8 @@ router.get('/:episodeId/performance-clips', requireAuth, async (req, res) => {
 router.put('/:episodeId/performance-clips', requireAuth, async (req, res) => {
   try {
     const { attachClip } = require('../services/performanceClipsService');
+    const { anyDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
+    if (await anyDocumentPresentation(req.body && req.body.asset_id, { sequelize: models.sequelize })) return refuseDocumentPresentation(res);
     const result = await attachClip(models.sequelize, req.params.episodeId, req.body || {});
     return res.status(result.replaced ? 200 : 201).json({ success: true, data: result.clip, replaced: result.replaced });
   } catch (err) {

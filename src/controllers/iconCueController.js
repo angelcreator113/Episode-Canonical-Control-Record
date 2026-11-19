@@ -4,6 +4,7 @@
  */
 
 const { pool } = require('../db');
+const { anyDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 const iconCueGeneratorService = require('../services/iconCueGeneratorService');
 
 /**
@@ -173,6 +174,7 @@ exports.createIconCue = async (req, res) => {
         error: { message: 'Missing required fields: timestamp, slot_id, action' },
       });
     }
+    if (await anyDocumentPresentation(asset_id)) return refuseDocumentPresentation(res);
     
     const result = await pool.query(
       `INSERT INTO icon_cues (
@@ -215,6 +217,7 @@ exports.updateIconCue = async (req, res) => {
   const updates = req.body;
   
   try {
+    if (await anyDocumentPresentation(updates && updates.asset_id)) return refuseDocumentPresentation(res);
     // Build dynamic update query
     const allowedFields = [
       'asset_id', 'timestamp', 'duration_ms', 'slot_id', 'action',
