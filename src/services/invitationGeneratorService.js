@@ -588,26 +588,56 @@ async function moneyCheckFor(models, event, content) {
  * whether or not the event has an episode yet. Then the episode overlay is
  * synced (P10; Start Episode does it when there is no episode yet); a
  * failure there is logged and does not undo the approval.
+ *
+ * Who approved and when are
+ * kept on the version (metadata.approved_by, approved_at) and in one audit
+ * entry written in the same transaction, so there is no approval without
+ * its record (Evoni, 2026-11-19). The event row is locked, so two
+ * approvals take turns. `expectedInvitationAssetId`, when sent, is the
+ * approved invitation the sender saw: 409 when the event has another now.
+ * Approving the version that is already the approved one changes nothing
+ * and adds no second entry.
  */
-async function approveInvitation(models, { showId, eventId, assetId }) {
+async function approveInvitation(models, { showId, eventId, assetId, actor = null, expectedInvitationAssetId }) {
   const { sequelize } = models;
   const { supersedeOtherInvitationVersions, syncEpisodeInvitationOverlay } = require('./episodeInvitationOverlayService');
+  const approverId = actor?.id === undefined || actor?.id === null ? null : String(actor.id);
+  if (!approverId) throw new InvitationError(403, 'An approval needs the admin who is approving.');
 
   const { episodeId, superseded } = await sequelize.transaction(async (transaction) => {
     const event = await loadEvent(sequelize, {
       showId, eventId, transaction, lock: true,
       columns: 'id, used_in_episode_id, invitation_asset_id, canon_consequences',
     });
+    if (expectedInvitationAssetId !== undefined && (event.invitation_asset_id || null) !== (expectedInvitationAssetId || null)) {
+      throw new InvitationError(409, 'The approved invitation changed since you opened this. Reload it and try again.');
+    }
     const asset = await loadVersion(sequelize, { eventId, assetId, transaction });
     const words = versionText(asset, event);
+    // Already the approved one: nothing to decide again, and no second entry.
+    if (String(event.invitation_asset_id || '') === String(assetId) && asset.approval_status === 'approved') {
+      return { episodeId: event.used_in_episode_id || null, superseded: 0 };
+    }
 
+    const approvedAt = new Date().toISOString();
     await sequelize.query(
       `UPDATE assets
           SET approval_status = 'approved',
-              metadata = COALESCE(metadata, '{}'::jsonb) - 'superseded_by' - 'superseded_at',
+              metadata = (COALESCE(metadata, '{}'::jsonb) - 'superseded_by' - 'superseded_at')
+                || jsonb_build_object('approved_by', jsonb_build_object('id', CAST(:approverId AS text)), 'approved_at', CAST(:approvedAt AS text)),
               updated_at = NOW()
         WHERE id = :assetId`,
-      { replacements: { assetId }, transaction }
+      { replacements: { assetId, approverId, approvedAt }, transaction }
+    );
+    await require('../middleware/auditLog').logger.logActionInTransaction(
+      transaction, approverId, 'event_invitation_approved', 'world_event', eventId,
+      {
+        asset_id: assetId,
+        invitation_version: parseMetadata(asset).version ?? null,
+        replaces_asset_id: event.invitation_asset_id || null,
+        show_id: showId,
+        episode_id: event.used_in_episode_id || null,
+      }
     );
     await sequelize.query(
       words

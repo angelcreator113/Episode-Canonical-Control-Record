@@ -169,8 +169,9 @@ async function writeDocument(sequelize, eventId, type, doc, { transaction } = {}
  * A read-modify-write of one document, in one transaction with the event
  * row locked (audit Low, 2026-10-23), so a draft, an edit and an approval
  * cannot overwrite one another: each reads the version the one before it
- * wrote. `change(prev, event)` returns the document to write, or null to
- * write nothing; it may throw an EventDocumentError. Returns
+ * wrote. `change(prev, event, transaction)` returns the document to write,
+ * or null to write nothing; it may throw an EventDocumentError, and may
+ * write within the transaction (the approval's audit entry). Returns
  * { event, doc, written }.
  *
  * expectedVersion (optional): the version the client last read. When sent
@@ -184,7 +185,7 @@ async function changeDocument(sequelize, { showId, eventId, type, expectedVersio
     if (expectedVersion != null && Number(prev?.version || 0) !== Number(expectedVersion)) {
       throw new EventDocumentError(409, `The ${DOC_TYPES[type].label.toLowerCase()} changed since you opened it (now version ${prev?.version || 0}). Reload it and try again.`);
     }
-    const doc = await change(prev, event);
+    const doc = await change(prev, event, transaction);
     if (!doc) return { event, doc: prev, written: false };
     await writeDocument(sequelize, eventId, type, doc, { transaction });
     return { event, doc, written: true };
@@ -555,23 +556,66 @@ async function keepListForLook(models, { showId, eventId, version }) {
   return doc;
 }
 
+// ─── Approving the words, and drawing them: two things ─────────────────────
+//
+// Evoni, 2026-11-19 (V2-1). Approval is a decision about the document's
+// content: its status, who approved it and when, with one audit entry
+// written in the same transaction. Drawing the approved document as its
+// overlay is a separate step that can fail without undoing the approval;
+// how it went is kept on the document as
+//   overlay_render { status: 'rendering' | 'ok' | 'failed', version,
+//                    started_at | at, error? }
+// so a failure is said and can be tried again, and is never read as an
+// overlay that is ready. Neither is carried to a later version.
+
+/** How long a drawing in progress keeps others from starting the same one. */
+const RENDER_CLAIM_MS = 2 * 60 * 1000;
+const RENDER_ERROR_MAX = 200;
+const AUDIT_APPROVED = 'event_document_approved';
+const AUDIT_RESOURCE = 'world_event';
+
+const approverId = (actor) => (actor?.id === undefined || actor?.id === null ? null : String(actor.id));
+
+/** True while a drawing of this version was started recently enough to still be running. */
+function renderInProgress(doc, now = Date.now()) {
+  const r = doc?.overlay_render;
+  if (!r || r.status !== 'rendering' || r.version !== doc.version) return false;
+  const started = Date.parse(r.started_at);
+  return Number.isFinite(started) && now - started < RENDER_CLAIM_MS;
+}
+
 /**
  * The approved document drawn as its overlay (Evoni, 2026-10-07: "i want
  * both the shopping list and career list and invitations as overlays"),
  * recorded on the document as overlay { asset_id, url, version, made_at }.
  * Not placed on a beat ("none of the overlays should be beats for now").
- * A drawing failure leaves the approval as it is.
+ *
+ * One drawing at a time per version: it is claimed under the event's row
+ * lock first, and a second caller finds the claim and draws nothing. What
+ * was drawn, or why it was not, is written only to the version it was
+ * drawn from: a newer edit that landed meanwhile is left as it is. A
+ * failure leaves the approval as it is and is recorded.
  */
 async function withOverlay(models, event, type, doc) {
   const { makeDocumentOverlay } = require('./eventDocumentOverlayService');
+  const at = { showId: event.show_id, eventId: event.id, type };
+  const sameVersion = (current) => current && current.version === doc.version && current.status === 'approved';
+  let claimed = false;
+  const { doc: stored } = await changeDocument(models.sequelize, at, (current) => {
+    if (!sameVersion(current) || renderInProgress(current)) return null;
+    claimed = true;
+    return { ...current, overlay_render: { status: 'rendering', version: current.version, started_at: new Date().toISOString() } };
+  });
+  // Edited since, or another request is drawing it now: nothing to draw here.
+  if (!claimed) return stored || doc;
   try {
     const terms = type === 'offer_letter' ? await offerTermsOf(models.sequelize, event) : null;
     const overlay = await makeDocumentOverlay(models, { event, type, doc, terms });
-    if (!overlay) return doc;
-    // Recorded only on the version it was drawn from: a newer edit that
-    // landed while it was drawn is left as it is.
-    const { doc: saved } = await changeDocument(models.sequelize, { showId: event.show_id, eventId: event.id, type }, (current) => (
-      current && current.version === doc.version ? { ...current, overlay } : null
+    if (!overlay) throw new Error('Drawing is not available on this server.');
+    const { doc: saved } = await changeDocument(models.sequelize, at, (current) => (
+      current && current.version === doc.version
+        ? { ...current, overlay, overlay_render: { status: 'ok', version: doc.version, at: new Date().toISOString() } }
+        : null
     ));
     if (type === 'offer_letter' && event.used_in_episode_id) {
       await syncOfferLetterPlacement(models, { event: { ...event, canon_consequences: null }, episodeId: event.used_in_episode_id, overlay });
@@ -579,26 +623,59 @@ async function withOverlay(models, event, type, doc) {
     return saved && saved.version === doc.version ? saved : doc;
   } catch (err) {
     console.error(`[EventDocuments] ${type} overlay failed (the approval stands):`, err.message);
-    return doc;
+    try {
+      const { doc: failed } = await changeDocument(models.sequelize, at, (current) => (
+        current && current.version === doc.version
+          ? { ...current, overlay_render: { status: 'failed', version: doc.version, at: new Date().toISOString(), error: String(err.message || 'It could not be drawn.').slice(0, RENDER_ERROR_MAX) } }
+          : null
+      ));
+      return failed || stored;
+    } catch (writeErr) {
+      console.error(`[EventDocuments] ${type} overlay failure could not be recorded:`, writeErr.message);
+      return stored;
+    }
   }
 }
 
 /**
  * Approve: the current version, as it is, and draw its overlay. Approving
  * an approved document whose overlay is missing or out of date draws it again.
+ *
+ * `actor` is the admin approving (the route's req.user): an approval is not
+ * written without one. `intent` says which of the two the caller means:
+ *   'approve'  approve the content; a document that is already approved is
+ *              refused (409), so of two approvals sent at once one succeeds;
+ *   'render'   only draw an approved document's overlay (409 when it is
+ *              not approved);
+ *   absent     whichever applies, as before.
  */
-async function approveDocument(models, { showId, eventId, type, version }) {
+async function approveDocument(models, { showId, eventId, type, version, actor = null, intent = null }) {
   assertType(type);
   const expectedVersion = readExpectedVersion(version);
+  if (intent != null && intent !== 'approve' && intent !== 'render') throw new EventDocumentError(400, 'intent must be "approve" or "render"');
+  const label = DOC_TYPES[type].label.toLowerCase();
   const { overlayState } = require('./eventDocumentOverlayService');
   // The approval is read and written under the event row lock, so it
   // approves the version stored at that moment and never writes an older
   // copy over a newer edit (audit Low, 2026-10-23).
-  const { event, doc: prev, written } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, (current) => {
-    if (!current) throw new EventDocumentError(404, `No ${DOC_TYPES[type].label.toLowerCase()} yet. Draft it first.`);
-    if (current.status === 'approved') return null;
+  const { event, doc: prev, written } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, async (current, row, transaction) => {
+    if (!current) throw new EventDocumentError(404, `No ${label} yet. Draft it first.`);
+    if (current.status === 'approved') {
+      if (intent === 'approve') throw new EventDocumentError(409, `The ${label} is already approved (version ${current.version}). Nothing was changed.`);
+      return null;
+    }
+    if (intent === 'render') throw new EventDocumentError(409, `Approve the ${label} before drawing its overlay.`);
+    const by = approverId(actor);
+    if (!by) throw new EventDocumentError(403, 'An approval needs the admin who is approving.');
     const now = new Date().toISOString();
-    return { ...current, status: 'approved', approved_at: now, updated_at: now };
+    // The entry commits or rolls back with the approval it records.
+    await require('../middleware/auditLog').logger.logActionInTransaction(transaction, by, AUDIT_APPROVED, AUDIT_RESOURCE, eventId, {
+      document_type: type,
+      document_version: current.version,
+      show_id: showId,
+      episode_id: row.used_in_episode_id || null,
+    });
+    return { ...current, status: 'approved', approved_at: now, approved_by: { id: by }, updated_at: now };
   });
   if (written) return withOverlay(models, event, type, prev);
   // Already approved: draw its overlay again when missing or out of date
