@@ -202,6 +202,99 @@ describe('EpisodeOverviewTab: loading is not shown as "none"', () => {
     await waitFor(() => expect(tile('look')).toContain('Not chosen'));
   });
 
+  // ── The locked outfit could not be read ──────────────────────────────
+  const EVENT_BRIEF = { ...BRIEF, event_id: 'ev-1' };
+  const PLANNED = { ...EVENT, outfit_pieces: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] };
+  const failOutfit = () => { held[URLS.outfit()] = { promise: Promise.reject(new Error('Network Error')) }; };
+
+  test('the locked outfit cannot be read and the event has a planned look: the planned count stays, and the tile and the note say what was not read', async () => {
+    answers[URLS.brief()] = { data: EVENT_BRIEF };
+    vi.mocked(getEpisodeEvents).mockResolvedValue({ events: [PLANNED] });
+    failOutfit();
+    renderTab();
+    await waitFor(() => expect(tile('look')).toContain('locked outfit could not be read'));
+    expect(tile('look')).toContain('3 pieces');
+    expect(tile('look')).not.toContain('Not chosen');
+    expect(screen.getByTestId('overview-tile-look').className).not.toContain('is-warn');
+    expect(screen.getByTestId('eov-load-failed').textContent).toContain('the locked outfit');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(console.error).toHaveBeenCalledWith('[Episode] locked outfit load failed:', expect.any(Error));
+  });
+
+  test('the locked outfit cannot be read and nothing is planned: a dash and "could not be read", not "Not chosen" and not a warning', async () => {
+    answers[URLS.brief()] = { data: EVENT_BRIEF };
+    failOutfit();
+    renderTab();
+    await waitFor(() => expect(tile('look')).toContain('could not be read'));
+    expect(tile('look')).toContain('—');
+    expect(tile('look')).not.toContain('Not chosen');
+    expect(tile('look')).not.toContain('locked outfit');
+    expect(screen.getByTestId('overview-tile-look').className).not.toContain('is-warn');
+    expect(screen.getByTestId('eov-load-failed').textContent).toContain('the locked outfit');
+  });
+
+  test('the locked outfit is read and is empty: "Not chosen" with its warning, and no failure is said', async () => {
+    answers[URLS.brief()] = { data: EVENT_BRIEF };
+    answers[URLS.outfit()] = { items: [] };
+    renderTab();
+    await waitFor(() => expect(tile('look')).toContain('Not chosen'));
+    expect(screen.getByTestId('overview-tile-look').className).toContain('is-warn');
+    expect(tile('look')).not.toContain('could not be read');
+    expect(screen.queryByTestId('eov-load-failed')).toBeNull();
+  });
+
+  test('after the outfit failed, Retry shows the look as loading, then what the read finds; the failure is gone', async () => {
+    answers[URLS.brief()] = { data: EVENT_BRIEF };
+    failOutfit();
+    renderTab();
+    await waitFor(() => expect(tile('look')).toContain('could not be read'));
+    const again = hold(URLS.outfit());
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(screen.queryByTestId('eov-load-failed')).toBeNull());
+    await waitFor(() => expect(tile('look')).not.toContain('could not be read'));
+    expect(tile('look')).toContain('—');
+    expect(tile('look')).not.toContain('Not chosen');
+    await release(again, { data: { items: [{ id: 'p1' }] } });
+    await waitFor(() => expect(tile('look')).toContain('1 piece locked'));
+    // And a Retry that finds no locked outfit says "Not chosen".
+    cleanup();
+    failOutfit();
+    renderTab();
+    await waitFor(() => expect(tile('look')).toContain('could not be read'));
+    delete held[URLS.outfit()];
+    answers[URLS.outfit()] = { items: [] };
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(tile('look')).toContain('Not chosen'));
+    expect(screen.queryByTestId('eov-load-failed')).toBeNull();
+  });
+
+  // ── One announcement per failure ─────────────────────────────────────
+  test('a failed brief is announced once: the note with Retry is the alert; the card says it in place, silently', async () => {
+    held[URLS.brief()] = { promise: Promise.reject(new Error('Network Error')) };
+    renderTab();
+    const inCard = await screen.findByTestId('overview-brief-failed');
+    expect(inCard.textContent).toContain("couldn't be loaded");
+    expect(inCard.getAttribute('role')).toBeNull();
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].getAttribute('data-testid')).toBe('eov-load-failed');
+    expect(alerts[0].textContent).toContain('the story brief');
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
+  test('failed events are announced once: the note with Retry is the alert; the card says it in place, silently', async () => {
+    vi.mocked(getEpisodeEvents).mockRejectedValue(new Error('Network Error'));
+    renderTab();
+    const inCard = await screen.findByTestId('eov-events-failed');
+    expect(inCard.textContent).toContain("Couldn't load this episode's events. Retry above.");
+    expect(inCard.getAttribute('role')).toBeNull();
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].getAttribute('data-testid')).toBe('eov-load-failed');
+    expect(alerts[0].textContent).toContain("this episode's events");
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
   // ── The next step ────────────────────────────────────────────────────
   test('no script text on the episode, the script check out: no step is named and there is no button, whatever else has answered', async () => {
     const script = hold(URLS.script());
@@ -304,6 +397,25 @@ describe('EpisodeOverviewTab: loading is not shown as "none"', () => {
     await waitFor(() => expect(nextStepEl().textContent).toContain('Work through production'));
     expect(nextStepEl().textContent).toContain('The script is written.');
     expect(screen.queryByTestId('overview-next-step-meta')).toBeNull();
+  });
+
+  // ── Another episode, with this tab left mounted ──────────────────────
+  test("the episode changes without this tab unmounting: the first one's script does not decide the second one's next step", async () => {
+    const props = { show: { id: 'show-1' }, onUpdate: vi.fn(), onOpenTab: vi.fn(), balance: 100, checks: { done: 2, total: 5 }, checksStatus: 'ready' };
+    // The first episode's script is in the scripts table only.
+    answers[URLS.script()] = { data: [{ content: 'one two three' }] };
+    const view = render(<MemoryRouter><EpisodeOverviewTab episode={EPISODE} {...props} /></MemoryRouter>);
+    await waitFor(() => expect(nextStepEl().textContent).toContain('Work through production'));
+    expect(goButton().textContent).toContain('Open Checklist');
+    const script2 = hold(URLS.script('ep-2'));
+    view.rerender(<MemoryRouter><EpisodeOverviewTab episode={{ ...EPISODE, id: 'ep-2' }} {...props} /></MemoryRouter>);
+    // No destination from the first episode: the step waits for this episode's own script check.
+    await waitFor(() => expect(nextStepEl().textContent).toContain('Checking for a script…'));
+    expect(nextStepEl().textContent).not.toContain('Work through production');
+    expect(goButton()).toBeNull();
+    await release(script2, { data: { data: [] } });
+    await waitFor(() => expect(nextStepEl().textContent).toContain('Generate the script'));
+    expect(goButton().textContent).toContain('Generate Script');
   });
 
   // ── Another episode ──────────────────────────────────────────────────

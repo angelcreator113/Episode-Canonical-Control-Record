@@ -91,7 +91,7 @@ export function StoryBriefCard({
         <p className="eos-prose is-empty" data-testid="overview-brief-loading">Loading the brief…</p>
       )}
       {!brief && status === 'failed' && (
-        <p className="eos-prose is-empty" role="alert" data-testid="overview-brief-failed">The brief couldn't be loaded. Retry above.</p>
+        <p className="eos-prose is-empty" data-testid="overview-brief-failed">The brief couldn't be loaded. Retry above.</p>
       )}
       {brief && (
       <>

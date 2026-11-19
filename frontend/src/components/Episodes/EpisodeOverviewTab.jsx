@@ -232,6 +232,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   useEffect(() => {
     if (!episode?.id) return;
     setAnswered({});
+    // Another episode's script answer does not decide this one's next step,
+    // even if this tab is not unmounted in between.
+    setScriptInfo(null);
     loadContext();
   }, [episode?.id]);
 
@@ -321,7 +324,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             .catch((err) => { console.error('[Episode] source event load failed:', err); if (live()) setSource(null); });
           api.get(`/api/v1/wardrobe/outfit/${episode.id}`)
             .then((res) => { if (live()) { setOutfit(Array.isArray(res.data?.items) ? res.data.items : undefined); heard('outfit'); } })
-            .catch((err) => { console.error('[Episode] locked outfit load failed:', err); if (live()) { setOutfit(undefined); heard('outfit'); } });
+            // A failed read is not "no look locked": it is said in the note with Retry and on the Look tile.
+            .catch((err) => { console.error('[Episode] locked outfit load failed:', err); if (live()) { setOutfit(undefined); setLoadFailed((f) => ({ ...f, outfit: 'the locked outfit' })); } });
         }
         // Resolve narrative_chain.parent_event_id → event name for the Source band.
         const parentId = b?.narrative_chain?.parent_event_id;
@@ -593,7 +597,14 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       : checksStatus === 'failed' ? "Production checklist: couldn't be checked. Open the Checklist tab to check again."
         : null;
   // The look tile also waits for the locked outfit, which is read once the brief names an event.
-  const lookStatus = eventsStatus === 'loading' || briefStatus === 'loading' || (brief?.event_id && showId && !answered.outfit) ? 'loading' : null;
+  const lookStatus = eventsStatus === 'loading' || briefStatus === 'loading' || (brief?.event_id && showId && !answered.outfit && !loadFailed.outfit) ? 'loading' : null;
+  // The locked outfit could not be read: the event's planned look still
+  // stands in when there is one, and the tile says what it could not read.
+  const lookUnread = loadFailed.outfit
+    ? (outfitPieces.length
+      ? { value: `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'}`, tone: null, note: 'locked outfit could not be read' }
+      : { value: '—', tone: null, note: 'could not be read' })
+    : null;
   // Coins after the episode from the Money plan (Task #1919), never from the
   // columns Start Episode estimated (which once counted the whole closet).
   const coinsTile = coinsAfterPlan(money, { accepted: isAccepted });
@@ -601,7 +612,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const tiles = [
     { key: 'prestige', label: 'Prestige', value: eventsStatus ? '—' : prestige ? `${prestige} / 10` : 'Not set', note: eventsStatus === 'failed' ? 'could not be read' : 'from the event' },
     { key: 'coins', label: 'Coins after episode', value: coinsTile.value, link: { label: 'Open Money', tab: 'money' }, note: coinsTile.note },
-    { key: 'look', label: "Lala's look", ...(lookStatus ? { value: '—', tone: null } : lookTile(outfit, outfitPieces)), link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
+    { key: 'look', label: "Lala's look", ...(lookStatus ? { value: '—', tone: null } : lookUnread || lookTile(outfit, outfitPieces)), link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
   ];
 
   // The form shows what the server saved: the update's reply (or, without
@@ -711,6 +722,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const failedLabels = Object.values(loadFailed);
   return (
     <div className="eov">
+      {/* The one announcement of a failed read; the lines inside the cards say it again in place, silently. */}
       {failedLabels.length > 0 && (
         <p role="alert" className="eov-warn" data-testid="eov-load-failed">
           Couldn't load {failedLabels.join(', ')}. What's shown below may be incomplete; nothing was changed.{' '}
@@ -799,7 +811,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         <div className="eov-card">
           <CardTitle icon={CalendarHeart}>Events {!eventsStatus && <span className="eov-count">{linkedEvents.length}</span>}</CardTitle>
           {loadFailed.events ? (
-            <p className="eov-empty" role="alert" data-testid="eov-events-failed">Couldn't load this episode's events. Retry above.</p>
+            <p className="eov-empty" data-testid="eov-events-failed">Couldn't load this episode's events. Retry above.</p>
           ) : eventsStatus === 'loading' ? (
             <p className="eov-empty" data-testid="eov-events-loading">Loading…</p>
           ) : linkedEvents.length === 0 ? (
