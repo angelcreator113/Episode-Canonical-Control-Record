@@ -2,13 +2,13 @@
 
 **Status.** The one authoritative plan for the Studio Home, Episode Command Center, resume, slot-aware planning and sidebar work. Compiled on 2026-11-17 from Evoni's decisions of that day (§2). It is a roadmap, not execution authorization: each pull request needs its own approval (§2.4).
 
-**Progress, as of 2026-11-18.** Most of the plan is not implemented.
+**Progress, as of 2026-11-19.** Most of the plan is not implemented.
 
 | State | Pull requests |
 |---|---|
-| Merged to `main` | PR-00 (#3872, these documents), PR-01 (#3873, request-count pins), PR-02 (#3874, shared next action and next slot), PR-03 (#3875, the production episode and the episode to resume), PR-04 (#3876, the resume location, the show, a deleted episode), PR-05 (#3877, return paths A; a race in its tests was corrected in #3879), PR-06 (#3880, return paths B; `main` at `a597e9a60d3ce72670af9c2bafdcac4347311b55`, where Validate passed) |
+| Merged to `main` | PR-00 (#3872, these documents), PR-01 (#3873, request-count pins), PR-02 (#3874, shared next action and next slot), PR-03 (#3875, the production episode and the episode to resume), PR-04 (#3876, the resume location, the show, a deleted episode), PR-05 (#3877, return paths A; a race in its tests was corrected in #3879), PR-06 (#3880, return paths B; `main` at `a597e9a60d3ce72670af9c2bafdcac4347311b55`, where Validate passed), PR-07 (#3882, the production checklist's loader makes its reads together with the same results; `main` at `a233b4487bc7b45731edf41576ea6fd91df6b969`, where Validate passed; its timings have not been measured on development, and no performance claim is made) |
 | Open, awaiting Evoni's review; not merged | None |
-| Planned, not started | PR-07 to PR-09 (the rest of R1); PR-10 to PR-13 (R2, slot-aware planning); PR-14 to PR-16 (R3, Studio Home); PR-17 and PR-18 (R4, Episode Command Center); PR-19 to PR-22 (R5, sidebar and show navigation) |
+| Planned, not started | PR-08 and PR-09 (the rest of R1); PR-10 to PR-13 (R2, slot-aware planning); PR-14 to PR-16 (R3, Studio Home); PR-17 and PR-18 (R4, Episode Command Center); PR-19 to PR-22 (R5, sidebar and show navigation) |
 
 Merged means merged to `main`; nothing here says any of it is deployed to production. Studio Home, the Episode Command Center, slot-aware planning and the sidebar changes do not exist yet. Where what was built differs from the design below, §4's clarification says how; known limits are in §13.
 
