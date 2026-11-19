@@ -1,6 +1,7 @@
 const { models } = require('../models');
 const { EpisodeAsset, Asset } = models;
 const { Op } = require('sequelize');
+const { isDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 
 /**
  * Episode Assets Controller
@@ -95,6 +96,7 @@ exports.addAssetToEpisode = async (req, res) => {
         error: 'Asset not found',
       });
     }
+    if (isDocumentPresentation(asset)) return refuseDocumentPresentation(res);
 
     // Check if already added
     const existing = await EpisodeAsset.findOne({

@@ -1320,6 +1320,10 @@ router.post('/:id/wardrobe-defaults', requireAuth, async (req, res) => {
         error: 'character_name is required',
       });
     }
+    {
+      const { anyDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
+      if (await anyDocumentPresentation(outfit_asset_id)) return refuseDocumentPresentation(res);
+    }
 
     // Upsert: create or update
     const [wardrobeDefault, created] = await EpisodeWardrobeDefault.findOrCreate({
