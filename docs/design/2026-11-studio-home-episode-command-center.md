@@ -546,18 +546,38 @@ Recorded on 2026-11-18. **None of the items in §13 is implemented.** Listing on
 
 | Class | Items |
 |---|---|
-| Confirmed defect (behaviour that is wrong today) | §13.3: the separate episode pages still open a deleted episode. §13.3: two windows writing the locations key at once can lose one update. §13.2: the Shows card counts treat an unrecognised status as in production, while Continue does not |
+| Confirmed defect (behaviour that is wrong today) | §13.9: "Venue image generated" cannot tell a failed read from no image (the other §13.9 defects are corrected by the change that records them). §13.3: the separate episode pages still open a deleted episode. §13.3: two windows writing the locations key at once can lose one update. §13.2: the Shows card counts treat an unrecognised status as in production, while Continue does not |
 | Deferred UX improvement (works, could be better) | §13.8: the Episode Overview has no loading feedback for its brief and scene-sets reads; the Checklist tab runs the loader twice. All of §13.4 (ways back that return to the episode instead of where they were opened from, including the two added from PR-06). §13.2: story order ignores the season number. §13.1: `useNextSlot` does not guard against a late or out-of-order answer (to settle before PR-16 uses it). §13.3: the show is remembered after its read answers, not when the page opens |
 | Observed behaviour, no change decided | §13.5: the Teleprompter's "Start at" after Exit |
 | Tooling limitation | §13.6: the frontend ESLint configuration does not load |
 | Housekeeping and notes for later pull requests | §13.1: the bundle-size check for PR-18, and the hook's `[ShowOverview]` log label. §13.2: the borrowed class on Home's "In production" line. §13.3: a deleted episode's other per-episode keys are left; nothing uses the saved location yet (PR-16, PR-18) |
 
-The classes are this document's reading of each item, made on 2026-11-18 (the §13.8 items on 2026-11-19); the items themselves are unchanged above.
+The classes are this document's reading of each item, made on 2026-11-18 (the §13.8 and §13.9 items on 2026-11-19); the items themselves are unchanged above.
 
 ### 13.8 Follow-ups from PR-08 (#3884)
 
 Recorded on 2026-11-19. None of these is built; each needs its own approval.
 
 - **Loading feedback on the Episode Overview** (Evoni, 2026-11-19): "Episode Overview currently lacks visible loading feedback for its brief and scene-sets reads. While requests are pending, sections may appear empty or display no scene sets. The production checklist and related counts may also be temporarily absent. Improve these loading and empty states in a separate, focused UI task." This predates PR-08 and is not a regression of it. Since PR-08 the checklist line and counts on the Overview wait for the Overview's brief and scene-sets reads before they appear.
+  - **Correction (2026-11-19, from the audit that followed).** The Overview reads the episode's scene sets but does not show them anywhere: `EpisodeOverviewTab` keeps them only to hand to the page's checklist (PR-08). So there is no "displays no scene sets" state. What the audit confirmed instead is in §13.9.
 - **The Checklist tab runs the loader twice.** On the Checklist tab `loadProductionChecks` runs once from the Episode page (`EpisodeDetail`, for the Production badge and step bar) and once from `EpisodeProductionChecklist` itself: every read of the loader is made twice. The PR-01 pins measure the Overview, so they do not count this. Deferred by Evoni on 2026-11-19; PR-08 did not touch it.
 - **PR-07 and PR-08 are not measured.** No timing has been taken on development for either. A one-off reading of the browser's own Resource Timing entries was prepared; no instrumentation was added and nothing was deployed for it.
+
+### 13.9 The Episode Overview's loading states and the checklist's correctness (audit of 2026-11-19)
+
+Found by a read-only audit on `main` at `9bdc574fcc63d27d31857c39dbaa981b3b1de895`, after PR-08. Decisions by Evoni, 2026-11-19. The change that carries this section corrects the first five; the last two are limits it keeps.
+
+Confirmed wrong before that change:
+
+- **Statements made before their read answered.** With no script text on the episode, the next step said "Generate the script. The brief is done." before the brief or the script check had answered. The Events card said "0" and "No events linked", the linker "No unlinked events available", the Prestige tile "Not set" and the Look tile "Not chosen", each before its read answered.
+- **No feedback.** The Story brief's fields and the checklist line, badge and count were simply absent while their reads were out.
+- **A checklist that could not run looked like one still loading.** A failure of the page's loader run was written to the console only.
+- **A read that failed was counted as an open check.** `loadProductionChecks` leaves a check unticked when its read fails, so "N left" counted it with nothing to say it had not been read. It was never counted as done.
+- **Another episode's checklist after a switch.** The page kept the checks without the episode they were for, so the badge, the count, the checklist line and the next step showed the previous episode's until the new one's loader answered.
+
+What the correction does, with nothing added to the requests: each area says "Loading…" until its own read answers; the next step's button waits only for the read that decides where it leads (the script check when the episode has no script text, else the checklist); the checks are kept with their episode; and an unticked check is called "couldn't be checked" only when the loader's own `read` (PR-07) shows that a read it is worked out from did not answer (`CHECK_READS` and `checklistReadability` in `lib/episodeShell.js`). The badge still says "N left"; how many of those could not be checked is in its hover and spoken label. The Checklist tab's Check again remains the way to read the checklist again.
+
+Limits that remain, accepted by Evoni on 2026-11-19:
+
+- **"Venue image generated".** `venueImageGenerated` answers "no image" when its read of the venue's scene set fails, so that failure cannot be told from a set with no image. It stays counted as incomplete.
+- **An episode with no show.** The loader does not look for an event or phone screens, and its wardrobe-slot and character-state reads cannot answer. Those checks are not called "couldn't be checked"; they stay as they were.

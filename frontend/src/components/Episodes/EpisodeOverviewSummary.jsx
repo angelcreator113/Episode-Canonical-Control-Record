@@ -27,9 +27,12 @@ export function NextStepBanner({ step, onOpenTab, meta = null, extra = null }) {
         {meta && <p className="eos-next-meta" data-testid="overview-next-step-meta">{meta}</p>}
       </div>
       <div className="eos-next-actions">
-        <button type="button" className="eos-next-btn" onClick={() => onOpenTab?.(step.tab)} data-testid="overview-next-step-go">
-          {step.action} <ArrowRight size={15} aria-hidden="true" />
-        </button>
+        {/* No button until it is known where the step leads. */}
+        {step.action && (
+          <button type="button" className="eos-next-btn" onClick={() => onOpenTab?.(step.tab)} data-testid="overview-next-step-go">
+            {step.action} <ArrowRight size={15} aria-hidden="true" />
+          </button>
+        )}
         {extra}
       </div>
     </section>
@@ -60,7 +63,9 @@ const PACKAGE_SECTION = { cast: 'epp-sec-people', location: 'epp-sec-place' };
 
 export function StoryBriefCard({
   brief, draft, setDraft, saveBriefField, saving, locked, synopsis, onEdit, archetypes, intents, outcomes = null,
+  status = null,
 }) {
+  // `status`: 'loading' or 'failed' while there is no brief to show; null otherwise.
   // The synopsis is the episode's own; the four creative fields wait for the brief.
   const state = brief ? briefState({ ...brief, ...draft }) : null;
   return (
@@ -82,6 +87,12 @@ export function StoryBriefCard({
           ? <p className="eos-prose">{synopsis}</p>
           : <p className="eos-prose is-empty">No synopsis yet. Edit adds one.</p>}
       </div>
+      {!brief && status === 'loading' && (
+        <p className="eos-prose is-empty" data-testid="overview-brief-loading">Loading the brief…</p>
+      )}
+      {!brief && status === 'failed' && (
+        <p className="eos-prose is-empty" role="alert" data-testid="overview-brief-failed">The brief couldn't be loaded. Retry above.</p>
+      )}
       {brief && (
       <>
       <div className="eos-brief-row">
