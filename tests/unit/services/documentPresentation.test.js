@@ -16,7 +16,7 @@ const { FRAME_W, FRAME_H, DEFAULT_LAYOUT } = require('../../../src/utils/editTim
 
 const {
   drawingAvailable, renderDocument, presentDocument, measureDocumentText, panelSlices,
-  DocumentPresentationError, PRESENTATIONS, MIN_READABLE_PX, PANEL_OVERLAP,
+  DocumentPresentationError, PRESENTATIONS, MIN_READABLE_PX, PANEL_OVERLAP, EDGE_PADDING_PX,
 } = svc;
 
 // ── Sample documents (made up for the tests) ──────────────────────────────
@@ -207,6 +207,41 @@ describe('the in-world document presented for video (V1)', () => {
       }
     });
 
+    test('every small mark (a checkbox, a stamp\'s box, a name box) is whole in at least one panel', () => {
+      const { marks, height } = measureDocumentText(type, data);
+      expect(marks.length).toBeGreaterThan(0);
+      for (const mark of marks) {
+        const top = Math.max(0, mark.top);
+        const bottom = Math.min(height, mark.bottom);
+        const whole = result.panels.some((p) => top >= p.source.y0 && bottom <= p.source.y1);
+        expect({ mark: [Math.round(top), Math.round(bottom)], whole }).toMatchObject({ whole: true });
+      }
+    });
+
+    test('what a panel repeats from the one before is blank page: no line or mark lies in the repeated rows', () => {
+      const { lines, marks } = measureDocumentText(type, data);
+      result.panels.forEach((panel, i) => {
+        if (i === 0 || panel.overlap === 0) return;
+        const from = panel.source.y0;
+        const to = result.panels[i - 1].source.y1;
+        for (const b of [...lines, ...marks]) expect(b.bottom <= from || b.top >= to).toBe(true);
+      });
+    });
+
+    test('each panel says the room at its edges, and it is what the page shows', () => {
+      const { lines, marks, height } = measureDocumentText(type, data);
+      const bands = [...lines, ...marks].map((b) => ({ top: Math.max(0, b.top), bottom: Math.min(height, b.bottom) })).filter((b) => b.bottom > b.top);
+      for (const panel of result.panels) {
+        const shown = bands.filter((b) => b.top >= panel.source.y0 && b.bottom <= panel.source.y1);
+        // A panel of blank page (the foot of a short list) has no writing to keep room from.
+        if (!shown.length) { expect(panel.padding).toEqual({ top: null, bottom: null }); continue; }
+        expect(panel.padding.top).toBe(Math.round((Math.min(...shown.map((b) => b.top)) - panel.source.y0) * result.scale));
+        expect(panel.padding.bottom).toBe(Math.round((panel.source.y1 - Math.max(...shown.map((b) => b.bottom))) * result.scale));
+        expect(panel.padding.top).toBeGreaterThanOrEqual(0);
+        expect(panel.padding.bottom).toBeGreaterThanOrEqual(0);
+      }
+    });
+
     test('each panel shows the canonical page: its paper, scaled back, matches the same rows of renderDocument', async () => {
       const page = renderDocument(type, data);
       for (const panel of result.panels) {
@@ -249,6 +284,80 @@ describe('the in-world document presented for video (V1)', () => {
     test('it is counted in text.past_page; nothing else is, and no document here loses a line in the middle', () => {
       const counts = Object.fromEntries(CASES.map(([name, type, data]) => [name, presentDocument(type, data, { presentation: 'reading' }).text.past_page]));
       expect(counts).toEqual({ 'a short shopping list': 0, 'a full shopping list': 1, 'a short offer letter': 0, 'a long offer letter': 0 });
+    });
+  });
+
+  describe('where a reading panel is cut', () => {
+    const FULL = { doc: LONG_LIST, event: EVENT, pieces: null };
+    const LONG = { doc: LETTER, event: EVENT, terms: TERMS };
+    /** The edges of a reading result's panels that are cuts (not the page's own top or bottom), as paddings. */
+    const cutEdges = (r) => r.panels.flatMap((p, i) => [i > 0 ? p.padding.top : null, i < r.panels.length - 1 ? p.padding.bottom : null].filter((n) => n != null));
+
+    test('the padding aimed for is 32 px', () => {
+      expect(EDGE_PADDING_PX).toBe(32);
+    });
+
+    test('a long offer letter: every cut edge has 32 px or more before the writing', () => {
+      const r = presentDocument('offer_letter', LONG, { presentation: 'reading' });
+      expect(r.panels.length).toBeGreaterThan(1);
+      const edges = cutEdges(r);
+      expect(edges.length).toBe((r.panels.length - 1) * 2);
+      for (const px of edges) expect(px).toBeGreaterThanOrEqual(EDGE_PADDING_PX);
+    });
+
+    test('a full shopping list, whose rows leave less than that: each cut edge has the whole gap between two rows, the most the page has', () => {
+      const r = presentDocument('shopping_list', FULL, { presentation: 'reading' });
+      const { lines, marks } = measureDocumentText('shopping_list', FULL);
+      const bands = [...lines, ...marks];
+      expect(r.panels).toHaveLength(2);
+      const [first, second] = r.panels;
+      // The rows it was cut between, and the blank page between them.
+      const above = Math.max(...bands.filter((b) => b.bottom <= second.source.y0 + 1).map((b) => b.bottom));
+      const below = Math.min(...bands.filter((b) => b.top >= first.source.y1 - 1).map((b) => b.top));
+      const gap = Math.round((below - above) * r.scale);
+      expect(gap).toBeLessThan(EDGE_PADDING_PX * 2);
+      expect(first.padding.bottom).toBeGreaterThanOrEqual(gap - 2);
+      expect(second.padding.top).toBeGreaterThanOrEqual(gap - 2);
+      // Twice what one cut down the middle of that gap would leave on each side.
+      expect(first.padding.bottom).toBeGreaterThan(gap / 2 + 2);
+      expect(second.padding.top).toBeGreaterThan(gap / 2 + 2);
+      expect(second.overlap).toBeGreaterThan(0);
+    });
+
+    test('no checkbox is sliced: the rows of pixels at each cut edge hold none of a checkbox\'s ink', async () => {
+      const r = presentDocument('shopping_list', FULL, { presentation: 'reading' });
+      const { marks } = measureDocumentText('shopping_list', FULL);
+      // The checkboxes: the marks about 33 tall (a 30 px box and its 3 px line), below the heading.
+      const boxes = marks.filter((m) => m.top > 150 && m.bottom - m.top > 28 && m.bottom - m.top < 40);
+      expect(boxes.length).toBe(15);
+      for (const box of boxes) expect(r.panels.filter((p) => box.top >= p.source.y0 && box.bottom <= p.source.y1).length).toBeGreaterThanOrEqual(1);
+      // A box is drawn in the list's ink (#2C2C2C) between page x 108 and 142.
+      const dark = (img, x, y) => {
+        const i = (y * img.width + x) * img.channels;
+        return img.data[i] < 90 && img.data[i + 1] < 90 && img.data[i + 2] < 90 && img.data[i + 3] === 255;
+      };
+      for (const [i, panel] of r.panels.entries()) {
+        const img = await pixels(panel.buffer);
+        const x0 = panel.rect.x + Math.floor(104 * r.scale);
+        const x1 = panel.rect.x + Math.ceil(146 * r.scale);
+        const rows = [];
+        if (i > 0) rows.push(panel.rect.y, panel.rect.y + 1, panel.rect.y + 2);
+        if (i < r.panels.length - 1) rows.push(panel.rect.y + panel.rect.h - 1, panel.rect.y + panel.rect.h - 2, panel.rect.y + panel.rect.h - 3);
+        for (const y of rows) for (let x = x0; x <= x1; x += 1) expect({ x, y, ink: dark(img, x, y) }).toMatchObject({ ink: false });
+      }
+    });
+
+    test('the offer letter\'s stamp and its name boxes are marks, and none is sliced', () => {
+      const r = presentDocument('offer_letter', LONG, { presentation: 'reading' });
+      const { marks } = measureDocumentText('offer_letter', LONG);
+      expect(marks.length).toBeGreaterThanOrEqual(3);
+      for (const m of marks) expect(r.panels.some((p) => Math.max(0, m.top) >= p.source.y0 && m.bottom <= p.source.y1)).toBe(true);
+    });
+
+    test('the page\'s own frame is not a mark: a rectangle taller than a mark may be is left out', () => {
+      const { marks, height } = measureDocumentText('offer_letter', LONG);
+      for (const m of marks) expect(m.bottom - m.top).toBeLessThanOrEqual(160);
+      expect(Math.max(...marks.map((m) => m.bottom - m.top))).toBeLessThan(height / 4);
     });
   });
 
@@ -330,6 +439,33 @@ describe('the in-world document presented for video (V1)', () => {
       expect(thrown.code).toBe('NO_SAFE_PANEL_BOUNDARY');
     });
 
+    test('with padding asked for: a cut is placed where both sides have that much room, when the lower half has such a place', () => {
+      const lines = [line(100, 140), line(400, 430), line(520, 560), line(700, 740), line(900, 940)];
+      const slices = panelSlices(1000, 718, lines, { pad: 25 });
+      const cut = slices[0].y1;
+      expect(slices[1]).toEqual({ y0: cut, y1: 1000, overlap: 0 });
+      for (const l of lines) expect(l.bottom <= cut - 25 || l.top >= cut + 25).toBe(true);
+    });
+
+    test('with padding asked for and only narrow gaps: the widest gap is used, and both panels show all of it', () => {
+      // Rows 40 tall, 10 apart, down the whole lower half.
+      const lines = Array.from({ length: 22 }, (_, i) => line(100 + i * 50, 140 + i * 50));
+      const slices = panelSlices(1300, 718, lines, { pad: 25 });
+      const [first, second] = slices;
+      expect(second.overlap).toBe(10);
+      expect(first.y1 - second.y0).toBe(10);
+      // The first ends where the next row begins; the second starts where the last row ended.
+      expect(lines.some((l) => l.top === first.y1)).toBe(true);
+      expect(lines.some((l) => l.bottom === second.y0)).toBe(true);
+      for (const l of lines) expect(slices.some((s) => l.top >= s.y0 && l.bottom <= s.y1)).toBe(true);
+    });
+
+    test('with no padding asked for, a cut still never goes through a line', () => {
+      const lines = Array.from({ length: 22 }, (_, i) => line(100 + i * 50, 140 + i * 50));
+      const slices = panelSlices(1300, 718, lines);
+      for (const s of slices.slice(0, -1)) for (const l of lines) expect(l.top < s.y1 && l.bottom > s.y1).toBe(false);
+    });
+
     test('whatever the lines, the slices cover the page and keep every line whole, or it throws', () => {
       let seed = 7;
       const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
@@ -343,7 +479,7 @@ describe('the in-world document presented for video (V1)', () => {
           y += h + (rand() < 0.35 ? 0 : rand() * 40);
         }
         let slices;
-        try { slices = panelSlices(height, 718, lines); } catch (err) { expect(err).toBeInstanceOf(DocumentPresentationError); continue; }
+        try { slices = panelSlices(height, 718, lines, { pad: n % 2 ? 25 : 0 }); } catch (err) { expect(err).toBeInstanceOf(DocumentPresentationError); continue; }
         expect(slices[0].y0).toBe(0);
         expect(slices[slices.length - 1].y1).toBe(height);
         slices.forEach((s, i) => {
@@ -383,7 +519,7 @@ describe('the in-world document presented for video (V1)', () => {
 
     test('what the module offers: the presentation is added, nothing is taken away', () => {
       expect(Object.keys(svc).sort()).toEqual([
-        'DocumentPresentationError', 'MIN_READABLE_PX', 'PANEL_OVERLAP', 'PRESENTATIONS',
+        'DocumentPresentationError', 'EDGE_PADDING_PX', 'MIN_READABLE_PX', 'PANEL_OVERLAP', 'PRESENTATIONS',
         'documentByline', 'drawingAvailable', 'makeDocumentOverlay', 'measureDocumentText', 'overlayState',
         'panelSlices', 'presentDocument', 'renderDocument', 'shoppingLines', 'shoppingListContext',
       ]);
