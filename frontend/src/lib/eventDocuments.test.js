@@ -108,3 +108,26 @@ describe('the amount note (2026-10-24)', () => {
     expect(amountNote({}, 'shopping_list')).toBeNull();
   });
 });
+describe('docOverlay: how the last drawing went (V2-1)', () => {
+  const approved = { status: 'approved', version: 2 };
+  const NOW = Date.parse('2026-11-19T12:00:00.000Z');
+  test('a failed drawing of this version is "failed", with why, even beside an older image', () => {
+    const o = docOverlay({ ...approved, overlay: { url: 'https://x/old.png', version: 1 }, overlay_render: { status: 'failed', version: 2, error: 'storage refused the upload' } });
+    expect(o.key).toBe('failed');
+    expect(o.label).toBe('The overlay could not be drawn: storage refused the upload The approval stands; try again.');
+    expect(docOverlay({ ...approved, overlay_render: { status: 'failed', version: 2 } }).label).toBe('The overlay could not be drawn. The approval stands; try again.');
+  });
+  test('a failure of another version, or on a document no longer approved, is not this one\'s', () => {
+    expect(docOverlay({ ...approved, overlay_render: { status: 'failed', version: 1 } }).key).toBe('not_made');
+    expect(docOverlay({ status: 'draft', version: 2, overlay_render: { status: 'failed', version: 2 } }).key).toBe('not_made');
+  });
+  test('a drawing under way is "rendering" for two minutes, then no longer', () => {
+    const doc = { ...approved, overlay_render: { status: 'rendering', version: 2, started_at: '2026-11-19T11:59:30.000Z' } };
+    expect(docOverlay(doc, null, false, NOW)).toMatchObject({ key: 'rendering', label: 'Drawing the overlay…' });
+    expect(docOverlay({ ...approved, overlay_render: { status: 'rendering', version: 2, started_at: '2026-11-19T11:57:00.000Z' } }, null, false, NOW).key).toBe('not_made');
+  });
+  test('a drawing that went well leaves the overlay to say whether it is current', () => {
+    expect(docOverlay({ ...approved, overlay: { url: 'https://x/a.png', version: 2 }, overlay_render: { status: 'ok', version: 2 } })).toMatchObject({ key: 'current', label: 'Overlay ready' });
+  });
+});
+

@@ -37,7 +37,7 @@
  * (lib/eventDocuments, src/services/eventDocumentsService.js). The
  * invitation keeps its place in 1. The Event.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Check, ExternalLink, History, Image as ImageIcon, Loader2, Pencil, Plus, RefreshCw, RotateCcw, Shirt, Trash2, Wand2, X } from 'lucide-react';
 import {
   getEventDocumentsApi, draftEventDocumentApi, editEventDocumentApi, approveEventDocumentApi,
@@ -45,6 +45,8 @@ import {
   docState, docOverlay, shoppingLines, documentByline, amountNote, lineOfSlot, LETTER_FIELDS,
 } from '../../lib/eventDocuments';
 import UndoNotice from './UndoNotice';
+import AuthContext from '../../contexts/AuthContext';
+import { isAdmin } from '../../utils/authGroups';
 import { useUndo } from './useUndo';
 import { saveErrorMessage } from '../../utils/eventSaveVersion';
 import './EventDocuments.css';
@@ -190,25 +192,26 @@ function OfferLetter({ doc, event, terms = [], agreement = null }) {
 
 // The document's overlay: its image, whether it matches the document, and
 // Make overlay (the approve call draws it again) when an approved one has none.
-function OverlayRow({ type, doc, busy, onMake, lookTotal = null, termsChanged = false, readOnly = false }) {
+function OverlayRow({ type, doc, busy, onMake, lookTotal = null, termsChanged = false, readOnly = false, adminOnly = null }) {
   const o = docOverlay(doc, lookTotal, termsChanged);
   if (!o) return null;
-  const canMake = !readOnly && doc.status === 'approved' && o.key !== 'current';
+  // Drawn again by an admin (it is the approve call); not while one is being drawn.
+  const canMake = !readOnly && doc.status === 'approved' && o.key !== 'current' && o.key !== 'rendering';
   return (
     <div className={`evd-overlay is-${o.key}`} data-testid={`evd-overlay-${type}`}>
       <span className="evd-overlay-thumb">
         {o.url ? <img src={o.url} alt="" /> : <ImageIcon size={16} aria-hidden="true" />}
       </span>
-      <span className="evd-overlay-text">{o.label}</span>
+      <span className="evd-overlay-text" role={o.key === 'failed' ? 'alert' : undefined} data-testid={o.key === 'failed' ? `evd-overlay-failed-${type}` : undefined}>{o.label}</span>
       {o.url && o.key === 'current' && (
         <a className="evd-link" href={o.url} target="_blank" rel="noreferrer">
           View <ExternalLink size={12} aria-hidden="true" />
         </a>
       )}
       {canMake && (
-        <button type="button" className="evd-link" onClick={onMake} disabled={!!busy} data-testid={`evd-make-overlay-${type}`}>
+        <button type="button" className="evd-link" onClick={onMake} disabled={!!busy || !!adminOnly} title={adminOnly || undefined} data-testid={`evd-make-overlay-${type}`}>
           {busy === `${type}:overlay` ? <Loader2 size={13} className="evd-spin" aria-hidden="true" /> : <ImageIcon size={13} aria-hidden="true" />}
-          {o.url ? ' Redraw overlay' : ' Make overlay'}
+          {o.key === 'failed' ? ' Try again' : o.url ? ' Redraw overlay' : ' Make overlay'}
         </button>
       )}
     </div>
@@ -325,6 +328,11 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
   const [docs, setDocs] = useState(() => (initialDocs && !initialDocs.error ? (initialDocs.data || { shopping_list: null, offer_letter: null }) : null));
   const [error, setError] = useState(initialDocs?.error ? 'Couldn\u2019t load the documents' : null);
   const [busy, setBusy] = useState(null); // `${type}:${action}`
+  // Approving, and drawing an approved document's overlay again, are an
+  // admin's (V2-1, 2026-11-19; the server refuses anyone else). A signed-in
+  // user who is not one sees the buttons off, with why.
+  const user = useContext(AuthContext)?.user;
+  const adminOnly = user && !isAdmin(user) ? 'Only an admin can approve a document.' : null;
   const [editing, setEditing] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(null); // type
   const [lineBusy, setLineBusy] = useState(null); // { type, index }
@@ -402,7 +410,7 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
       meta: { type },
       undo: async (ctx) => {
         let back = await restoreEventDocumentApi(showId, eventId, type, version);
-        if (status === 'approved') back = await approveEventDocumentApi(showId, eventId, type);
+        if (status === 'approved') back = await approveEventDocumentApi(showId, eventId, type, { version: back?.version, intent: 'approve' });
         ctx.setDocs?.((d) => ({ ...(d || {}), [type]: back }));
         ctx.refresh?.();
       },
@@ -547,7 +555,8 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                         {isBusy('draft') ? <Loader2 size={13} className="evd-spin" aria-hidden="true" /> : <RefreshCw size={13} aria-hidden="true" />} Redraft
                       </button>
                       {doc.status !== 'approved' && (
-                        <button type="button" className="evd-link" onClick={() => act(type, 'approve', () => approveEventDocumentApi(showId, eventId, type))} disabled={!!busy || editing === type}>
+                        <button type="button" className="evd-link" onClick={() => act(type, 'approve', () => approveEventDocumentApi(showId, eventId, type, { version: doc.version, intent: 'approve' }))}
+                          disabled={!!busy || editing === type || !!adminOnly} title={adminOnly || undefined} data-testid={`evd-approve-${type}`}>
                           <Check size={13} aria-hidden="true" /> Approve
                         </button>
                       )}
@@ -573,7 +582,8 @@ export default function EventDocuments({ showId, eventId, event, outfitPieces = 
                     type={type} doc={doc} busy={busy} readOnly={ro}
                     lookTotal={type === 'shopping_list' ? listTotal : null}
                     termsChanged={termsChanged}
-                    onMake={() => act(type, 'overlay', () => approveEventDocumentApi(showId, eventId, type))}
+                    adminOnly={adminOnly}
+                    onMake={() => act(type, 'overlay', () => approveEventDocumentApi(showId, eventId, type, { version: doc.version, intent: 'render' }))}
                   />
                 )}
                 {doc && (

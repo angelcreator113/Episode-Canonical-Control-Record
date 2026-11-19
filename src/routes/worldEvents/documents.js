@@ -18,7 +18,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { isBudgetError } = require('../../services/imageCostService');
 const { getModels } = require('./helpers');
@@ -77,14 +77,21 @@ router.put('/world/:showId/events/:eventId/documents/:type', requireAuth, async 
   }
 });
 
-// POST /world/:showId/events/:eventId/documents/:type/approve — approve the current version
-router.post('/world/:showId/events/:eventId/documents/:type/approve', requireAuth, async (req, res) => {
+// POST /world/:showId/events/:eventId/documents/:type/approve — { version?, intent? }
+// Approve the current version, or draw an approved one's overlay again.
+// An ADMIN's (Evoni, 2026-11-19): approving is a decision about what is
+// canon, and the same call from the episode's Overlays tab comes here too.
+// `version` is the version the sender read (409 when it has moved on).
+// `intent`: 'approve' refuses a document that is already approved, so two
+// approvals at once do not both succeed; 'render' only draws an approved
+// document's overlay; with neither it does whichever applies, as before.
+router.post('/world/:showId/events/:eventId/documents/:type/approve', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { approveDocument } = require('../../services/eventDocumentsService');
     const { showId, eventId, type } = req.params;
-    const data = await approveDocument(models, { showId, eventId, type, version: req.body?.version });
+    const data = await approveDocument(models, { showId, eventId, type, version: req.body?.version, intent: req.body?.intent, actor: req.user });
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'approve');

@@ -23,6 +23,7 @@ vi.mock('../utils/authedEventStream', () => ({
 
 import api from '../services/api';
 import { InvitationButton, moneyNote, versionNote } from './InvitationGenerator';
+import AuthContext from '../contexts/AuthContext';
 
 const EVENT = { id: 'evt-1', name: 'Golden Hour Gala', host_brand: 'Lumi', invitation_asset_id: null, invitation_url: null };
 const ESTIMATE = {
@@ -101,6 +102,29 @@ describe('InvitationButton', () => {
     await waitFor(() => expect(screen.getByTestId('invitation-notice').textContent).toContain('leave out 500 Prime Coins'));
     // The new version is pending: Approve is offered.
     expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+  });
+
+  // Approving an invitation is an admin's (V2-1, 2026-11-19).
+  test.each([
+    ['a signed-in user who is not an admin sees Approve off, with why, and nothing is sent', { name: 'Editor', groups: ['editor'] }, true],
+    ['an admin sees Approve on', { name: 'Evoni', groups: ['admin'] }, false],
+  ])('%s', async (_name, user, off) => {
+    api.get.mockResolvedValue({ data: { text: { opening: 'Dear Lala,', body: 'Join us.', closing: 'Warmly,' } } });
+    api.post.mockImplementation((url) => {
+      if (url.endsWith('/edit-invitation-text')) return Promise.resolve({ data: { assetId: 'a9', imageUrl: 'https://x/a9.png', moneyCheck: { ok: true, missing: [], invented: [] } } });
+      return Promise.resolve({ data: {} });
+    });
+    const approved = { ...EVENT, invitation_asset_id: 'a1', invitation_url: 'https://x/a1.png' };
+    render(<AuthContext.Provider value={{ user }}><InvitationButton event={approved} showId="show-1" mode="inline" /></AuthContext.Provider>);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit text' }));
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    fireEvent.click(await screen.findByText('Save as new version'));
+    const approve = await screen.findByRole('button', { name: 'Approve' });
+    expect(approve.disabled).toBe(off);
+    expect(approve.getAttribute('title')).toBe(off ? 'Only an admin can approve an invitation.' : 'Approve');
+    fireEvent.click(approve);
+    const sent = api.post.mock.calls.some(([u]) => u.endsWith('/approve-invitation'));
+    expect(sent).toBe(!off);
   });
 
   test('a failed reject is shown, not swallowed', async () => {

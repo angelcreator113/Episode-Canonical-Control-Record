@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useContext } from 'react';
 import { Loader2, RefreshCw, CheckCircle2, XCircle, Pencil, Mail, AlertCircle, ZoomIn, ExternalLink, X, Type, Image as ImageIcon, Download, History } from 'lucide-react';
 import api from '../services/api';
+import AuthContext from '../contexts/AuthContext';
+import { isAdmin } from '../utils/authGroups';
 import { openAuthedEventStream } from '../utils/authedEventStream';
 
 // ─── THEME OPTIONS ────────────────────────────────────────────────────────────
@@ -65,6 +67,10 @@ const errText = (err, fallback) => err?.response?.data?.error || err?.message ||
 // ─── INVITATION BUTTON COMPONENT ──────────────────────────────────────────────
 
 export function InvitationButton({ event, showId, onGenerated, mode = 'modal', autoGenerate = false, approvalInfo = null, regenerateSignal = 0 }) {
+  // Approving an invitation is an admin's (V2-1, 2026-11-19; the server
+  // refuses anyone else). A signed-in user who is not one sees it off, with why.
+  const signedIn = useContext(AuthContext)?.user;
+  const approveAdminOnly = signedIn && !isAdmin(signedIn) ? 'Only an admin can approve an invitation.' : null;
   const [generating, setGenerating]   = useState(false);
   const [approving, setApproving]     = useState(false);
   const [imageUrl, setImageUrl]       = useState(event.invitation_url || null);
@@ -663,7 +669,7 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
               )}
               {isPending && (
                 <>
-                  <button type="button" className="epp-icon-btn" title="Approve" aria-label="Approve" onClick={handleApprove} disabled={approving}>
+                  <button type="button" className="epp-icon-btn" title={approveAdminOnly || 'Approve'} aria-label="Approve" onClick={handleApprove} disabled={approving || !!approveAdminOnly}>
                     <CheckCircle2 size={14} />
                   </button>
                   <button type="button" className="epp-icon-btn" title="Reject" aria-label="Reject" onClick={handleReject}>
@@ -846,7 +852,7 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
                     <button onClick={handleReject} style={{ ...redBtn, flex: '1 1 70px' }}>Reject</button>
                     <button onClick={() => handleRerollText()} disabled={busy} title="New words, same background" style={{ ...grayBtn, flex: '1 1 90px', opacity: busy ? 0.6 : 1 }}>New words</button>
                     <button onClick={() => handleRerollBackground()} disabled={busy} title="New background, same words" style={{ ...grayBtn, flex: '1 1 110px', opacity: busy ? 0.6 : 1 }}>New background</button>
-                    <button onClick={handleApprove} disabled={approving || busy} style={{ ...greenBtn, flex: '2 1 140px', opacity: approving ? 0.6 : 1 }}>{approving ? 'Approving...' : 'Approve Invitation'}</button>
+                    <button onClick={handleApprove} disabled={approving || busy || !!approveAdminOnly} title={approveAdminOnly || undefined} style={{ ...greenBtn, flex: '2 1 140px', opacity: approving || approveAdminOnly ? 0.6 : 1 }}>{approving ? 'Approving...' : 'Approve Invitation'}</button>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap' }}>
