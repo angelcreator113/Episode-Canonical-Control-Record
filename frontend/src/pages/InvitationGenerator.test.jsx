@@ -72,7 +72,7 @@ describe('InvitationButton', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Variant 2' }));
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/events/evt-1/approve-invitation', { assetId: 'a2' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/world/show-1/events/evt-1/approve-invitation', { assetId: 'a2', expectedInvitationAssetId: null }));
     await waitFor(() => expect(onGenerated).toHaveBeenCalledWith('https://x/a2.png', 'a2', expect.any(Object)));
   });
 
@@ -125,6 +125,66 @@ describe('InvitationButton', () => {
     fireEvent.click(approve);
     const sent = api.post.mock.calls.some(([u]) => u.endsWith('/approve-invitation'));
     expect(sent).toBe(!off);
+  });
+
+  // A pending version beside an approved one, ready to approve.
+  const pendingBeside = async (ui) => {
+    api.get.mockResolvedValue({ data: { text: { opening: 'Dear Lala,', body: 'Join us.', closing: 'Warmly,' } } });
+    let n = 8;
+    api.post.mockImplementation((url) => {
+      if (url.endsWith('/edit-invitation-text')) { n += 1; return Promise.resolve({ data: { assetId: `a${n}`, imageUrl: `https://x/a${n}.png`, moneyCheck: { ok: true, missing: [], invented: [] } } }); }
+      return Promise.resolve({ data: {} });
+    });
+    const view = render(ui);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit text' }));
+    await waitFor(() => expect(api.get).toHaveBeenCalled());
+    fireEvent.click(await screen.findByText('Save as new version'));
+    await screen.findByRole('button', { name: 'Approve' });
+    return view;
+  };
+  const approvals = () => api.post.mock.calls.filter(([u]) => u.endsWith('/approve-invitation')).map(([, body]) => body);
+  const APPROVED = { ...EVENT, invitation_asset_id: 'a1', invitation_url: 'https://x/a1.png' };
+
+  test('an approval says which approved invitation this screen saw', async () => {
+    await pendingBeside(<InvitationButton event={APPROVED} showId="show-1" mode="inline" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(approvals()).toEqual([{ assetId: 'a9', expectedInvitationAssetId: 'a1' }]));
+  });
+
+  test('an approval the server refuses as out of date is shown, and nothing is reported approved', async () => {
+    const onGenerated = vi.fn();
+    await pendingBeside(<InvitationButton event={APPROVED} showId="show-1" mode="inline" onGenerated={onGenerated} />);
+    const stale = 'The approved invitation changed since you opened this. Reload it and try again.';
+    api.post.mockImplementation((url) => (url.endsWith('/approve-invitation')
+      ? Promise.reject({ response: { status: 409, data: { error: stale } } })
+      : Promise.resolve({ data: {} })));
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(screen.getAllByText(stale).length).toBeGreaterThan(0));
+    expect(onGenerated).not.toHaveBeenCalled();
+    expect(screen.queryByText('Invitation approved')).toBeNull();
+    // Still pending, and a second try still names what this screen saw: it
+    // does not adopt the version it was refused over.
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(approvals()).toHaveLength(2));
+    expect(approvals()[1]).toEqual({ assetId: 'a9', expectedInvitationAssetId: 'a1' });
+  });
+
+  test('after this screen approves one, its next approval names that one, even if the event it was given has not been reloaded', async () => {
+    await pendingBeside(<InvitationButton event={APPROVED} showId="show-1" mode="inline" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(approvals()).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit text' }));
+    fireEvent.click(await screen.findByText('Save as new version'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(approvals()).toHaveLength(2));
+    expect(approvals()[1]).toEqual({ assetId: 'a10', expectedInvitationAssetId: 'a9' });
+  });
+
+  test('when the event is reloaded with another approved invitation, the next approval names that one', async () => {
+    const { rerender } = await pendingBeside(<InvitationButton event={APPROVED} showId="show-1" mode="inline" />);
+    rerender(<InvitationButton event={{ ...APPROVED, invitation_asset_id: 'a5' }} showId="show-1" mode="inline" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(approvals()).toEqual([{ assetId: 'a9', expectedInvitationAssetId: 'a5' }]));
   });
 
   test('a failed reject is shown, not swallowed', async () => {

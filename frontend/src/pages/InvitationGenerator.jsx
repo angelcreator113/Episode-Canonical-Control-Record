@@ -108,6 +108,13 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
     return () => window.removeEventListener('keydown', onKey);
   }, [showZoom]);
 
+  // The approved invitation as this screen last knew it: what the event
+  // came with, then whatever this screen itself approved. Sent
+  // with an approval so the server refuses it (409) when someone else has
+  // approved another version meanwhile (V2-1, 2026-11-19).
+  const approvedSeen = useRef(null);
+  useEffect(() => { approvedSeen.current = event.invitation_asset_id || null; }, [event.id, event.invitation_asset_id]);
+
   // A job stream never outlives the component.
   useEffect(() => () => { streamRef.current?.close(); streamRef.current = null; }, []);
 
@@ -273,7 +280,8 @@ export function InvitationButton({ event, showId, onGenerated, mode = 'modal', a
     if (!pendingAssetId) return;
     setApproving(true);
     try {
-      const res = await api.post(`${base}/approve-invitation`, { assetId: pendingAssetId });
+      const res = await api.post(`${base}/approve-invitation`, { assetId: pendingAssetId, expectedInvitationAssetId: approvedSeen.current });
+      approvedSeen.current = pendingAssetId;
       setPendingAssetId(null);
       setChoices([]);
       setNotice(null);
