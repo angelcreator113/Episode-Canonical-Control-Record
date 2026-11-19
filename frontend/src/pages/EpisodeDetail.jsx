@@ -48,7 +48,7 @@ import { isAdmin } from '../utils/authGroups';
 import { withReturn, tabOrigin } from '../utils/returnPath';
 import { voiceStudioOn } from '../lib/voiceStudioApi';
 import { closetBeat } from '../lib/scriptMoments';
-import { checklistProgress, coinsLabel } from '../lib/episodeShell';
+import { checklistProgress, checklistReadability, coinsLabel } from '../lib/episodeShell';
 import { isScreen } from '../lib/overlayUtils';
 import { beatOrder } from '../lib/storyClock';
 import './EpisodeDetail.css';
@@ -251,14 +251,13 @@ const EpisodeDetail = () => {
   // production checks, read the way the checklist reads them. The checklist
   // reports again after each of its re-checks, so the badge follows it.
   // The Overview's Production checklist tile reads the same progress.
-  const [checksProgress, setChecksProgress] = useState(null);
-  // The checks themselves, for Production's step bar and progress card.
-  const [productionChecks, setProductionChecks] = useState({ checks: null, sections: null });
-  const checksLeft = checksProgress?.left ?? null;
-  const reportChecks = useCallback((checks, sections) => {
-    setChecksProgress(checklistProgress(checks, sections));
-    setProductionChecks({ checks, sections });
-  }, []);
+  // One record, with the episode it belongs to: { episodeId, status:
+  // 'ready' | 'failed', checks, sections, read }. Everything shown is taken
+  // from it only while it is this episode's, so another episode's badge,
+  // count or next step is never shown; until this episode's own checks
+  // answer, the checklist is "loading". `read` is what the loader could
+  // read (loadProductionChecks' `read`), or null when a report came without it.
+  const [checksInfo, setChecksInfo] = useState({ episodeId: null });
   const checksEpisodeId = episode?.id;
   // What this page and its Overview tab have already read for the episode,
   // handed to the checklist's loader as `loaded` so it does not ask again
@@ -276,6 +275,32 @@ const EpisodeDetail = () => {
   // this episode's.
   const checksEpisodeNow = useRef(checksEpisodeId);
   checksEpisodeNow.current = checksEpisodeId;
+  const checksMine = checksEpisodeId != null && checksInfo.episodeId === checksEpisodeId ? checksInfo : null;
+  const checksStatus = checksMine?.status || 'loading';
+  const checksProgress = useMemo(
+    () => (checksMine?.status === 'ready' ? checklistProgress(checksMine.checks, checksMine.sections) : null),
+    [checksMine],
+  );
+  const productionChecks = useMemo(
+    () => (checksMine?.status === 'ready' ? { checks: checksMine.checks, sections: checksMine.sections } : { checks: null, sections: null }),
+    [checksMine],
+  );
+  const checksLeft = checksProgress?.left ?? null;
+  const hasShowForChecks = !!(episode?.show_id || episode?.showId);
+  // Done, incomplete and unreadable, when the loader said what it read; else null.
+  const checksRead = useMemo(
+    () => (checksMine?.status === 'ready' ? checklistReadability(checksMine.checks, checksMine.sections, checksMine.read, { hasShow: hasShowForChecks }) : null),
+    [checksMine, hasShowForChecks],
+  );
+  // The badge keeps "N left"; how many of those could not be read goes in its hover and spoken label.
+  const checksUnreadNote = checksRead?.unreadable || 0;
+  // The Checklist tab's re-checks ({ read, episodeId } with them): one for
+  // another episode is dropped.
+  const reportChecks = useCallback((checks, sections, meta) => {
+    const forEpisodeId = meta?.episodeId ?? checksEpisodeNow.current;
+    if (forEpisodeId == null || forEpisodeId !== checksEpisodeNow.current) return;
+    setChecksInfo({ episodeId: forEpisodeId, status: 'ready', checks, sections, read: meta?.read || null });
+  }, []);
   const reportOverviewRead = useCallback((forEpisodeId, key, result) => {
     if (forEpisodeId !== checksEpisodeNow.current) return;
     setOverviewReads((prev) => (prev.episodeId === forEpisodeId
@@ -304,12 +329,16 @@ const EpisodeDetail = () => {
     if (reports.sceneSets?.ok) loaded.sceneSets = reports.sceneSets.value;
     import('../components/Episodes/EpisodeProductionChecklist')
       .then((m) => m.loadProductionChecks(episode, episode.show_id || episode.showId, { loaded })
-        .then(({ checks }) => {
+        .then(({ checks, read }) => {
           if (!pageAlive.current || checksEpisodeNow.current !== checksEpisodeId) return;
-          setChecksProgress(checklistProgress(checks, m.CHECKLIST_SECTIONS));
-          setProductionChecks({ checks, sections: m.CHECKLIST_SECTIONS });
+          setChecksInfo({ episodeId: checksEpisodeId, status: 'ready', checks, sections: m.CHECKLIST_SECTIONS, read: read || null });
         }))
-      .catch((err) => { console.error('[EpisodeDetail] production checks load failed:', err); });
+      .catch((err) => {
+        console.error('[EpisodeDetail] production checks load failed:', err);
+        if (!pageAlive.current || checksEpisodeNow.current !== checksEpisodeId) return;
+        // Said on the page; checks the Checklist tab has since reported stand.
+        setChecksInfo((prev) => (prev.episodeId === checksEpisodeId && prev.status === 'ready' ? prev : { episodeId: checksEpisodeId, status: 'failed' }));
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checksEpisodeId, sourceEventRead, overviewReads, tabKey]);
 
@@ -1153,7 +1182,8 @@ const EpisodeDetail = () => {
                 {Icon && <Icon size={16} className="ed-tab-icon" aria-hidden="true" />}
                 <span className="ed-tab-label">{t.label}</span>
                 {t.key === 'production' && checksLeft > 0 && (
-                  <span className="ed-tab-badge" data-testid="ed-production-left" aria-label={`${checksLeft} left`}>{checksLeft}<span className="ed-tab-badge-word"> left</span></span>
+                  <span className="ed-tab-badge" title={checksUnreadNote ? `${checksUnreadNote} of these couldn't be checked` : undefined}
+                    data-testid="ed-production-left" aria-label={`${checksLeft} left${checksUnreadNote ? `, ${checksUnreadNote} couldn't be checked` : ''}`}>{checksLeft}<span className="ed-tab-badge-word"> left</span></span>
                 )}
               </button>
             );
@@ -1227,6 +1257,8 @@ const EpisodeDetail = () => {
             onUpdate={handleUpdateEpisode}
             onOpenTab={openTab}
             checks={checksProgress}
+            checksStatus={checksStatus}
+            checksRead={checksRead}
             balance={headerBalance}
             onRead={reportOverviewRead}
           />

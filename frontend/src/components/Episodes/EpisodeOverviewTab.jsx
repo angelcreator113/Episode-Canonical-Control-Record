@@ -144,7 +144,7 @@ export function unlinkLockReason(ev, episodeId) {
   return null;
 }
 
-function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null, onRead = null }) {
+function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null, onRead = null, checksStatus = null, checksRead = null }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [allEvents, setAllEvents] = useState([]);  // every event in the show — drives the linker dropdown
@@ -154,6 +154,13 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // Reads that failed (Evoni, 2026-11-12): said on the page with Retry. A
   // failed read is not "no events linked", "no script" or an empty brief.
   const [loadFailed, setLoadFailed] = useState({});
+  // Reads that have answered, so "not read yet" is not shown as "none":
+  // events, eventList, script, brief, outfit. A read is pending while it is
+  // neither here nor in loadFailed. Written where loadFailed is, by the
+  // newest run only; emptied for another episode, kept through a Retry so
+  // what has answered stays on screen while the rest is read again.
+  const [answered, setAnswered] = useState({});
+  const heard = (key) => setAnswered((a) => (a[key] ? a : { ...a, [key]: true }));
   const failedRead = (key, label, err) => { console.error(`[EpisodeOverview] ${label} load failed:`, err); setLoadFailed((f) => ({ ...f, [key]: label })); };
   // Each run of loadContext has a number. Only the newest run's answers and
   // failures are applied, so a slow earlier read (a Retry pressed twice, or
@@ -224,6 +231,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
 
   useEffect(() => {
     if (!episode?.id) return;
+    setAnswered({});
+    // Another episode's script answer does not decide this one's next step,
+    // even if this tab is not unmounted in between.
+    setScriptInfo(null);
     loadContext();
   }, [episode?.id]);
 
@@ -252,6 +263,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         setLinkedEvents(data?.events || []);
         // Whether another event can be linked now (the server's word; absent from an older server).
         setAddEvent(data?.add_event || null);
+        heard('events');
       }).catch(failed('events', "this episode's events"));
       if (showId) {
         // The show's event list feeds only the linker dropdown (events not
@@ -259,6 +271,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         api.get(`/api/v1/world/${showId}/events`).then(({ data }) => {
           if (!live()) return;
           setAllEvents(data?.events || []);
+          heard('eventList');
         }).catch(failed('eventList', "the show's events"));
         // Episode-scoped ledger. Skipping when no showId — the endpoint
         // requires it, and a draft episode without a show wouldn't have
@@ -286,6 +299,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         if (!live()) return;
         const scripts = data?.data || data?.scripts || [];
         if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
+        heard('script');
       }).catch(failed('script', 'the script check'));
       // EpisodeBrief — drives the merged Identity/Source/Stakes/Reference
       // sections. Auto-creates if missing (the GET handler does that).
@@ -294,6 +308,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         const b = data?.data || null;
         tell('brief', { ok: data != null, value: b });
         setBrief(b);
+        heard('brief');
         setDraft({
           narrative_purpose: b?.narrative_purpose || '',
           forward_hook: b?.forward_hook || '',
@@ -308,8 +323,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             .then((res) => { if (live()) setSource(res.data || null); })
             .catch((err) => { console.error('[Episode] source event load failed:', err); if (live()) setSource(null); });
           api.get(`/api/v1/wardrobe/outfit/${episode.id}`)
-            .then((res) => { if (live()) setOutfit(Array.isArray(res.data?.items) ? res.data.items : undefined); })
-            .catch((err) => { console.error('[Episode] locked outfit load failed:', err); if (live()) setOutfit(undefined); });
+            .then((res) => { if (live()) { setOutfit(Array.isArray(res.data?.items) ? res.data.items : undefined); heard('outfit'); } })
+            // A failed read is not "no look locked": it is said in the note with Retry and on the Look tile.
+            .catch((err) => { console.error('[Episode] locked outfit load failed:', err); if (live()) { setOutfit(undefined); setLoadFailed((f) => ({ ...f, outfit: 'the locked outfit' })); } });
         }
         // Resolve narrative_chain.parent_event_id → event name for the Source band.
         const parentId = b?.narrative_chain?.parent_event_id;
@@ -560,16 +576,43 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     ? episodePlanning({ episode, event: source.event, sourceProfile: source.sourceProfile, sceneSet: source.sceneSet, venueLocation: source.venueLocation, outfit })
     : null;
   const fromEvent = fromEventItems(plan);
-  const hasScript = !!(typeof episode.script_content === 'string' && episode.script_content.trim()) || !!scriptInfo?.exists;
-  const step = nextStep({ hasScript, brief: brief ? { ...brief, ...draft } : null, plan, checks });
+  const hasScriptText = !!(typeof episode.script_content === 'string' && episode.script_content.trim());
+  const hasScript = hasScriptText || !!scriptInfo?.exists;
+  // What is still being read, per area ('loading', 'failed' or null). Each
+  // looks only at the read it needs.
+  const pending = (key) => (loadFailed[key] ? 'failed' : !answered[key] ? 'loading' : null);
+  const eventsStatus = pending('events');
+  const eventListStatus = showId ? pending('eventList') : null;
+  const briefStatus = brief ? null : pending('brief');
+  // The episode's own script text settles it at once; else the script check does.
+  const scriptStatus = hasScript ? null : pending('script');
+  const step = nextStep({ hasScript, brief: brief ? { ...brief, ...draft } : null, plan, checks, script: scriptStatus, briefStatus, checksStatus });
+  // The checklist line under the next step. Three ways only when the
+  // loader said which checks it could not read (checksRead); else the count.
+  const checksMeta = checks
+    ? (checksRead?.unreadable > 0
+      ? `Production checklist: ${checksRead.done} of ${checksRead.total} verified complete · ${checksRead.incomplete} incomplete · ${checksRead.unreadable} couldn't be checked. Open the Checklist tab to check again.`
+      : `Production checklist: ${checks.done} of ${checks.total} done`)
+    : checksStatus === 'loading' ? 'Production checklist: checking…'
+      : checksStatus === 'failed' ? "Production checklist: couldn't be checked. Open the Checklist tab to check again."
+        : null;
+  // The look tile also waits for the locked outfit, which is read once the brief names an event.
+  const lookStatus = eventsStatus === 'loading' || briefStatus === 'loading' || (brief?.event_id && showId && !answered.outfit && !loadFailed.outfit) ? 'loading' : null;
+  // The locked outfit could not be read: the event's planned look still
+  // stands in when there is one, and the tile says what it could not read.
+  const lookUnread = loadFailed.outfit
+    ? (outfitPieces.length
+      ? { value: `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'}`, tone: null, note: 'locked outfit could not be read' }
+      : { value: '—', tone: null, note: 'could not be read' })
+    : null;
   // Coins after the episode from the Money plan (Task #1919), never from the
   // columns Start Episode estimated (which once counted the whole closet).
   const coinsTile = coinsAfterPlan(money, { accepted: isAccepted });
   const prestige = primaryEvent?.prestige;
   const tiles = [
-    { key: 'prestige', label: 'Prestige', value: prestige ? `${prestige} / 10` : 'Not set', note: 'from the event' },
+    { key: 'prestige', label: 'Prestige', value: eventsStatus ? '—' : prestige ? `${prestige} / 10` : 'Not set', note: eventsStatus === 'failed' ? 'could not be read' : 'from the event' },
     { key: 'coins', label: 'Coins after episode', value: coinsTile.value, link: { label: 'Open Money', tab: 'money' }, note: coinsTile.note },
-    { key: 'look', label: "Lala's look", ...lookTile(outfit, outfitPieces), link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
+    { key: 'look', label: "Lala's look", ...(lookStatus ? { value: '—', tone: null } : lookUnread || lookTile(outfit, outfitPieces)), link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
   ];
 
   // The form shows what the server saved: the update's reply (or, without
@@ -679,6 +722,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const failedLabels = Object.values(loadFailed);
   return (
     <div className="eov">
+      {/* The one announcement of a failed read; the lines inside the cards say it again in place, silently. */}
       {failedLabels.length > 0 && (
         <p role="alert" className="eov-warn" data-testid="eov-load-failed">
           Couldn't load {failedLabels.join(', ')}. What's shown below may be incomplete; nothing was changed.{' '}
@@ -718,7 +762,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       <div className="eov-top">
         <NextStepBanner
           step={step} onOpenTab={onOpenTab}
-          meta={checks ? `Production checklist: ${checks.done} of ${checks.total} done` : null}
+          meta={checksMeta}
           extra={(
             <button
               type="button"
@@ -746,7 +790,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       <div className="eos-grid">
         <StoryBriefCard
           brief={brief} draft={draft} setDraft={setDraft} saveBriefField={saveBriefField}
-          saving={savingBrief} locked={isLocked} synopsis={formData.description}
+          saving={savingBrief} locked={isLocked} synopsis={formData.description} status={briefStatus}
           onEdit={() => setIsEditing(true)} archetypes={ARCHETYPES} intents={INTENTS}
           outcomes={outcomes}
         />
@@ -765,9 +809,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             linked anywhere; picking one stamps it with this episode's
             used_in_episode_id. */}
         <div className="eov-card">
-          <CardTitle icon={CalendarHeart}>Events {!loadFailed.events && <span className="eov-count">{linkedEvents.length}</span>}</CardTitle>
+          <CardTitle icon={CalendarHeart}>Events {!eventsStatus && <span className="eov-count">{linkedEvents.length}</span>}</CardTitle>
           {loadFailed.events ? (
-            <p className="eov-empty" role="alert" data-testid="eov-events-failed">Couldn't load this episode's events. Retry above.</p>
+            <p className="eov-empty" data-testid="eov-events-failed">Couldn't load this episode's events. Retry above.</p>
+          ) : eventsStatus === 'loading' ? (
+            <p className="eov-empty" data-testid="eov-events-loading">Loading…</p>
           ) : linkedEvents.length === 0 ? (
             <p className="eov-empty">No events linked</p>
           ) : (
@@ -832,11 +878,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             className="eov-select"
             aria-label="Link an event"
             value=""
-            disabled={linkBusy || linkableEvents.length === 0 || Boolean(loadFailed.events || loadFailed.eventList)}
+            disabled={linkBusy || linkableEvents.length === 0 || Boolean(eventsStatus || eventListStatus)}
             aria-describedby={addBlockedReason ? 'overview-add-event-blocked' : undefined}
             onChange={(e) => { if (e.target.value) linkEvent(e.target.value); e.target.value = ''; }}
           >
             <option value="">{loadFailed.events || loadFailed.eventList ? "Events didn't load"
+              : eventsStatus === 'loading' || eventListStatus === 'loading' ? 'Loading events…'
               : restoreId && linkableEvents.length > 0 ? '+ Link the source event again…'
                 : addBlocked ? 'No event can be added now'
                   : linkableEvents.length === 0 ? 'No unlinked events available' : '+ Link an event…'}</option>

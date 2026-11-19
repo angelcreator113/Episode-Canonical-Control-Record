@@ -621,7 +621,8 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
 
   const checkReadiness = async () => {
     setLoading(true);
-    const { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep: step, linkedEvent: ev } = await loadProductionChecks(episode, showId);
+    const forEpisodeId = episode.id;
+    const { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep: step, linkedEvent: ev, read } = await loadProductionChecks(episode, showId);
     setLinkedEvent(ev || null);
     setVersion((v) => v + 1);
     setCoverage(planCoverage);
@@ -630,7 +631,9 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     setNotes(checkNotes);
     setLoading(false);
     // The page's Production badge follows each re-check.
-    onChecks?.(results, CHECKLIST_SECTIONS);
+    // With what the loader could read and the episode these are for, so
+    // the page never takes them for another episode's.
+    onChecks?.(results, CHECKLIST_SECTIONS, { read, episodeId: forEpisodeId });
   };
 
   const handleGenerateScript = async () => {
