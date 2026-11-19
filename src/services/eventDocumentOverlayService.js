@@ -376,6 +376,327 @@ function renderDocument(type, data) {
   return canvas.toBuffer('image/png');
 }
 
+// ── The document presented for video (V1, Evoni 2026-11-19) ─────────────
+// The same document, drawn by the same function from the same data, placed
+// in a transparent 1920×1080 frame: one canonical document, and what is
+// shown on video derived from it. Nothing here stores, names or places
+// anything, and renderDocument above is unchanged.
+//
+//   floating  the whole page, scaled to fit: an object in the scene.
+//   reading   the page large enough to read, as consecutive panels that
+//             cover all of it, top to bottom.
+//
+// The frame and Prime's picture-in-picture window are the editor's own
+// (utils/editTimeline). The paper and its shadow stay in the column to the
+// left of that window, inside the frame's 5% safe area.
+const { FRAME_W, FRAME_H, DEFAULT_LAYOUT } = require('../utils/editTimeline');
+
+const PRESENTATIONS = Object.freeze(['floating', 'reading']);
+/** Body text is readable on video from this size, in frame pixels at 1080p. */
+const MIN_READABLE_PX = 28;
+/** How far a panel repeats the one before it when no gap between lines can end it, in page pixels. */
+const PANEL_OVERLAP = 80;
+/** The space aimed for between a reading panel's cut edge and the nearest writing or mark, in frame pixels. */
+const EDGE_PADDING_PX = 32;
+/** A drawn rectangle up to this tall (page pixels) is a mark kept whole: a checkbox, a stamp, a name box. Taller ones are the page's own frame. */
+const MARK_MAX_HEIGHT = 160;
+const SAFE_X = Math.round(FRAME_W * 0.05);
+const SAFE_Y = Math.round(FRAME_H * 0.05);
+/** Prime's window, whole: it reaches past the safe area, so all of it is kept clear. */
+const PRIME_WINDOW = Object.freeze({ x: DEFAULT_LAYOUT.x, y: DEFAULT_LAYOUT.y, w: DEFAULT_LAYOUT.w, h: DEFAULT_LAYOUT.h });
+/** The gap kept between the column and Prime's window: the window's own margin from the frame's edge. */
+const WINDOW_GAP = FRAME_W - (DEFAULT_LAYOUT.x + DEFAULT_LAYOUT.w);
+/** Where a document may be: the safe area to the left of Prime's window. */
+const COLUMN = Object.freeze({ x: SAFE_X, y: SAFE_Y, w: PRIME_WINDOW.x - WINDOW_GAP - SAFE_X, h: FRAME_H - 2 * SAFE_Y });
+/** The room kept inside the column for the paper's shadow. */
+const SHADOW = Object.freeze({ pad: 24, blur: 10, offsetY: 4, color: 'rgba(0, 0, 0, 0.3)' });
+const PAPER_AREA = Object.freeze({ x: COLUMN.x + SHADOW.pad, y: COLUMN.y + SHADOW.pad, w: COLUMN.w - 2 * SHADOW.pad, h: COLUMN.h - 2 * SHADOW.pad });
+
+/** A document that cannot be presented as asked. `code` says why; nothing is drawn clipped instead. */
+class DocumentPresentationError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'DocumentPresentationError';
+    this.code = code;
+  }
+}
+
+/** The height renderDocument gave the page, read from its PNG (IHDR), so the two never disagree. */
+function pngHeight(buffer) {
+  return buffer.readUInt32BE(20);
+}
+
+/**
+ * A drawing context that draws as `ctx` does and notes where each line of
+ * text lands: { top, bottom } on the page and the font's size, weighted by
+ * the line's width. The text itself is not kept. With `marks`, it also
+ * notes the small rectangles drawn (a checkbox, a stamp's box, a name box:
+ * MARK_MAX_HEIGHT or less), which a panel must not slice either.
+ */
+function recordingContext(ctx, lines, marks = null) {
+  const transform = () => ctx.currentTransform || (ctx.getTransform ? ctx.getTransform() : { b: 0, d: 1, f: 0 });
+  const noteRect = (x, y, w, h, grow) => {
+    if (!marks) return;
+    const t = transform();
+    const xs = [x - grow, x + w + grow];
+    const ys = [y - grow, y + h + grow];
+    const mapped = [];
+    for (const cx of xs) for (const cy of ys) mapped.push(t.b * cx + t.d * cy + t.f);
+    const top = Math.min(...mapped);
+    const bottom = Math.max(...mapped);
+    if (bottom > top && bottom - top <= MARK_MAX_HEIGHT) marks.push({ top, bottom });
+  };
+  const note = (text, x, y) => {
+    const m = ctx.measureText(String(text));
+    if (!(m.width > 0)) return;
+    const px = Number((/(\d+(?:\.\d+)?)px/.exec(ctx.font) || [])[1]) || 0;
+    const t = transform();
+    const xs = [x - (m.actualBoundingBoxLeft || 0), x + (m.actualBoundingBoxRight || m.width)];
+    const ys = [y - (m.actualBoundingBoxAscent || px), y + (m.actualBoundingBoxDescent || 0)];
+    const mapped = [];
+    for (const cx of xs) for (const cy of ys) mapped.push(t.b * cx + t.d * cy + t.f);
+    lines.push({ top: Math.min(...mapped), bottom: Math.max(...mapped), px, width: m.width });
+  };
+  return new Proxy(ctx, {
+    get(target, prop) {
+      if (prop === 'fillText' || prop === 'strokeText') {
+        return (text, x, y, ...rest) => { note(text, x, y); return target[prop](text, x, y, ...rest); };
+      }
+      if (prop === 'strokeRect') {
+        return (x, y, w, h) => { noteRect(x, y, w, h, (Number(target.lineWidth) || 1) / 2); return target.strokeRect(x, y, w, h); };
+      }
+      if (prop === 'fillRect') {
+        return (x, y, w, h) => { noteRect(x, y, w, h, 0); return target.fillRect(x, y, w, h); };
+      }
+      const value = target[prop];
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+    set(target, prop, value) { target[prop] = value; return true; },
+  });
+}
+
+/**
+ * The sizes the page's text is drawn at, from what was drawn: `body` is the
+ * size that carries the most text (by width; the smaller size on a tie),
+ * `min` the smallest.
+ */
+function textSizes(lines) {
+  const byPx = new Map();
+  for (const l of lines) if (l.px > 0) byPx.set(l.px, (byPx.get(l.px) || 0) + l.width);
+  if (!byPx.size) return { body: 0, min: 0 };
+  const body = [...byPx.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+  return { body, min: Math.min(...byPx.keys()) };
+}
+
+/**
+ * The page cut into panels of at most `capacity` page pixels, top to bottom:
+ * [{ y0, y1, overlap }]. `lines` is everything a panel must show whole
+ * (lines of text, and small marks). A panel ends in a gap between them:
+ * one with `pad` clear page pixels on both sides when its lower half has
+ * such a gap (the one nearest an even share of the page that is left),
+ * otherwise the gap with the most room, which both panels then show in
+ * full. Where the lower half has no gap at
+ * all, the panel ends at its full height and the next starts PANEL_OVERLAP
+ * higher (or at the top of what was cut, when that is higher still), so
+ * everything is whole in at least one panel. Something no panel can hold,
+ * or a cut that would make no progress, is an error, never a clipped line.
+ */
+function panelSlices(height, capacity, lines, { pad = 0 } = {}) {
+  const tallest = lines.reduce((n, l) => Math.max(n, l.bottom - l.top), 0);
+  if (tallest > capacity) {
+    throw new DocumentPresentationError('TEXT_TALLER_THAN_PANEL', `A line of text is ${Math.ceil(tallest)} pixels tall and a panel holds ${Math.floor(capacity)}.`);
+  }
+  const cuts = (y) => lines.filter((l) => l.top < y && l.bottom > y);
+  /** The room around a cut at y: to the nearest line above or below; -1 when it goes through one. */
+  const room = (y) => {
+    let least = Infinity;
+    for (const l of lines) {
+      if (l.top < y && l.bottom > y) return -1;
+      const d = l.bottom <= y ? y - l.bottom : l.top - y;
+      if (d < least) least = d;
+    }
+    return least;
+  };
+  const slices = [];
+  let y0 = 0;
+  let overlap = 0;
+  while (y0 < height) {
+    const limit = y0 + capacity;
+    if (limit >= height) { slices.push({ y0, y1: height, overlap }); break; }
+    const even = y0 + (height - y0) / Math.ceil((height - y0) / capacity);
+    let padded = null; // the gap with `pad` clear on both sides, nearest the even share
+    let widest = null; // else the gap with the most room
+    let widestRoom = -1;
+    for (let y = Math.floor(limit); y > y0 + capacity / 2; y -= 1) {
+      const r = room(y);
+      if (r < 0) continue;
+      if (r >= pad && (padded == null || Math.abs(y - even) < Math.abs(padded - even))) padded = y;
+      if (r > widestRoom || (r === widestRoom && Math.abs(y - even) < Math.abs(widest - even))) { widest = y; widestRoom = r; }
+    }
+    if (padded != null) {
+      slices.push({ y0, y1: padded, overlap });
+      y0 = padded;
+      overlap = 0;
+      continue;
+    }
+    if (widest != null) {
+      // A gap narrower than the padding asks for: both panels show the
+      // whole gap (this one to the line below it, the next from the line
+      // above it), so each has all the room the page has there. Only
+      // blank page is repeated.
+      const above = Math.max(y0, ...lines.filter((l) => l.bottom <= widest).map((l) => l.bottom));
+      const below = Math.min(limit, height, ...lines.filter((l) => l.top >= widest).map((l) => l.top));
+      const next = Math.ceil(above);
+      const y1 = Math.max(widest, Math.floor(below));
+      if (next > y0) {
+        slices.push({ y0, y1, overlap });
+        overlap = y1 - next;
+        y0 = next;
+        continue;
+      }
+      slices.push({ y0, y1: widest, overlap });
+      y0 = widest;
+      overlap = 0;
+      continue;
+    }
+    const cut = cuts(limit);
+    const next = Math.floor(Math.min(limit - PANEL_OVERLAP, ...cut.map((l) => l.top)));
+    if (next <= y0) {
+      throw new DocumentPresentationError('NO_SAFE_PANEL_BOUNDARY', 'No panel boundary keeps every line of text whole.');
+    }
+    slices.push({ y0, y1: limit, overlap });
+    overlap = limit - next;
+    y0 = next;
+  }
+  return slices;
+}
+
+/**
+ * Where the page's text and small marks land, from the drawing itself at
+ * the page's own size: { height, lines: [{ top, bottom, px, width }],
+ * marks: [{ top, bottom }] }, or null when drawing is unavailable.
+ * Geometry only; the words are not kept.
+ */
+function measureDocumentText(type, data) {
+  const draw = DRAW[type];
+  const page = draw ? renderDocument(type, data) : null;
+  if (!page) return null;
+  const height = pngHeight(page);
+  const lines = [];
+  const marks = [];
+  draw(recordingContext(createCanvas(WIDTH, height).getContext('2d'), lines, marks), height, data);
+  return { height, lines, marks };
+}
+
+/** One frame: the page's rows y0..y1 at `scale`, its paper at `rect`, on a transparent frame. */
+function drawFrame(draw, pageHeight, data, { scale, rect, y0 }) {
+  const canvas = createCanvas(FRAME_W, FRAME_H);
+  const ctx = canvas.getContext('2d');
+  // The paper's shadow, from a filled rectangle the page then covers.
+  ctx.save();
+  ctx.shadowColor = SHADOW.color;
+  ctx.shadowBlur = SHADOW.blur;
+  ctx.shadowOffsetY = SHADOW.offsetY;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.x, rect.y, rect.w, rect.h);
+  ctx.clip();
+  ctx.translate(rect.x, rect.y - y0 * scale);
+  ctx.scale(scale, scale);
+  draw(ctx, pageHeight, data);
+  ctx.restore();
+  return canvas.toBuffer('image/png');
+}
+
+/**
+ * The document presented for video, or null when drawing is unavailable
+ * (as renderDocument). `data` is what renderDocument takes. Returns
+ *   { type, presentation, frame, column, clear_of, page, scale, text,
+ *     readable, panels: [{ index, of, source: { y0, y1 }, overlap, padding, rect, buffer }] }
+ * where each buffer is a FRAME_W×FRAME_H PNG, transparent outside the
+ * paper and its shadow; `text` is the body and smallest text sizes on the
+ * page and on screen, and `past_page`, how many lines the page itself cuts
+ * at its edge (they are shown as the page shows them); `readable` says the body text is MIN_READABLE_PX or
+ * more on screen. It holds geometry and images only, never the document's
+ * words. Throws DocumentPresentationError for a presentation that is not
+ * one, or a document whose text cannot be kept whole.
+ */
+function presentDocument(type, data, { presentation = 'floating' } = {}) {
+  if (!PRESENTATIONS.includes(presentation)) {
+    throw new DocumentPresentationError('UNKNOWN_PRESENTATION', `"${presentation}" is not a presentation (${PRESENTATIONS.join(', ')}).`);
+  }
+  const draw = DRAW[type];
+  const measured = measureDocumentText(type, data);
+  if (!measured) return null;
+  const { height: pageHeight } = measured;
+  // A line the page itself cuts at its edge (renderDocument stops at the
+  // type's maximum height) cannot be shown whole here either: this shows
+  // the page as it is. It is counted and said (text.past_page), and the
+  // panels are worked out from the part of it that is on the page.
+  const pastPage = measured.lines.filter((l) => l.top < 0 || l.bottom > pageHeight).length;
+  const onPage = (l) => ({ ...l, top: Math.max(0, l.top), bottom: Math.min(pageHeight, l.bottom) });
+  const lines = measured.lines.map(onPage);
+  // What a panel must show whole: the lines of text and the small marks.
+  const whole = [...lines, ...measured.marks.map(onPage).filter((m) => m.bottom > m.top)];
+  const sizes = textSizes(lines);
+
+  let scale;
+  let slices;
+  if (presentation === 'floating') {
+    const fit = Math.min(PAPER_AREA.w / WIDTH, PAPER_AREA.h / pageHeight);
+    scale = Math.floor(WIDTH * fit) / WIDTH;
+    slices = [{ y0: 0, y1: pageHeight, overlap: 0 }];
+  } else {
+    scale = PAPER_AREA.w / WIDTH;
+    slices = panelSlices(pageHeight, PAPER_AREA.h / scale, whole, { pad: EDGE_PADDING_PX / scale });
+  }
+  const w = Math.round(WIDTH * scale);
+  const panels = slices.map((slice, i) => {
+    const h = Math.min(PAPER_AREA.h, Math.round((slice.y1 - slice.y0) * scale));
+    const rect = {
+      x: PAPER_AREA.x + Math.floor((PAPER_AREA.w - w) / 2),
+      // A floating page sits in the middle of the column; a reading panel hangs from its top.
+      y: presentation === 'floating' ? PAPER_AREA.y + Math.floor((PAPER_AREA.h - h) / 2) : PAPER_AREA.y,
+      w,
+      h,
+    };
+    // The room between each of the panel's edges and the nearest writing
+    // or mark it shows, in frame pixels: at a cut edge EDGE_PADDING_PX is
+    // aimed for, and what the page allows is what is said.
+    const shown = whole.filter((l) => l.top >= slice.y0 && l.bottom <= slice.y1);
+    const edge = (distance) => (shown.length ? Math.round(distance * scale) : null);
+    const padding = {
+      top: edge(Math.min(...shown.map((l) => l.top)) - slice.y0),
+      bottom: edge(slice.y1 - Math.max(...shown.map((l) => l.bottom))),
+    };
+    return {
+      index: i + 1,
+      of: slices.length,
+      source: { y0: slice.y0, y1: slice.y1 },
+      overlap: slice.overlap,
+      padding,
+      rect,
+      buffer: drawFrame(draw, pageHeight, data, { scale, rect, y0: slice.y0 }),
+    };
+  });
+  const onScreen = (px) => Math.round(px * scale * 10) / 10;
+  return {
+    type,
+    presentation,
+    frame: { width: FRAME_W, height: FRAME_H },
+    column: { ...COLUMN },
+    clear_of: { ...PRIME_WINDOW },
+    page: { width: WIDTH, height: pageHeight },
+    scale,
+    text: { body_px: sizes.body, min_px: sizes.min, body_px_on_screen: onScreen(sizes.body), min_px_on_screen: onScreen(sizes.min), past_page: pastPage },
+    readable: sizes.body > 0 && sizes.body * scale >= MIN_READABLE_PX,
+    panels,
+  };
+}
+
 function storageBucket() {
   return process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || null;
 }
@@ -482,6 +803,14 @@ function overlayState(doc, lookTotal = null, termsKey = null) {
 module.exports = {
   drawingAvailable,
   renderDocument,
+  presentDocument,
+  measureDocumentText,
+  panelSlices,
+  DocumentPresentationError,
+  PRESENTATIONS,
+  MIN_READABLE_PX,
+  PANEL_OVERLAP,
+  EDGE_PADDING_PX,
   shoppingLines,
   shoppingListContext,
   documentByline,
