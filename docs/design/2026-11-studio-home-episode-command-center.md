@@ -6,9 +6,9 @@
 
 | State | Pull requests |
 |---|---|
-| Merged to `main` | PR-00 (#3872, these documents), PR-01 (#3873, request-count pins), PR-02 (#3874, shared next action and next slot), PR-03 (#3875, the production episode and the episode to resume), PR-04 (#3876, the resume location, the show, a deleted episode), PR-05 (#3877, return paths A; a race in its tests was corrected in #3879), PR-06 (#3880, return paths B; `main` at `a597e9a60d3ce72670af9c2bafdcac4347311b55`, where Validate passed), PR-07 (#3882, the production checklist's loader makes its reads together with the same results; `main` at `a233b4487bc7b45731edf41576ea6fd91df6b969`, where Validate passed; its timings have not been measured on development, and no performance claim is made) |
+| Merged to `main` | PR-00 (#3872, these documents), PR-01 (#3873, request-count pins), PR-02 (#3874, shared next action and next slot), PR-03 (#3875, the production episode and the episode to resume), PR-04 (#3876, the resume location, the show, a deleted episode), PR-05 (#3877, return paths A; a race in its tests was corrected in #3879), PR-06 (#3880, return paths B; `main` at `a597e9a60d3ce72670af9c2bafdcac4347311b55`, where Validate passed), PR-07 (#3882, the production checklist's loader makes its reads together with the same results; `main` at `a233b4487bc7b45731edf41576ea6fd91df6b969`, where Validate passed; its timings have not been measured on development, and no performance claim is made), PR-08 (#3884, the Episode page hands the checklist's loader the event, brief and scene sets it already read; a default open makes three requests fewer, 28 to 25 and 34 to 31; `main` at `843e3866b63299b11d9bd252f1be760ee20227a8`, where Validate passed; not measured on development, and no performance claim is made) |
 | Open, awaiting Evoni's review; not merged | None |
-| Planned, not started | PR-08 and PR-09 (the rest of R1); PR-10 to PR-13 (R2, slot-aware planning); PR-14 to PR-16 (R3, Studio Home); PR-17 and PR-18 (R4, Episode Command Center); PR-19 to PR-22 (R5, sidebar and show navigation) |
+| Planned, not started | PR-09 (the rest of R1); PR-10 to PR-13 (R2, slot-aware planning); PR-14 to PR-16 (R3, Studio Home); PR-17 and PR-18 (R4, Episode Command Center); PR-19 to PR-22 (R5, sidebar and show navigation) |
 
 Merged means merged to `main`; nothing here says any of it is deployed to production. Studio Home, the Episode Command Center, slot-aware planning and the sidebar changes do not exist yet. Where what was built differs from the design below, §4's clarification says how; known limits are in §13.
 
@@ -547,9 +547,17 @@ Recorded on 2026-11-18. **None of the items in §13 is implemented.** Listing on
 | Class | Items |
 |---|---|
 | Confirmed defect (behaviour that is wrong today) | §13.3: the separate episode pages still open a deleted episode. §13.3: two windows writing the locations key at once can lose one update. §13.2: the Shows card counts treat an unrecognised status as in production, while Continue does not |
-| Deferred UX improvement (works, could be better) | All of §13.4 (ways back that return to the episode instead of where they were opened from, including the two added from PR-06). §13.2: story order ignores the season number. §13.1: `useNextSlot` does not guard against a late or out-of-order answer (to settle before PR-16 uses it). §13.3: the show is remembered after its read answers, not when the page opens |
+| Deferred UX improvement (works, could be better) | §13.8: the Episode Overview has no loading feedback for its brief and scene-sets reads; the Checklist tab runs the loader twice. All of §13.4 (ways back that return to the episode instead of where they were opened from, including the two added from PR-06). §13.2: story order ignores the season number. §13.1: `useNextSlot` does not guard against a late or out-of-order answer (to settle before PR-16 uses it). §13.3: the show is remembered after its read answers, not when the page opens |
 | Observed behaviour, no change decided | §13.5: the Teleprompter's "Start at" after Exit |
 | Tooling limitation | §13.6: the frontend ESLint configuration does not load |
 | Housekeeping and notes for later pull requests | §13.1: the bundle-size check for PR-18, and the hook's `[ShowOverview]` log label. §13.2: the borrowed class on Home's "In production" line. §13.3: a deleted episode's other per-episode keys are left; nothing uses the saved location yet (PR-16, PR-18) |
 
-The classes are this document's reading of each item, made on 2026-11-18; the items themselves are unchanged above.
+The classes are this document's reading of each item, made on 2026-11-18 (the §13.8 items on 2026-11-19); the items themselves are unchanged above.
+
+### 13.8 Follow-ups from PR-08 (#3884)
+
+Recorded on 2026-11-19. None of these is built; each needs its own approval.
+
+- **Loading feedback on the Episode Overview** (Evoni, 2026-11-19): "Episode Overview currently lacks visible loading feedback for its brief and scene-sets reads. While requests are pending, sections may appear empty or display no scene sets. The production checklist and related counts may also be temporarily absent. Improve these loading and empty states in a separate, focused UI task." This predates PR-08 and is not a regression of it. Since PR-08 the checklist line and counts on the Overview wait for the Overview's brief and scene-sets reads before they appear.
+- **The Checklist tab runs the loader twice.** On the Checklist tab `loadProductionChecks` runs once from the Episode page (`EpisodeDetail`, for the Production badge and step bar) and once from `EpisodeProductionChecklist` itself: every read of the loader is made twice. The PR-01 pins measure the Overview, so they do not count this. Deferred by Evoni on 2026-11-19; PR-08 did not touch it.
+- **PR-07 and PR-08 are not measured.** No timing has been taken on development for either. A one-off reading of the browser's own Resource Timing entries was prepared; no instrumentation was added and nothing was deployed for it.
