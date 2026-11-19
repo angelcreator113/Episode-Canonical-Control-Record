@@ -39,6 +39,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   let token;
   const as = (req) => req.set('Authorization', `Bearer ${token}`);
   const REFUSED = { success: false, error: REFUSAL_MESSAGE, code: REFUSAL_CODE };
+  // The same id as PostgreSQL also reads it.
+  const SPELLINGS = {
+    'upper case': (id) => id.toUpperCase(),
+    'no hyphens': (id) => id.replace(/-/g, ''),
+    'in braces': (id) => `{${id}}`,
+    'groups of four': (id) => id.replace(/-/g, '').match(/.{4}/g).join('-'),
+  };
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({ id: 'test-editor-guards', email: 'guards@test.dev', name: 'guards', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
@@ -88,6 +95,24 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect(await anyDocumentPresentation(uuid())).toBe(false);
       expect(await anyDocumentPresentation(['Words, not an id', null, undefined, 7, ''])).toBe(false);
       expect(await anyDocumentPresentation([])).toBe(false);
+    });
+
+    it('PostgreSQL reads each other spelling as the same asset, and so does the rule', async () => {
+      for (const spell of Object.values(SPELLINGS)) {
+        const [found] = await q('SELECT id FROM assets WHERE id = CAST(:id AS uuid)', { id: spell(presentation) });
+        expect(found.id).toBe(presentation);
+        expect(await anyDocumentPresentation(spell(presentation))).toBe(true);
+        expect(await anyDocumentPresentation([ordinary, spell(presentation)])).toBe(true);
+        expect(await anyDocumentPresentation([spell(ordinary), spell(overlay)])).toBe(false);
+      }
+    });
+
+    it('what PostgreSQL would not read as a uuid is not asked about', async () => {
+      const hex = presentation.replace(/-/g, '');
+      for (const bad of [hex.slice(1), `${hex}0`, `{${presentation}`, `urn:uuid:${presentation}`]) {
+        await expect(q('SELECT CAST(:id AS uuid) AS id', { id: bad })).rejects.toThrow(/invalid input syntax for type uuid/);
+        expect(await anyDocumentPresentation(bad)).toBe(false);
+      }
     });
 
     it('reads inside a transaction it is given', async () => {
@@ -227,6 +252,45 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect(res.status).toBe(200);
       expect((await assetRow(overlay)).approval_status).toBe('approved');
       expect((await eventRow()).canon_consequences.automation.wardrobe_overlay_asset_id).toBe(overlay);
+    });
+  });
+
+  describe('its id written another way, through the routes', () => {
+    it.each(Object.keys(SPELLINGS))('%s: refused wherever it is sent, and every row is as it was', async (how) => {
+      const id = SPELLINGS[how](presentation);
+      const snapshot = async () => ({
+        scene: (await q('SELECT background_url, canvas_settings, assets FROM scenes WHERE id = :scene', { scene }))[0],
+        objects: await q('SELECT asset_id FROM scene_assets WHERE scene_id = :scene OR scene_set_id = :sceneSet ORDER BY asset_id', { scene, sceneSet }),
+        defaults: await q('SELECT default_outfit_asset_id FROM episode_wardrobe_defaults WHERE episode_id = :episode', { episode }),
+        clips: await q('SELECT asset_id FROM episode_performance_clips WHERE episode_id = :episode', { episode }),
+        asset: (await q('SELECT approval_status, asset_scope, episode_id, updated_at FROM assets WHERE id = :presentation', { presentation }))[0],
+        event: (await q('SELECT canon_consequences, updated_at FROM world_events WHERE id = :event', { event }))[0],
+        compositions: await q('SELECT id FROM thumbnail_compositions WHERE episode_id = :episode', { episode }),
+      });
+      const before = await snapshot();
+      const template = uuid();
+      await run('INSERT INTO template_studio (id, name, created_at, updated_at) VALUES (:template, :name, NOW(), NOW())', { template, name: `Guards template ${template.slice(0, 8)}` });
+      const sent = [
+        as(request(app).put(`/api/v1/scenes/${scene}/canvas`)).send({ canvas_settings: { zoom: 9 }, objects: [{ id: 'client-1', asset_id: ordinary, object_type: 'image' }, { id: 'client-2', asset_id: id, object_type: 'image' }] }),
+        as(request(app).put(`/api/v1/scene-sets/${sceneSet}/canvas`)).send({ objects: [{ id: 'client-1', asset_id: id, object_type: 'image' }] }),
+        as(request(app).post(`/api/v1/scene-sets/${sceneSet}/objects`)).send({ asset_id: id }),
+        as(request(app).put(`/api/v1/scenes/${scene}/assets`)).send({ assets: { background_id: ordinary, ui_elements: [id] } }),
+        as(request(app).post(`/api/v1/episodes/${episode}/wardrobe-defaults`)).send({ character_name: 'Lala', outfit_asset_id: id }),
+        as(request(app).put(`/api/v1/episode-brief/${episode}/performance-clips`)).send({ canonical_beat_number: 3, performer: 'lala', asset_id: id }),
+        as(request(app).post(`/api/v1/world/${show}/events/${event}/approve-overlay`)).send({ assetId: id }),
+        as(request(app).post('/api/v1/compositions')).send({ episode_id: episode, template_studio_id: template, selected_formats: ['youtube'], asset_map: { 'CHAR.HOST.LALA': ordinary, 'BG.MAIN': id } }),
+      ];
+      for (const pending of sent) {
+        const res = await pending;
+        expect([res.status, res.body]).toEqual([409, REFUSED]);
+      }
+      expect(await snapshot()).toEqual(before);
+    });
+
+    it('an ordinary asset whose id is written another way is still taken (the database reads it)', async () => {
+      const res = await as(request(app).post(`/api/v1/episodes/${episode}/wardrobe-defaults`)).send({ character_name: 'Guest', outfit_asset_id: ordinary.replace(/-/g, '').toUpperCase() });
+      expect(res.status).toBeLessThan(300);
+      expect(await q(`SELECT default_outfit_asset_id FROM episode_wardrobe_defaults WHERE episode_id = :episode AND character_name = 'Guest'`, { episode })).toEqual([{ default_outfit_asset_id: ordinary }]);
     });
   });
 

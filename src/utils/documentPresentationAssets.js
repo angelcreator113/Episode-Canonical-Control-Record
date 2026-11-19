@@ -20,7 +20,25 @@ const DOCUMENT_PRESENTATION = 'DOCUMENT_PRESENTATION';
 const REFUSAL_CODE = 'DOCUMENT_PRESENTATION_NOT_ATTACHABLE';
 const REFUSAL_MESSAGE = 'A document presentation cannot be attached here. It belongs to its document and is not placed like other assets.';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const HEX_32 = /^[0-9a-f]{32}$/;
+
+/**
+ * The one spelling of an asset id (lower case, 8-4-4-4-12), or null for a
+ * value that cannot be one. PostgreSQL reads several spellings as the same
+ * uuid: upper or lower case, with no hyphens, inside braces, hyphenated in
+ * groups of four. Each has to be recognised here, or an id written another
+ * way would pass the rule and still be stored as the asset it names. This
+ * takes a little more than PostgreSQL does (hyphens anywhere, space around
+ * it), which errs towards asking.
+ */
+function normalizeAssetId(value) {
+  if (typeof value !== 'string') return null;
+  let text = value.trim().toLowerCase();
+  if (text.startsWith('{') && text.endsWith('}')) text = text.slice(1, -1);
+  const hex = text.replace(/-/g, '');
+  if (!HEX_32.test(hex)) return null;
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 /** True for an asset row (model instance or plain row) that is a document presentation. */
 function isDocumentPresentation(asset) {
@@ -30,13 +48,13 @@ function isDocumentPresentation(asset) {
 }
 
 /**
- * The asset ids among `values`: strings shaped like a UUID (space around
- * one is ignored, as some operations trim theirs), each once. Anything
- * else cannot name an asset.
+ * The asset ids among `values`, each once, in the one spelling
+ * (normalizeAssetId). Anything else cannot name an asset: the database
+ * would not read it as a uuid either.
  */
 function assetIdsIn(values) {
   const list = Array.isArray(values) ? values : [values];
-  return [...new Set(list.filter((v) => typeof v === 'string').map((v) => v.trim().toLowerCase()).filter((v) => UUID_RE.test(v)))];
+  return [...new Set(list.map(normalizeAssetId).filter(Boolean))];
 }
 
 /** Every UUID-shaped string anywhere inside a JSON value (an object of asset ids, lists of them). */
@@ -48,10 +66,12 @@ function assetIdsWithin(value, found = []) {
 }
 
 /**
- * True when any of `values` is the id of a document presentation. Reads
- * only; a soft-deleted one counts (it is one still). For an operation that
- * has no asset lookup of its own, or whose lookup comes after its first
- * write.
+ * True when any of `values` is the id of a document presentation, however
+ * the id is spelled. Reads only; a soft-deleted one counts (it is one
+ * still). For an operation that has no asset lookup of its own, or whose
+ * lookup comes after its first write. A read that fails throws: the caller
+ * answers with its own error and attaches nothing, since "could not ask"
+ * is not "may be attached".
  */
 async function anyDocumentPresentation(values, { sequelize = null, transaction = null } = {}) {
   const ids = assetIdsIn(values);
@@ -74,6 +94,7 @@ module.exports = {
   REFUSAL_CODE,
   REFUSAL_MESSAGE,
   isDocumentPresentation,
+  normalizeAssetId,
   assetIdsIn,
   assetIdsWithin,
   anyDocumentPresentation,

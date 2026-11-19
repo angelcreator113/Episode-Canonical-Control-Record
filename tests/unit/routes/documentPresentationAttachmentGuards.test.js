@@ -22,7 +22,12 @@ jest.mock('../../../src/models', () => {
     '22222222-2222-4222-8222-222222222222': 'PROMO_LALA',
     '33333333-3333-4333-8333-333333333333': 'EPISODE_FRAME',
   };
-  const state = { writes: [], findOne: {} };
+  const state = { writes: [], findOne: {}, failLookup: false };
+  // As PostgreSQL reads a uuid: braces and hyphens aside, any case.
+  const asDatabase = (id) => {
+    const hex = String(id).toLowerCase().replace(/^\{(.*)\}$/, '$1').replace(/-/g, '');
+    return /^[0-9a-f]{32}$/.test(hex) ? `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}` : null;
+  };
   const wrote = (what) => { state.writes.push(what); };
   const row = (model, fields = {}) => {
     const self = {
@@ -37,7 +42,11 @@ jest.mock('../../../src/models', () => {
     self.get = (key) => (key ? self[key] : self.toJSON());
     return self;
   };
-  const assetRow = (id) => (ASSET_TYPES[id] ? row('Asset', { id, asset_type: ASSET_TYPES[id], asset_role: 'UI.OVERLAY.WARDROBE_LIST', s3_url_processed: 'https://x/a.png' }) : null);
+  const assetRow = (given) => {
+    const id = asDatabase(given);
+    return ASSET_TYPES[id] ? rowOf(id) : null;
+  };
+  const rowOf = (id) => (ASSET_TYPES[id] ? row('Asset', { id, asset_type: ASSET_TYPES[id], asset_role: 'UI.OVERLAY.WARDROBE_LIST', s3_url_processed: 'https://x/a.png' }) : null);
   const model = (name) => ({
     findByPk: jest.fn(async (id) => (name === 'Asset' ? assetRow(id) : row(name, { id }))),
     findAll: jest.fn(async (opts = {}) => (name === 'Asset' ? [].concat(opts.where?.id || []).map(assetRow).filter(Boolean) : [])),
@@ -62,6 +71,7 @@ jest.mock('../../../src/models', () => {
       const text = String(sql).trim();
       // The rule's own read: which of these ids are document presentations.
       if (/FROM assets WHERE id IN \(:ids\) AND asset_type = :type/.test(text)) {
+        if (state.failLookup) throw new Error('connection terminated unexpectedly');
         const hit = (opts.replacements.ids || []).some((id) => ASSET_TYPES[id] === opts.replacements.type);
         return [hit ? [{ '?column?': 1 }] : [], hit ? 1 : 0];
       }
@@ -175,10 +185,22 @@ const OPERATIONS = [
     (ids) => ({ params: { id: OWNER }, body: { assets: { lala_outfit_id: ids[0], background_id: ORDINARY_2, ui_elements: ids.slice(1) } } }), { many: true }],
 ];
 
+const ROW_BASED = ['3.', '6.', '7.', '8.', '9.', '10.', '11.'];
+// The same id as PostgreSQL also reads it (Evoni, 2026-11-19: an id written
+// another way must not pass the rule).
+const SPELLINGS = {
+  'upper case': (id) => id.toUpperCase(),
+  'no hyphens': (id) => id.replace(/-/g, ''),
+  'in braces': (id) => `{${id}}`,
+  'groups of four': (id) => id.replace(/-/g, '').match(/.{4}/g).join('-'),
+  'upper case, no hyphens, in braces': (id) => `{${id.replace(/-/g, '').toUpperCase()}}`,
+};
+
 describe('a document presentation is refused by every generic operation that attaches an asset', () => {
   beforeEach(() => {
     state.writes.length = 0;
     state.findOne = {};
+    state.failLookup = false;
   });
 
   test('all 21 operations and the scene assets object are here', () => {
@@ -202,7 +224,40 @@ describe('a document presentation is refused by every generic operation that att
       expect(state.writes.length).toBeGreaterThan(0);
     });
 
+    test.each(Object.entries(SPELLINGS))('its id written another way (%s) is refused the same, with nothing written', async (_how, spell) => {
+      const res = await run(send([spell(PRESENTATION)]));
+      expect(res).toEqual({ status: 409, body: { success: false, error: REFUSAL_MESSAGE, code: REFUSAL_CODE } });
+      expect(state.writes).toEqual([]);
+    });
+
+    test('an ordinary asset whose id is written another way is not refused by the rule', async () => {
+      for (const spell of Object.values(SPELLINGS)) {
+        const res = await run(send([spell(ORDINARY)]));
+        expect(res.status).not.toBe(409);
+        expect(res.body?.code).not.toBe(REFUSAL_CODE);
+      }
+    });
+
+    if (!ROW_BASED.some((n) => _name.startsWith(n))) {
+      test('when the rule cannot ask the database, the request fails and nothing is attached', async () => {
+        state.failLookup = true;
+        const res = await run(send([ORDINARY]));
+        expect(res.status).toBeGreaterThanOrEqual(500);
+        expect(state.writes).toEqual([]);
+      });
+    }
+
     if (many) {
+      test('a presentation written another way among ordinary assets refuses the whole request', async () => {
+        for (const spell of Object.values(SPELLINGS)) {
+          state.writes.length = 0;
+          const res = await run(send([ORDINARY, spell(PRESENTATION), ORDINARY_2]));
+          expect(res.status).toBe(409);
+          expect(res.body.code).toBe(REFUSAL_CODE);
+          expect(state.writes).toEqual([]);
+        }
+      });
+
       test('one document presentation among ordinary assets refuses the whole request, with nothing written', async () => {
         const res = await run(send([ORDINARY, PRESENTATION, ORDINARY_2]));
         expect(res.status).toBe(409);
@@ -214,7 +269,26 @@ describe('a document presentation is refused by every generic operation that att
 });
 
 describe('what the rule reads as an asset id', () => {
-  const { assetIdsIn, assetIdsWithin, isDocumentPresentation, anyDocumentPresentation, DOCUMENT_PRESENTATION } = require('../../../src/utils/documentPresentationAssets');
+  const { normalizeAssetId, assetIdsIn, assetIdsWithin, isDocumentPresentation, anyDocumentPresentation, DOCUMENT_PRESENTATION } = require('../../../src/utils/documentPresentationAssets');
+
+  test('every spelling PostgreSQL reads as a uuid is the one id', () => {
+    for (const spell of Object.values(SPELLINGS)) expect(normalizeAssetId(spell(PRESENTATION))).toBe(PRESENTATION);
+    expect(normalizeAssetId(PRESENTATION)).toBe(PRESENTATION);
+    expect(assetIdsIn(Object.values(SPELLINGS).map((spell) => spell(PRESENTATION)))).toEqual([PRESENTATION]);
+  });
+
+  test('what cannot be a uuid is not an id: too short or long, not hex, an unclosed brace, not a string', () => {
+    const hex = PRESENTATION.replace(/-/g, '');
+    for (const bad of [hex.slice(1), `${hex}0`, hex.replace('1', 'g'), `{${PRESENTATION}`, `${PRESENTATION}}`, `urn:uuid:${PRESENTATION}`, '', '{}', '-', null, undefined, 7, true, [PRESENTATION], { id: PRESENTATION }]) {
+      expect(normalizeAssetId(bad)).toBeNull();
+    }
+  });
+
+  test('a read that fails is thrown, not answered as "none"', async () => {
+    models.__state.failLookup = true;
+    await expect(anyDocumentPresentation([ORDINARY])).rejects.toThrow('connection terminated');
+    models.__state.failLookup = false;
+  });
 
   test('strings shaped like a UUID, once each, whatever their case or the space around them; nothing else', () => {
     expect(assetIdsIn([PRESENTATION, ` ${PRESENTATION.toUpperCase()} `, 'Words, not an id', '', null, undefined, 7, { id: ORDINARY }])).toEqual([PRESENTATION]);
