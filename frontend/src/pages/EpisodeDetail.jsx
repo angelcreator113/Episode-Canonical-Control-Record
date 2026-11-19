@@ -260,20 +260,58 @@ const EpisodeDetail = () => {
     setProductionChecks({ checks, sections });
   }, []);
   const checksEpisodeId = episode?.id;
+  // What this page and its Overview tab have already read for the episode,
+  // handed to the checklist's loader as `loaded` so it does not ask again
+  // (PR-08 of docs/design/2026-11-studio-home-episode-command-center.md).
+  // Each is tagged with its episode; nothing is kept beyond the first run.
+  //   sourceEventRead  the header's own read of the episode's events, once
+  //                    it has answered: { episodeId, usable, event }
+  //   overviewReads    the Overview tab's brief and scene sets, as it
+  //                    reports them: { episodeId, brief?, sceneSets? }, each
+  //                    { ok, value }
+  const [sourceEventRead, setSourceEventRead] = useState(null);
+  const [overviewReads, setOverviewReads] = useState({ episodeId: null });
+  // The episode on the page now. A report for any other episode (a slow
+  // answer for the one she just left) is dropped, so it cannot displace
+  // this episode's.
+  const checksEpisodeNow = useRef(checksEpisodeId);
+  checksEpisodeNow.current = checksEpisodeId;
+  const reportOverviewRead = useCallback((forEpisodeId, key, result) => {
+    if (forEpisodeId !== checksEpisodeNow.current) return;
+    setOverviewReads((prev) => (prev.episodeId === forEpisodeId
+      ? { ...prev, [key]: result }
+      : { episodeId: forEpisodeId, [key]: result }));
+  }, []);
+  // The loader runs once per episode. It starts when the header's events
+  // read has answered and, on the Overview tab, when that tab has reported
+  // its brief and its scene sets (answered or failed). On any other tab
+  // there is nothing to wait for. A read that failed is not handed over, so
+  // the loader makes it itself.
+  const checksStartedFor = useRef(null);
+  const pageAlive = useRef(true);
+  useEffect(() => { pageAlive.current = true; return () => { pageAlive.current = false; }; }, []);
   useEffect(() => {
-    if (!checksEpisodeId || !episode) return undefined;
-    let cancelled = false;
+    if (!checksEpisodeId || !episode) return;
+    if (checksStartedFor.current === checksEpisodeId) return;
+    const events = sourceEventRead && sourceEventRead.episodeId === String(checksEpisodeId) ? sourceEventRead : null;
+    if (!events) return;
+    const reports = overviewReads.episodeId === checksEpisodeId ? overviewReads : {};
+    if (tabKey === 'overview' && !(reports.brief && reports.sceneSets)) return;
+    checksStartedFor.current = checksEpisodeId;
+    const loaded = {};
+    if (events.usable) loaded.linkedEvent = events.event;
+    if (reports.brief?.ok) loaded.brief = reports.brief.value;
+    if (reports.sceneSets?.ok) loaded.sceneSets = reports.sceneSets.value;
     import('../components/Episodes/EpisodeProductionChecklist')
-      .then((m) => m.loadProductionChecks(episode, episode.show_id || episode.showId)
+      .then((m) => m.loadProductionChecks(episode, episode.show_id || episode.showId, { loaded })
         .then(({ checks }) => {
-          if (cancelled) return;
+          if (!pageAlive.current || checksEpisodeNow.current !== checksEpisodeId) return;
           setChecksProgress(checklistProgress(checks, m.CHECKLIST_SECTIONS));
           setProductionChecks({ checks, sections: m.CHECKLIST_SECTIONS });
         }))
       .catch((err) => { console.error('[EpisodeDetail] production checks load failed:', err); });
-    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checksEpisodeId]);
+  }, [checksEpisodeId, sourceEventRead, overviewReads, tabKey]);
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   // The header's ⋮ menu closes on Escape (focus back on the ⋮) and on a
@@ -660,6 +698,7 @@ const EpisodeDetail = () => {
     // A new episode drops the last one's link until its own arrives (Task #3107).
     setSourceEvent(null);
     setSourceEventStatus('loading');
+    setSourceEventRead(null);
     // Optional header detail: any failure, synchronous or not, leaves the
     // link off and never breaks the page.
     const loadSourceEvent = async () => {
@@ -667,11 +706,17 @@ const EpisodeDetail = () => {
         const data = await getEpisodeEvents(episodeId);
         if (cancelled) return;
         const events = data?.events || [];
-        setSourceEvent(events.find((ev) => ev.link?.anchor) || null);
+        const anchor = events.find((ev) => ev.link?.anchor) || null;
+        setSourceEvent(anchor);
         setSourceEventStatus('ready');
+        // For the checklist: the header shows only a flagged source event,
+        // the checklist falls back to the first event listed. They agree
+        // when one is flagged or none is linked; otherwise the checklist
+        // reads the events itself.
+        setSourceEventRead({ episodeId: String(episodeId), usable: !!anchor || events.length === 0, event: anchor });
       } catch (err) {
         console.error('Failed to load the source event:', err);
-        if (!cancelled) { setSourceEvent(null); setSourceEventStatus('failed'); }
+        if (!cancelled) { setSourceEvent(null); setSourceEventStatus('failed'); setSourceEventRead({ episodeId: String(episodeId), usable: false, event: null }); }
       }
     };
     loadSourceEvent();
@@ -1183,6 +1228,7 @@ const EpisodeDetail = () => {
             onOpenTab={openTab}
             checks={checksProgress}
             balance={headerBalance}
+            onRead={reportOverviewRead}
           />
         )}
 
