@@ -10,6 +10,16 @@
  *   - a change that raises one needs Evoni's approval.
  * No performance ceiling is asserted here.
  *
+ * Lowered by PR-08 (measured on main at f5b44e0e): the production
+ * checklist's loader is handed three things the page already holds, so it
+ * no longer asks for them. Per default open, three requests fewer and no
+ * address added or dropped:
+ *   GET /episodes/:id/events      3 -> 2  (was: the page, the Overview, the checklist)
+ *   GET /episode-brief/:id        2 -> 1  (was: the Overview, the checklist)
+ *   GET /episodes/:id/scene-sets  2 -> 1  (was: the Overview, the checklist)
+ * BARE 28 -> 25 and FULL 34 -> 31; the addresses stay 22 and 26; the
+ * repeated addresses go from five to three and from seven to five.
+ *
  * The real EpisodeDetail, EpisodeOverviewTab and production-checklist loader
  * (loadProductionChecks) are rendered, with every child they mount. Only the
  * HTTP client, the auth context and the toast hook are replaced; none of
@@ -45,17 +55,17 @@ import {
 } from './EpisodeDetail.requests.fixtures';
 
 // ── Today's exact baseline ────────────────────────────────────────────────
-/** What every default open asks for, and how many times: 28 requests, 22 addresses. */
+/** What every default open asks for, and how many times: 25 requests, 22 addresses. */
 const always = (id) => ({
   [`GET /api/v1/assets?asset_type=SOCIAL_CHECKLIST&episode_id=${id}&limit=1`]: 1,
   [`GET /api/v1/characters/lala/state?show_id=${SHOW_ID}`]: 1,
-  [`GET /api/v1/episode-brief/${id}`]: 2, // the Overview, the checklist
+  [`GET /api/v1/episode-brief/${id}`]: 1, // the Overview (the checklist is handed it, PR-08)
   [`GET /api/v1/episode-brief/${id}/plan`]: 1,
   [`GET /api/v1/episodes/${id}`]: 2, // the page, the checklist
-  [`GET /api/v1/episodes/${id}/events`]: 3, // the page, the Overview, the checklist
+  [`GET /api/v1/episodes/${id}/events`]: 2, // the page, the Overview (the checklist is handed the page's, PR-08)
   [`GET /api/v1/episodes/${id}/lookbook`]: 2, // the style board, the checklist
   [`GET /api/v1/episodes/${id}/overlays`]: 1,
-  [`GET /api/v1/episodes/${id}/scene-sets`]: 2, // the Overview, the checklist
+  [`GET /api/v1/episodes/${id}/scene-sets`]: 1, // the Overview (the checklist is handed them, PR-08)
   [`GET /api/v1/episodes/${id}/scripts?includeAllVersions=false`]: 1,
   [`GET /api/v1/episodes/${id}/style-sheet`]: 1,
   [`GET /api/v1/episodes/${id}/timeline/placements`]: 1,
@@ -75,8 +85,8 @@ const always = (id) => ({
 const BARE = {
   counts: always(EP_BARE),
   initial: [`GET /api/v1/episodes/${EP_BARE}`, `GET /api/v1/episodes/${EP_BARE}/events`],
-  afterInitial: 26,
-  total: 28,
+  afterInitial: 23,
+  total: 25,
   distinct: 22,
 };
 
@@ -92,8 +102,8 @@ const FULL = {
     [`GET /api/v1/scene-sets/${SET_ID}`]: 1, // the event's venue set
   },
   initial: ['GET /api/v1/voice-studio/status', `GET /api/v1/episodes/${EP_FULL}`, `GET /api/v1/episodes/${EP_FULL}/events`],
-  afterInitial: 31,
-  total: 34,
+  afterInitial: 28,
+  total: 31,
   distinct: 26,
 };
 
@@ -149,15 +159,15 @@ describe('Episode page, default open: the requests it makes today (exact baselin
     expect(ledger.viaFetch()).toEqual([]);
   }
 
-  test('a bare episode, as an editor: 28 requests to 22 addresses, five of them repeated', async () => {
+  test('a bare episode, as an editor: 25 requests to 22 addresses, three of them repeated', async () => {
     const unanswered = await open(EP_BARE, EDITOR);
     expectBaseline(BARE, unanswered);
-    expect(Object.keys(ledger.duplicates()).length).toBe(5);
+    expect(Object.keys(ledger.duplicates()).length).toBe(3);
   });
 
-  test('a fully linked episode, as an admin: 34 requests to 26 addresses, seven of them repeated', async () => {
+  test('a fully linked episode, as an admin: 31 requests to 26 addresses, five of them repeated', async () => {
     const unanswered = await open(EP_FULL, ADMIN);
     expectBaseline(FULL, unanswered);
-    expect(Object.keys(ledger.duplicates()).length).toBe(7);
+    expect(Object.keys(ledger.duplicates()).length).toBe(5);
   });
 });

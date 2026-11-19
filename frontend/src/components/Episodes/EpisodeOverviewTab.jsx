@@ -144,7 +144,7 @@ export function unlinkLockReason(ev, episodeId) {
   return null;
 }
 
-function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null }) {
+function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null, onRead = null }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [allEvents, setAllEvents] = useState([]);  // every event in the show — drives the linker dropdown
@@ -232,77 +232,101 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     const live = () => run === loadRun.current;
     const failed = (key, label) => (err) => { if (live()) failedRead(key, label, err); else console.error(`[EpisodeOverview] an earlier ${label} read failed:`, err); };
     setLoadFailed({});
-    // The episode's own events (Task #1906): the brief's source event
-    // first, then any additional linked events.
-    getEpisodeEvents(episode.id).then((data) => {
-      if (!live()) return;
-      setLinkedEvents(data?.events || []);
-      // Whether another event can be linked now (the server's word; absent from an older server).
-      setAddEvent(data?.add_event || null);
-    }).catch(failed('events', "this episode's events"));
-    if (showId) {
-      // The show's event list feeds only the linker dropdown (events not
-      // yet linked anywhere). It is not how this episode finds its events.
-      api.get(`/api/v1/world/${showId}/events`).then(({ data }) => {
+    // The brief and the scene sets are told to the page (onRead, optional)
+    // so its production checklist does not ask for them again: each exactly
+    // once per run, with the answer or as failed. An answer the checklist
+    // would read differently from this tab is told as failed, and the
+    // checklist then reads it itself.
+    const episodeId = episode.id;
+    const told = {};
+    const tell = (key, result) => {
+      if (told[key] || !live()) return;
+      told[key] = true;
+      try { onRead?.(episodeId, key, result); } catch (err) { console.error('[EpisodeOverview] onRead failed:', err); }
+    };
+    try {
+      // The episode's own events (Task #1906): the brief's source event
+      // first, then any additional linked events.
+      getEpisodeEvents(episode.id).then((data) => {
         if (!live()) return;
-        setAllEvents(data?.events || []);
-      }).catch(failed('eventList', "the show's events"));
-      // Episode-scoped ledger. Skipping when no showId — the endpoint
-      // requires it, and a draft episode without a show wouldn't have
-      // transactions anyway.
-      api.get(`/api/v1/world/${showId}/episodes/${episode.id}/money`)
-        .then((r) => { if (live()) setMoney(r?.data?.data || false); })
-        .catch((err) => { console.error('[EpisodeOverview] money plan load failed:', err); if (live()) setMoney(false); });
-      api.get(`/api/v1/world/${showId}/financial-ledger?episode_id=${episode.id}&limit=50`)
-        .then(({ data }) => {
-          // Only the rows that count toward Lala's balance: a voided row
-          // stays in the ledger as history but is not money (Task #2273).
-          const txs = (data?.data?.transactions || []).filter(t => t.counted !== false);
-          if (live()) setLedger({ transactions: txs, loading: false });
-        })
-        .catch((err) => { console.error('[EpisodeOverview] ledger load failed:', err); if (live()) setLedger({ transactions: [], loading: false }); });
-    } else {
-      setLedger({ transactions: [], loading: false });
+        setLinkedEvents(data?.events || []);
+        // Whether another event can be linked now (the server's word; absent from an older server).
+        setAddEvent(data?.add_event || null);
+      }).catch(failed('events', "this episode's events"));
+      if (showId) {
+        // The show's event list feeds only the linker dropdown (events not
+        // yet linked anywhere). It is not how this episode finds its events.
+        api.get(`/api/v1/world/${showId}/events`).then(({ data }) => {
+          if (!live()) return;
+          setAllEvents(data?.events || []);
+        }).catch(failed('eventList', "the show's events"));
+        // Episode-scoped ledger. Skipping when no showId — the endpoint
+        // requires it, and a draft episode without a show wouldn't have
+        // transactions anyway.
+        api.get(`/api/v1/world/${showId}/episodes/${episode.id}/money`)
+          .then((r) => { if (live()) setMoney(r?.data?.data || false); })
+          .catch((err) => { console.error('[EpisodeOverview] money plan load failed:', err); if (live()) setMoney(false); });
+        api.get(`/api/v1/world/${showId}/financial-ledger?episode_id=${episode.id}&limit=50`)
+          .then(({ data }) => {
+            // Only the rows that count toward Lala's balance: a voided row
+            // stays in the ledger as history but is not money (Task #2273).
+            const txs = (data?.data?.transactions || []).filter(t => t.counted !== false);
+            if (live()) setLedger({ transactions: txs, loading: false });
+          })
+          .catch((err) => { console.error('[EpisodeOverview] ledger load failed:', err); if (live()) setLedger({ transactions: [], loading: false }); });
+      } else {
+        setLedger({ transactions: [], loading: false });
+      }
+      api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => {
+        if (!live()) return;
+        tell('sceneSets', { ok: !(data && !data.data && data.sceneSets), value: data?.data || [] });
+        setSceneSets(data?.data || []);
+      }).catch((err) => { console.error('[EpisodeOverviewTab] scene sets load failed:', err); tell('sceneSets', { ok: false }); });
+      api.get(`/api/v1/episodes/${episode.id}/scripts?includeAllVersions=false`).then(({ data }) => {
+        if (!live()) return;
+        const scripts = data?.data || data?.scripts || [];
+        if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
+      }).catch(failed('script', 'the script check'));
+      // EpisodeBrief — drives the merged Identity/Source/Stakes/Reference
+      // sections. Auto-creates if missing (the GET handler does that).
+      api.get(`/api/v1/episode-brief/${episode.id}`).then(({ data }) => {
+        if (!live()) return;
+        const b = data?.data || null;
+        tell('brief', { ok: data != null, value: b });
+        setBrief(b);
+        setDraft({
+          narrative_purpose: b?.narrative_purpose || '',
+          forward_hook: b?.forward_hook || '',
+          episode_archetype: b?.episode_archetype || '',
+          designed_intent: b?.designed_intent || '',
+          allowed_outcomes: Array.isArray(b?.allowed_outcomes) ? b.allowed_outcomes : [],
+          arc_number: b?.arc_number ?? '',
+          position_in_arc: b?.position_in_arc ?? '',
+        });
+        if (b?.event_id && showId) {
+          api.get(`/api/v1/world/${showId}/events/${b.event_id}`)
+            .then((res) => { if (live()) setSource(res.data || null); })
+            .catch((err) => { console.error('[Episode] source event load failed:', err); if (live()) setSource(null); });
+          api.get(`/api/v1/wardrobe/outfit/${episode.id}`)
+            .then((res) => { if (live()) setOutfit(Array.isArray(res.data?.items) ? res.data.items : undefined); })
+            .catch((err) => { console.error('[Episode] locked outfit load failed:', err); if (live()) setOutfit(undefined); });
+        }
+        // Resolve narrative_chain.parent_event_id → event name for the Source band.
+        const parentId = b?.narrative_chain?.parent_event_id;
+        if (parentId && showId) {
+          api.get(`/api/v1/world/${showId}/events`).then(({ data: ev }) => {
+            const events = ev?.events || [];
+            if (live()) setParentEvent(events.find(e => e.id === parentId) || null);
+          }).catch((err) => console.error('[EpisodeOverview] parent event load failed:', err));
+        }
+      }).catch((err) => { failed('brief', 'the story brief')(err); tell('brief', { ok: false }); });
+    } catch (err) {
+      // A read that could not even be asked for: said here, and the page is
+      // not left waiting for it.
+      console.error('[EpisodeOverview] load stopped early:', err);
+      tell('sceneSets', { ok: false });
+      tell('brief', { ok: false });
     }
-    api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => { if (live()) setSceneSets(data?.data || []); })
-      .catch((err) => console.error('[EpisodeOverviewTab] scene sets load failed:', err));
-    api.get(`/api/v1/episodes/${episode.id}/scripts?includeAllVersions=false`).then(({ data }) => {
-      if (!live()) return;
-      const scripts = data?.data || data?.scripts || [];
-      if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
-    }).catch(failed('script', 'the script check'));
-    // EpisodeBrief — drives the merged Identity/Source/Stakes/Reference
-    // sections. Auto-creates if missing (the GET handler does that).
-    api.get(`/api/v1/episode-brief/${episode.id}`).then(({ data }) => {
-      if (!live()) return;
-      const b = data?.data || null;
-      setBrief(b);
-      setDraft({
-        narrative_purpose: b?.narrative_purpose || '',
-        forward_hook: b?.forward_hook || '',
-        episode_archetype: b?.episode_archetype || '',
-        designed_intent: b?.designed_intent || '',
-        allowed_outcomes: Array.isArray(b?.allowed_outcomes) ? b.allowed_outcomes : [],
-        arc_number: b?.arc_number ?? '',
-        position_in_arc: b?.position_in_arc ?? '',
-      });
-      if (b?.event_id && showId) {
-        api.get(`/api/v1/world/${showId}/events/${b.event_id}`)
-          .then((res) => { if (live()) setSource(res.data || null); })
-          .catch((err) => { console.error('[Episode] source event load failed:', err); if (live()) setSource(null); });
-        api.get(`/api/v1/wardrobe/outfit/${episode.id}`)
-          .then((res) => { if (live()) setOutfit(Array.isArray(res.data?.items) ? res.data.items : undefined); })
-          .catch((err) => { console.error('[Episode] locked outfit load failed:', err); if (live()) setOutfit(undefined); });
-      }
-      // Resolve narrative_chain.parent_event_id → event name for the Source band.
-      const parentId = b?.narrative_chain?.parent_event_id;
-      if (parentId && showId) {
-        api.get(`/api/v1/world/${showId}/events`).then(({ data: ev }) => {
-          const events = ev?.events || [];
-          if (live()) setParentEvent(events.find(e => e.id === parentId) || null);
-        }).catch((err) => console.error('[EpisodeOverview] parent event load failed:', err));
-      }
-    }).catch(failed('brief', 'the story brief'));
   };
 
   // ── Brief edit helpers ─────────────────────────────────────────────────
