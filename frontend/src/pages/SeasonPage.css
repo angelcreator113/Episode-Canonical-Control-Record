@@ -251,6 +251,10 @@
 }
 
 /* Overview: three cards in a row, then the fold, then four summary cards. */
+/* The Overview's own blocks from the header (2026-11-20): the season's counts, then the stat cards. */
+.szn-overview-tab > .shl.is-details { margin: 0 0 14px; }
+.szn-glance { margin: 0 0 16px; }
+.szn-glance > .szn-stats { margin-top: 0; }
 .szn-overview-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .szn-facts { display: grid; gap: 10px; margin: 0; }
 .szn-facts > div { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 10px; align-items: baseline; }

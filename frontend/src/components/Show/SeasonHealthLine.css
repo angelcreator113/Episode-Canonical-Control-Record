@@ -24,3 +24,10 @@
 @media (max-width: 640px) {
   .shl-line { font-size: 13px; }
 }
+
+/* On the Overview (show="details", 2026-11-20): the same counts on the
+   page's light ground, plum text on soft pills. */
+.shl.is-details { margin: 0; }
+.shl.is-details .shl-line { color: var(--sp-ink, #3A1236); }
+.shl-heading { font-size: 13px; font-weight: 700; color: var(--sp-muted, #6E4A68); margin-right: 4px; }
+.shl.is-details .shl-piece { background: var(--sp-purple-soft, #F1E6F8); color: var(--sp-ink, #3A1236); }

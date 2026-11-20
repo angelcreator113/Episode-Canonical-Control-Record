@@ -353,19 +353,27 @@ describe('Edit season', () => {
     expect((await screen.findByTestId('szn-setup-note')).textContent).toBe('Season saved.');
   });
 
-  test("the Overview card's Edit opens the same form", async () => {
+  test("the Overview card has no second Edit: Edit Season on the hero is the one way in", async () => {
     renderPage();
-    fireEvent.click(await screen.findByTestId('szn-overview-edit'));
+    const card = await screen.findByTestId('szn-overview-card');
+    expect(within(card).queryByTestId('szn-overview-edit')).toBeNull();
+    expect(within(card).queryByRole('button', { name: /edit/i })).toBeNull();
+    fireEvent.click(screen.getByTestId('szn-edit-season'));
     expect(await screen.findByTestId('season-setup-form')).toBeTruthy();
   });
 });
 
 describe('The Overview', () => {
-  test('the season card: logline, dates, status from the current part, Ep x of 24, description', async () => {
+  test('the season card: logline, status from the current part, Ep x of 24, description; the title and dates are the hero\'s', async () => {
     renderPage();
     const card = await screen.findByTestId('szn-overview-card');
-    expect(card.textContent).toContain('Season 1: Soft Luxury Ascension');
-    expect(card.textContent).toContain('Jan 5, 2026 – Mar 29, 2026');
+    // Said once, on the hero (2026-11-20): the card no longer repeats the title and the dates.
+    expect(card.textContent).not.toContain('Soft Luxury Ascension');
+    expect(card.textContent).not.toContain('Jan 5, 2026 – Mar 29, 2026');
+    const hero = screen.getByTestId('szn-hero');
+    expect(hero.textContent).toContain('Soft Luxury Ascension');
+    expect(hero.textContent).toContain('Jan 5, 2026 – Mar 29, 2026');
+    expect(card.textContent).toContain('Lala earns her');
     expect(within(card).getByTestId('szn-temp').textContent).toBe('Rising');
     expect(within(card).getByTestId('szn-current-arc').textContent).toBe('Phase 1: curiosity → first stumble → finding her footing');
     expect(card.textContent).toContain('Ep 1 of 24');
@@ -596,8 +604,11 @@ describe('The Goals tab', () => {
       }
       return { data: {} };
     });
-    renderPage('?tab=goals');
+    // The stat card is the Overview's (2026-11-20): read there first, then again after the goal is made.
+    renderPage('?tab=overview');
     expect((await screen.findByTestId('szn-stat-goals')).textContent).toContain('1 complete · 2 remaining');
+    fireEvent.click(screen.getByTestId('szn-tab-goals'));
+    expect(screen.queryByTestId('szn-stat-goals')).toBeNull();
     fireEvent.click(await screen.findByTestId('cg-new'));
     const editor = screen.getByTestId('cg-editor');
     expect(within(editor).getByTestId('cg-save').disabled).toBe(true);
@@ -613,7 +624,8 @@ describe('The Goals tab', () => {
     expect(screen.getByTestId('cg-note').textContent).toBe('Goal created.');
     expect(screen.queryByTestId('cg-editor')).toBeNull();
     expect(screen.getByTestId('cg-counts').textContent).toBe('3 active · 1 complete');
-    expect(screen.getByTestId('szn-stat-goals').textContent).toContain('1 complete · 3 remaining');
+    fireEvent.click(screen.getByTestId('szn-tab-overview'));
+    expect((await screen.findByTestId('szn-stat-goals')).textContent).toContain('1 complete · 3 remaining');
   });
 
   test('a goal edits in place through PUT; a refusal says so in the page', async () => {
