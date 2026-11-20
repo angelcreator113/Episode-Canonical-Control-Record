@@ -445,7 +445,8 @@
   .szn-hero { padding: 12px 14px; gap: 10px; background: linear-gradient(120deg, var(--sp-shade) 0%, var(--sp-purple-fill) 70%, var(--sp-pink) 130%); }
   .szn-hero-thumb { display: none; }
   .szn-hero-id { flex-basis: 100%; }
-  .szn-hero-title { font-size: 22px; }
+  /* On a phone the whole title is shown: there is no hover to read a cut one by, and the Overview no longer repeats it. */
+  .szn-hero-title { font-size: 22px; display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
   .szn-hero-side { flex: 1 1 100%; justify-content: space-between; margin-left: 0; }
   /* The actions keep to the right edge with or without a switcher, so the menu under ⋯ opens inside the screen. */
   .szn-hero-actions { margin-left: auto; }
