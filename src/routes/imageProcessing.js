@@ -17,6 +17,10 @@ const { models } = require('../models');
 const { isBudgetError } = require('../services/imageCostService');
 const s3Service = require('../services/S3Service');
 const { requireAuth, authorize } = require('../middleware/auth');
+const { protectDocumentPresentations } = require('../utils/documentPresentationAssets');
+
+// A document presentation is kept by its document; it is not processed here (V2-2a).
+const presentationById = protectDocumentPresentations((req) => req.params.id);
 
 // Starting or undoing image processing is an ADMIN's (Evoni, 2026-11-16): background
 // removal is a paid call and each of these rewrites a production asset.
@@ -27,7 +31,7 @@ const { requireAuth, authorize } = require('../middleware/auth');
  *
  * @returns {Object} { status, message, data: { asset_id, url, original_url, cached? } }
  */
-router.post('/:id/remove-background', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.post('/:id/remove-background', requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -203,7 +207,7 @@ router.post('/:id/remove-background', requireAuth, authorize(['ADMIN']), async (
  * @body {Object} settings - Enhancement settings (skin_smooth, saturation, vibrance, contrast, sharpen)
  * @returns {Object} { status, message, data: { asset_id, url, original_url, settings, cached? } }
  */
-router.post('/:id/enhance', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.post('/:id/enhance', requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -419,7 +423,7 @@ router.get('/:id/processing-status', requireAuth, async (req, res) => {
  * @body {string} reset_type - 'all', 'bg_removal', or 'enhancement'
  * @returns {Object} { status, message, data: { asset_id } }
  */
-router.post('/:id/reset-processing', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.post('/:id/reset-processing', requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const { reset_type = 'all' } = req.body;

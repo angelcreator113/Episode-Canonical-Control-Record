@@ -16,6 +16,14 @@ const { models } = require('../models');
 const { isBudgetError } = require('../services/imageCostService');
 const { requireAuth, authorize, optionalAuth } = require('../middleware/auth');
 const { validateAssetUpload, validateUUIDParam } = require('../middleware/requestValidation');
+const {
+  protectDocumentPresentations, refuseDocumentPresentationType, isDocumentPresentationType, exceptDocumentPresentations,
+} = require('../utils/documentPresentationAssets');
+
+// A document presentation is kept by its document (V2-2a): the operations
+// below that change assets refuse one, whichever of these names it.
+const presentationById = protectDocumentPresentations((req) => req.params.id);
+const presentationAmongIds = protectDocumentPresentations((req) => req.body?.assetIds);
 
 const router = express.Router();
 
@@ -103,12 +111,21 @@ router.get('/', optionalAuth, async (req, res) => {
     const { category, character_name, entity_type: entityTypeFilter, location_name, include_global, search } = req.query;
     const { Op } = require('sequelize');
 
-    const where = {};
+    let where = {};
     if (approval_status) {
       where.approval_status = approval_status;
     }
     if (asset_type) {
       where.asset_type = asset_type;
+    }
+    // Document presentations are left out of this list (every picker reads
+    // it) unless they are asked for by their type, and then only by someone
+    // signed in: this route is otherwise open.
+    if (isDocumentPresentationType(asset_type)) {
+      if (!req.user) return res.status(401).json({ error: 'Authentication required', message: 'Sign in to list document presentations.' });
+      where.asset_type = asset_type.trim().toUpperCase();
+    } else {
+      where = exceptDocumentPresentations(where);
     }
     // When show_id is provided, also include GLOBAL assets (available everywhere)
     if (show_id) {
@@ -288,10 +305,10 @@ router.get('/eligible', optionalAuth, async (req, res) => {
 
     // Combine role/approval with scope conditions
     const { Op } = require('sequelize');
-    const finalWhere = {
+    const finalWhere = exceptDocumentPresentations({
       ...where,
       [Op.or]: scopeConditions,
-    };
+    });
 
     const assets = await models.Asset.findAll({
       where: finalWhere,
@@ -399,10 +416,10 @@ router.get('/by-folder', optionalAuth, async (req, res) => {
 
     console.log('🔍 Scope conditions:', JSON.stringify(scopeConditions, null, 2));
 
-    const finalWhere = {
+    const finalWhere = exceptDocumentPresentations({
       ...where,
       [Op.or]: scopeConditions,
-    };
+    });
 
     console.log('🔍 Final where clause:', JSON.stringify(finalWhere, null, 2));
 
@@ -574,7 +591,7 @@ router.post('/labels', requireAuth, async (req, res) => {
  * POST /api/v1/assets/bulk/delete
  * Bulk delete assets
  */
-router.post('/bulk/delete', requireAuth, async (req, res) => {
+router.post('/bulk/delete', requireAuth, presentationAmongIds, async (req, res) => {
   try {
     const { assetIds } = req.body;
 
@@ -606,7 +623,7 @@ router.post('/bulk/delete', requireAuth, async (req, res) => {
  * Bulk background removal
  */
 // The four processing routes in this file are an ADMIN's (Evoni, 2026-11-16): paid background removal.
-router.post('/bulk/process-background', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.post('/bulk/process-background', requireAuth, authorize(['ADMIN']), presentationAmongIds, async (req, res) => {
   try {
     const { assetIds } = req.body;
 
@@ -637,7 +654,7 @@ router.post('/bulk/process-background', requireAuth, authorize(['ADMIN']), async
  * POST /api/v1/assets/bulk/add-labels
  * Bulk add labels to assets
  */
-router.post('/bulk/add-labels', requireAuth, async (req, res) => {
+router.post('/bulk/add-labels', requireAuth, presentationAmongIds, async (req, res) => {
   try {
     const { assetIds, labelIds } = req.body;
 
@@ -675,7 +692,7 @@ router.post('/bulk/add-labels', requireAuth, async (req, res) => {
  * POST /api/v1/assets/bulk/change-type
  * Bulk change asset type
  */
-router.post('/bulk/change-type', requireAuth, async (req, res) => {
+router.post('/bulk/change-type', requireAuth, refuseDocumentPresentationType((req) => req.body?.assetType), presentationAmongIds, async (req, res) => {
   try {
     const { assetIds, assetType } = req.body;
 
@@ -935,7 +952,7 @@ router.post('/', requireAuth, authorize(['ADMIN']), upload.single('file'), valid
  * PUT /api/v1/assets/:id/approve
  * Approve asset (admin only)
  */
-router.put('/:id/approve', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.put('/:id/approve', requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await AssetService.approveAsset(id, req.user?.id);
@@ -967,7 +984,7 @@ router.put('/:id/approve', requireAuth, authorize(['ADMIN']), async (req, res) =
  * PUT /api/v1/assets/:id/reject
  * Reject asset (admin only)
  */
-router.put('/:id/reject', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.put('/:id/reject', requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -1001,7 +1018,7 @@ router.put('/:id/reject', requireAuth, authorize(['ADMIN']), async (req, res) =>
  * PUT /api/v1/assets/:id/process
  * Process asset background removal
  */
-router.put('/:id/process', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.put('/:id/process', requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1036,7 +1053,7 @@ router.put('/:id/process', requireAuth, authorize(['ADMIN']), async (req, res) =
  * POST /api/v1/assets/:id/process-background
  * On-demand background removal
  */
-router.post('/:id/process-background', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.post('/:id/process-background', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await AssetService.processAssetBackgroundRemoval(id);
@@ -1060,7 +1077,7 @@ router.post('/:id/process-background', validateUUIDParam('id'), requireAuth, aut
  * PUT /api/v1/assets/:id
  * Update asset metadata
  */
-router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.put('/:id', validateUUIDParam('id'), requireAuth, refuseDocumentPresentationType((req) => req.body?.asset_type), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -1085,7 +1102,7 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
  * DELETE /api/v1/assets/:id
  * Delete asset
  */
-router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.delete('/:id', validateUUIDParam('id'), requireAuth, presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     await AssetService.bulkDeleteAssets([id]);
@@ -1107,7 +1124,7 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => 
  * POST /api/v1/assets/:id/labels
  * Add labels to asset
  */
-router.post('/:id/labels', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/labels', validateUUIDParam('id'), requireAuth, presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const { labelIds } = req.body;
@@ -1139,7 +1156,7 @@ router.post('/:id/labels', validateUUIDParam('id'), requireAuth, async (req, res
  * DELETE /api/v1/assets/:id/labels/:labelId
  * Remove label from asset
  */
-router.delete('/:id/labels/:labelId', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.delete('/:id/labels/:labelId', validateUUIDParam('id'), requireAuth, presentationById, async (req, res) => {
   try {
     const { id, labelId } = req.params;
     const asset = await AssetService.removeLabelFromAsset(id, labelId);
@@ -1222,7 +1239,7 @@ router.get('/:id/download/:type', optionalAuth, validateUUIDParam('id'), async (
  * Process an asset with transformations (background removal, enhancement, etc.)
  * Body: { asset_id, template_id, processing: { removeBackground, smoothSkin, autoEnhance }, provider }
  */
-router.post('/process', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.post('/process', requireAuth, authorize(['ADMIN']), protectDocumentPresentations((req) => req.body?.asset_id), async (req, res) => {
   try {
     const { asset_id, template_id, processing = {}, provider = 'runway' } = req.body;
 
