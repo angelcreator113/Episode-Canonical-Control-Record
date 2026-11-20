@@ -62,6 +62,26 @@ describe('the asset API: every route that changes something', () => {
     expect(typed.sort()).toEqual(['POST /bulk/change-type', 'PUT /:id']);
   });
 
+  test('the four bulk routes check the list is a list of id strings, after the sign-in check and before the rule', () => {
+    const bulk = all.filter((r) => r.path.startsWith('/bulk/'));
+    expect(bulk.map((r) => r.path).sort()).toEqual(['/bulk/add-labels', '/bulk/change-type', '/bulk/delete', '/bulk/process-background']);
+    for (const route of bulk) {
+      const shape = route.middleware.search(/assetIdList/);
+      expect(shape).toBeGreaterThan(route.middleware.search(/requireAuth/));
+      expect(route.middleware.search(/presentationAmongIds/)).toBeGreaterThan(shape);
+    }
+  });
+
+  test('the reads of one asset by its id hide a presentation from anyone but an admin', () => {
+    const source = read('src/routes/assets.js');
+    for (const path of ["'/:id'", "'/:id/usage'", "'/:id/download/:type'"]) {
+      const at = source.indexOf(`router.get(${path}, optionalAuth, validateUUIDParam('id'),`);
+      expect(at).toBeGreaterThan(0);
+      expect(source.slice(at, at + 400)).toMatch(/presentationHidden\(/);
+    }
+    expect(read('src/routes/imageProcessing.js')).toMatch(/router\.get\('\/:id\/processing-status', requireAuth,\s*\/\/[^\n]*\n\s*hideDocumentPresentations\(/);
+  });
+
   test('the rule comes after the sign-in check, so who may call each is as it was', () => {
     for (const route of all.filter((r) => RULE.test(r.middleware))) {
       const auth = route.middleware.search(/requireAuth/);
@@ -193,6 +213,52 @@ describe('global search (its request, with the database stood in for)', () => {
   });
 });
 
+describe('the shape of the ids a request sends (middleware/requestValidation)', () => {
+  const { validateBodyAssetIds, validateBodyAssetId, validateBodyAssetIdItems } = require('../../../src/middleware/requestValidation');
+  const ID = '22222222-2222-4222-8222-222222222222';
+  const run = (middleware, body) => {
+    const res = { statusCode: null, body: null };
+    res.status = (code) => { res.statusCode = code; return res; };
+    res.json = (payload) => { res.body = payload; return res; };
+    const next = jest.fn();
+    middleware({ body }, res, next);
+    return { res, next };
+  };
+
+  test('a list of ids: a non-empty list of id strings, in any spelling PostgreSQL reads', () => {
+    const list = validateBodyAssetIds('assetIds');
+    for (const ok of [[ID], [ID, ID.toUpperCase(), ID.replace(/-/g, ''), `{${ID}}`]]) expect(run(list, { assetIds: ok }).next).toHaveBeenCalledTimes(1);
+    for (const bad of [undefined, null, [], ID, { 0: ID }, [[ID]], [ID, [ID]], [{ id: ID }], [7], [null], ['words'], [ID, '']]) {
+      const { res, next } = run(list, { assetIds: bad });
+      expect(next).not.toHaveBeenCalled();
+      expect([res.statusCode, res.body.error]).toEqual([400, 'Validation failed']);
+    }
+    expect(run(list, undefined).res.statusCode).toBe(400);
+    // The message a missing list has always had.
+    expect(run(list, {}).res.body.message).toBe('assetIds array is required');
+  });
+
+  test('one id: one id string when it is sent; when it is not, the handler says so as before', () => {
+    const one = validateBodyAssetId('assetId');
+    for (const ok of [{ assetId: ID }, {}, { assetId: null }, { assetId: '' }, undefined]) expect(run(one, ok).next).toHaveBeenCalledTimes(1);
+    for (const bad of [[ID], [[ID]], { id: ID }, 7, true, 'words']) {
+      const { res, next } = run(one, { assetId: bad });
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(400);
+    }
+  });
+
+  test('a list of objects each naming one id', () => {
+    const items = validateBodyAssetIdItems('assignments', 'assetId');
+    for (const ok of [{ assignments: [{ assetId: ID, roleKey: 'x' }] }, { assignments: 'not a list' }, {}]) expect(run(items, ok).next).toHaveBeenCalledTimes(1);
+    for (const bad of [[{ assetId: [ID] }], [{ assetId: { id: ID } }], [[{ assetId: ID }]], [null], [{ roleKey: 'x' }], [ID]]) {
+      const { res, next } = run(items, { assignments: bad });
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(400);
+    }
+  });
+});
+
 describe("the rule's middleware", () => {
   const PRESENTATION = '11111111-1111-4111-8111-111111111111';
   const ORDINARY = '22222222-2222-4222-8222-222222222222';
@@ -228,6 +294,54 @@ describe("the rule's middleware", () => {
       expect(next).not.toHaveBeenCalled();
       expect([res.statusCode, res.body]).toEqual([409, { success: false, error: rule.MANAGED_MESSAGE, code: rule.MANAGED_CODE }]);
     }
+  });
+
+  test('an id is found wherever it is in what the request names: lists in lists, objects, any spelling', async () => {
+    for (const ids of [[[PRESENTATION]], [ORDINARY, [[PRESENTATION]]], [{ id: PRESENTATION }], { a: { b: [`{${PRESENTATION.toUpperCase()}}`] } }]) {
+      const { res, next } = await call(rule.protectDocumentPresentations((req) => req.body.assetIds), { body: { assetIds: ids } });
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(409);
+    }
+    expect(rule.assetIdsIn([[ORDINARY], { x: [PRESENTATION, PRESENTATION.toUpperCase()] }, 7, null]).sort()).toEqual([PRESENTATION, ORDINARY].sort());
+  });
+
+  test('a value too deep or too large to look through is refused (400), never passed as "no asset named"', async () => {
+    const deep = (value, levels) => (levels ? [deep(value, levels - 1)] : value);
+    expect(() => rule.assetIdsIn(deep(PRESENTATION, rule.INSPECT_MAX_DEPTH))).not.toThrow();
+    expect(() => rule.assetIdsIn(deep(PRESENTATION, rule.INSPECT_MAX_DEPTH + 1))).toThrow(rule.UninspectableAssetIdsError);
+    expect(() => rule.assetIdsIn(Array.from({ length: rule.INSPECT_MAX_VALUES }, () => 'x'))).toThrow(rule.UninspectableAssetIdsError);
+    for (const ids of [deep(PRESENTATION, 20), Array.from({ length: rule.INSPECT_MAX_VALUES + 5 }, () => ORDINARY)]) {
+      const { res, next } = await call(rule.protectDocumentPresentations((req) => req.body.assetIds), { body: { assetIds: ids } });
+      expect(next).not.toHaveBeenCalled();
+      expect([res.statusCode, res.body.error]).toEqual([400, 'Validation failed']);
+    }
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  test('reading: an ADMIN goes on to the route; anyone else asking for a presentation is answered as the route answers for no asset', async () => {
+    const asIfMissing = jest.fn((req, res) => res.status(404).json({ error: 'Asset not found' }));
+    const hide = rule.hideDocumentPresentations((req) => req.params.id, asIfMissing);
+    const admin = { id: 'a', groups: ['ADMIN'] };
+    const editor = { id: 'e', groups: ['USER', 'EDITOR'] };
+    expect((await call(hide, { params: { id: PRESENTATION }, user: admin })).next).toHaveBeenCalledTimes(1);
+    expect((await call(hide, { params: { id: PRESENTATION }, user: { id: 'a', groups: ['admin'] } })).next).toHaveBeenCalledTimes(1);
+    for (const user of [editor, null, undefined, { id: 'x' }, { id: 'x', groups: 'ADMIN' }]) {
+      const { res, next } = await call(hide, { params: { id: PRESENTATION }, user });
+      expect(next).not.toHaveBeenCalled();
+      expect([res.statusCode, res.body]).toEqual([404, { error: 'Asset not found' }]);
+      expect((await call(hide, { params: { id: ORDINARY }, user })).next).toHaveBeenCalledTimes(1);
+    }
+    // An admin's read asks the database nothing extra.
+    query.mockClear();
+    await call(hide, { params: { id: PRESENTATION }, user: admin });
+    expect(query).not.toHaveBeenCalled();
+    // When it cannot be checked, nothing is returned.
+    query.mockRejectedValue(new Error('down'));
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const failed = await call(hide, { params: { id: ORDINARY }, user: editor });
+    logged.mockRestore();
+    expect(failed.next).not.toHaveBeenCalled();
+    expect(failed.res.statusCode).toBe(500);
   });
 
   test('a request that names no asset id asks nothing and goes on (the handler says what is missing, as before)', async () => {

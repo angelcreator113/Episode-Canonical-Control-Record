@@ -12,7 +12,11 @@ describe('CP12 — imageProcessing.js G6-EXTENDED closure', () => {
     for (const path of ['remove-background', 'enhance', 'reset-processing']) {
       expect(SRC).toMatch(new RegExp(`router\\.post\\('/:id/${path}', requireAuth, authorize\\(\\['ADMIN'\\]\\), `));
     }
-    expect(SRC).toMatch(/router\.get\('\/:id\/processing-status', requireAuth, async/);
+    // Still requireAuth alone as its sign-in tier (no authorize); after it
+    // comes only the document-presentation rule (V2-2a-1, 2026-11-20).
+    const status = SRC.slice(SRC.indexOf("router.get('/:id/processing-status'"), SRC.indexOf("router.get('/:id/processing-status'") + 400);
+    expect(status).toMatch(/^router\.get\('\/:id\/processing-status', requireAuth,\s*(\/\/[^\n]*\n\s*)?hideDocumentPresentations\(/);
+    expect(status.slice(0, status.indexOf('async (req, res)'))).not.toMatch(/authorize\(/);
   });
   test('§5.41 G6-EXTENDED: authenticate alias absent', () => {
     expect(SRC).not.toMatch(/[^A-Za-z]authenticate[^A-Za-z]/);

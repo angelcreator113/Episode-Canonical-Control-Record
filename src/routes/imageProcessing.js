@@ -17,7 +17,7 @@ const { models } = require('../models');
 const { isBudgetError } = require('../services/imageCostService');
 const s3Service = require('../services/S3Service');
 const { requireAuth, authorize } = require('../middleware/auth');
-const { protectDocumentPresentations } = require('../utils/documentPresentationAssets');
+const { protectDocumentPresentations, hideDocumentPresentations } = require('../utils/documentPresentationAssets');
 
 // A document presentation is kept by its document; it is not processed here (V2-2a).
 const presentationById = protectDocumentPresentations((req) => req.params.id);
@@ -376,7 +376,9 @@ router.post('/:id/enhance', requireAuth, authorize(['ADMIN']), presentationById,
  *
  * @returns {Object} { status, data: { asset_id, processing_status, has_bg_removed, has_enhanced, metadata } }
  */
-router.get('/:id/processing-status', requireAuth, async (req, res) => {
+router.get('/:id/processing-status', requireAuth,
+  // An ADMIN's to read; anyone else is answered as for an id that is no asset.
+  hideDocumentPresentations((req) => req.params.id, (req, res) => res.status(404).json({ status: 'ERROR', message: 'Asset not found' })), async (req, res) => {
   try {
     const { id } = req.params;
 

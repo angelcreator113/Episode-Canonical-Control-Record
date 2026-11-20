@@ -315,6 +315,7 @@ router.post('/world/:showId/events/:eventId/approve-overlay', requireAuth, async
 
 // POST /world/:showId/events/:eventId/reject-overlay
 router.post('/world/:showId/events/:eventId/reject-overlay', requireAuth,
+  require('../../middleware/requestValidation').validateBodyAssetId('assetId'),
   require('../../utils/documentPresentationAssets').protectDocumentPresentations((req) => req.body?.assetId), async (req, res) => {
   try {
     const { assetId } = req.body;

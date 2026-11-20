@@ -54,6 +54,15 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const token = (id, groups, role) => TokenService.generateTokenPair({ id, email: `${id}@guards.dev`, name: id, groups, role }).accessToken;
     tokens.admin = token('test-admin-presentation', ['USER', 'ADMIN'], 'ADMIN');
     tokens.editor = token('test-editor-presentation', ['USER', 'EDITOR'], 'USER');
+    // The open routes read a caller's groups from the claim a production
+    // token carries them in (cognito:groups); the test token service writes
+    // `groups` only, which those routes do not read. These two are signed
+    // the same way with the claim as production sends it.
+    const cognito = (id, groups) => require('jsonwebtoken').sign(
+      { jti: crypto.randomBytes(16).toString('hex'), sub: id, email: `${id}@guards.dev`, name: id, 'cognito:groups': groups, groups, type: 'access' },
+      process.env.JWT_SECRET, { expiresIn: '1h', algorithm: 'HS256' });
+    tokens.cognitoAdmin = cognito('test-cognito-admin', ['ADMIN']);
+    tokens.cognitoEditor = cognito('test-cognito-editor', ['EDITOR']);
     await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())', { show, name: `Guards ${show.slice(0, 8)}`, slug: `guards-${show.slice(0, 8)}` });
     await insertAsset(presentation, DOCUMENT_PRESENTATION, NAME, { role: 'DOCUMENT.PRESENTATION.OFFER_LETTER', metadata: { document_presentation: { presentation: 'reading', panel_index: 1 } } });
     await insertAsset(ordinary, 'PROMO_LALA', `Guards ordinary ${show.slice(0, 8)}`);
@@ -157,30 +166,102 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect(listed(res).sort()).toEqual([ordinary, ordinary2].sort());
     });
 
-    it('asked for by its type: only someone signed in is given them', async () => {
+    it('asked for by its type: only an admin is given them', async () => {
       const open = await request(app).get('/api/v1/assets').query({ show_id: show, asset_type: DOCUMENT_PRESENTATION });
       expect(open.status).toBe(401);
+      for (const who of ['editor', 'cognitoEditor']) {
+        const editor = await as(who, request(app).get('/api/v1/assets')).query({ show_id: show, asset_type: 'document_presentation' });
+        expect(editor.status).toBe(403);
+        expect(JSON.stringify(editor.body)).not.toContain(presentation);
+      }
       for (const type of [DOCUMENT_PRESENTATION, 'document_presentation']) {
-        const res = await as('editor', request(app).get('/api/v1/assets')).query({ show_id: show, asset_type: type });
+        const res = await as('cognitoAdmin', request(app).get('/api/v1/assets')).query({ show_id: show, asset_type: type });
         expect(res.status).toBe(200);
         expect(listed(res)).toEqual([presentation]);
       }
     });
 
-    it('the asset search finds it only when asked for by its type', async () => {
-      const found = async (filters) => {
-        const res = await as('editor', request(app).post('/api/v1/assets/search')).send({ approvalStatus: 'approved', query: 'Guards', ...filters });
+    it('the asset search finds it only when an admin asks for it by its type', async () => {
+      const search = (who, filters) => as(who, request(app).post('/api/v1/assets/search')).send({ approvalStatus: 'approved', query: 'Guards', ...filters });
+      for (const who of ['editor', 'admin']) {
+        const res = await search(who, {});
         expect(res.status).toBe(200);
-        return res.body.data.map((a) => a.id);
-      };
-      expect(await found({})).toEqual(expect.arrayContaining([ordinary, ordinary2]));
-      expect(await found({})).not.toContain(presentation);
-      expect(await found({ assetType: DOCUMENT_PRESENTATION })).toEqual([presentation]);
+        expect(res.body.data.map((a) => a.id)).toEqual(expect.arrayContaining([ordinary, ordinary2]));
+        expect(res.body.data.map((a) => a.id)).not.toContain(presentation);
+      }
+      const editor = await search('editor', { assetType: DOCUMENT_PRESENTATION });
+      expect(editor.status).toBe(403);
+      const admin = await search('admin', { assetType: DOCUMENT_PRESENTATION });
+      expect(admin.body.data.map((a) => a.id)).toEqual([presentation]);
     });
 
-    it('it can still be read by its id', async () => {
-      const res = await request(app).get(`/api/v1/assets/${presentation}`);
+    it('the pending list leaves it out even when it is pending', async () => {
+      await run(`UPDATE assets SET approval_status = 'PENDING' WHERE id IN (:ids)`, { ids: [presentation, ordinary] });
+      const res = await request(app).get('/api/v1/assets/pending');
+      const ids = (res.body.data || []).map((a) => a.id);
+      await run(`UPDATE assets SET approval_status = 'approved' WHERE id IN (:ids)`, { ids: [presentation, ordinary] });
       expect(res.status).toBe(200);
+      expect(ids).toContain(ordinary);
+      expect(ids).not.toContain(presentation);
+    });
+  });
+
+  describe('reading one by its id', () => {
+    // [name, the request for an id]. Each is compared with the same request
+    // for an id that is no asset at all: the two answers must be the same.
+    const READS = [
+      ['GET /assets/:id', (id) => request(app).get(`/api/v1/assets/${id}`)],
+      ['GET /assets/:id/usage', (id) => request(app).get(`/api/v1/assets/${id}/usage`)],
+      ['GET /assets/:id/download/raw', (id) => request(app).get(`/api/v1/assets/${id}/download/raw`)],
+      ['GET /assets/:id/download/processed', (id) => request(app).get(`/api/v1/assets/${id}/download/processed`)],
+      ['GET /assets/:id/download/other', (id) => request(app).get(`/api/v1/assets/${id}/download/other`)],
+    ];
+    const withoutId = (res, id) => [res.status, JSON.parse(JSON.stringify(res.body).split(id).join('<id>'))];
+
+    it.each(READS)('%s: someone not signed in, or not an admin, is answered exactly as for an id that is no asset', async (_name, read) => {
+      const nobody = uuid();
+      for (const who of [null, 'editor', 'cognitoEditor']) {
+        const ask = (id) => (who ? as(who, read(id)) : read(id));
+        const hidden = await ask(presentation);
+        const missing = await ask(nobody);
+        if (_name.endsWith('/usage') && missing.status !== 200) {
+          // On a migrations-built database the usage read itself fails for
+          // every id (episode_assets has another shape there, issue 3891);
+          // where it works, an id that is no asset has no usages.
+          expect([hidden.status, hidden.body]).toEqual([200, { status: 'SUCCESS', data: [], count: 0 }]);
+        } else {
+          expect(withoutId(hidden, presentation)).toEqual(withoutId(missing, nobody));
+        }
+        expect(JSON.stringify(hidden.body)).not.toContain(NAME);
+        expect(JSON.stringify(hidden.body)).not.toContain(`${presentation}.png`);
+      }
+    });
+
+    it('the processing status too (a signed-in route)', async () => {
+      const nobody = uuid();
+      const hidden = await as('editor', request(app).get(`/api/v1/assets/${presentation}/processing-status`));
+      const missing = await as('editor', request(app).get(`/api/v1/assets/${nobody}/processing-status`));
+      expect([hidden.status, hidden.body]).toEqual([missing.status, missing.body]);
+      expect(hidden.status).toBe(404);
+      expect((await as('admin', request(app).get(`/api/v1/assets/${presentation}/processing-status`))).status).toBe(200);
+    });
+
+    it('an admin reads it', async () => {
+      const res = await as('cognitoAdmin', request(app).get(`/api/v1/assets/${presentation}`));
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({ id: presentation, asset_type: DOCUMENT_PRESENTATION, name: NAME });
+      // Past the rule, to the route's own read (which fails for every id on
+      // a migrations-built database, issue 3891): not the hidden answer.
+      const usage = await as('cognitoAdmin', request(app).get(`/api/v1/assets/${presentation}/usage`));
+      const ordinaryUsage = await request(app).get(`/api/v1/assets/${ordinary}/usage`);
+      expect(usage.status).toBe(ordinaryUsage.status);
+    });
+
+    it('an ordinary asset is read by anyone, as before', async () => {
+      const res = await request(app).get(`/api/v1/assets/${ordinary}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toBe(ordinary);
+      expect((await as('editor', request(app).get(`/api/v1/assets/${ordinary}/processing-status`))).status).toBe(200);
     });
   });
 

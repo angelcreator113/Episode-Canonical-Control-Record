@@ -230,6 +230,20 @@ describe('a document presentation is refused by every generic operation that att
       expect(state.writes).toEqual([]);
     });
 
+    // An id inside a list or an object where one id belongs (found in the
+    // review of V2-2a-1): the database layer reads some such shapes as the
+    // asset, so the rule looks inside them.
+    test.each([
+      ['in a list', (id) => [id]],
+      ['in a list in a list', (id) => [[id]]],
+      ['in an object', (id) => ({ id })],
+      ['deep, and spelled another way', (id) => [{ any: [[`{${id.toUpperCase()}}`]] }]],
+    ])('its id %s is not attached, and nothing is written', async (_how, wrap) => {
+      const res = await run(send([wrap(PRESENTATION)]));
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(state.writes).toEqual([]);
+    });
+
     test('an ordinary asset whose id is written another way is not refused by the rule', async () => {
       for (const spell of Object.values(SPELLINGS)) {
         const res = await run(send([spell(ORDINARY)]));
@@ -291,7 +305,9 @@ describe('what the rule reads as an asset id', () => {
   });
 
   test('strings shaped like a UUID, once each, whatever their case or the space around them; nothing else', () => {
-    expect(assetIdsIn([PRESENTATION, ` ${PRESENTATION.toUpperCase()} `, 'Words, not an id', '', null, undefined, 7, { id: ORDINARY }])).toEqual([PRESENTATION]);
+    expect(assetIdsIn([PRESENTATION, ` ${PRESENTATION.toUpperCase()} `, 'Words, not an id', '', null, undefined, 7])).toEqual([PRESENTATION]);
+    // An id inside an object or a list is an id too (V2-2a-1): the rule looks inside.
+    expect(assetIdsIn([PRESENTATION, { id: ORDINARY }, [[ORDINARY_2]]]).sort()).toEqual([PRESENTATION, ORDINARY, ORDINARY_2].sort());
     expect(assetIdsIn(ORDINARY)).toEqual([ORDINARY]);
     expect(assetIdsIn(undefined)).toEqual([]);
   });

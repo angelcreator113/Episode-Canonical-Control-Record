@@ -650,9 +650,9 @@ class AssetService {
   async getPendingAssets() {
     try {
       const assets = await Asset.findAll({
-        where: {
+        where: require('../utils/documentPresentationAssets').exceptDocumentPresentations({
           approval_status: 'PENDING',
-        },
+        }),
         order: [['created_at', 'ASC']],
         paranoid: true, // Exclude soft-deleted assets
         raw: true,
