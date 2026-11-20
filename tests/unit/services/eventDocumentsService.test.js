@@ -3,6 +3,7 @@
  * beside the invitation (Evoni, 2026-10-06): Draft, Edit, Redraft, Approve,
  * stored in the event's canon_consequences.documents.
  */
+jest.mock('../../../src/middleware/auditLog', () => ({ logger: { logActionInTransaction: jest.fn(async () => ({})) } }));
 jest.mock('../../../src/services/todoListService', () => ({
   generateTasks: jest.fn(),
   generateCareerTasks: jest.fn(),
@@ -97,7 +98,7 @@ describe('eventDocumentsService', () => {
     expect(edited.history.map((h) => h.version)).toEqual([1]);
     expect(edited.history[0].history).toBeUndefined();
 
-    const approved = await svc.approveDocument(models, { ...ids, type: 'shopping_list' });
+    const approved = await svc.approveDocument(models, { ...ids, type: 'shopping_list', actor: { id: 'admin-1' } });
     expect(approved).toMatchObject({ status: 'approved', version: 2 });
     expect(approved.approved_at).toEqual(expect.any(String));
 
@@ -113,13 +114,13 @@ describe('eventDocumentsService', () => {
 
     // The client last read version 1; version 2 (the edit) is stored now.
     const writesBefore = models.sequelize.query.mock.calls.filter(([sql]) => /^UPDATE/.test(sql.trim())).length;
-    await expect(svc.approveDocument(models, { ...ids, type: 'shopping_list', version: 1 })).rejects.toMatchObject({ status: 409 });
+    await expect(svc.approveDocument(models, { ...ids, type: 'shopping_list', version: 1, actor: { id: 'admin-1' } })).rejects.toMatchObject({ status: 409 });
     expect(models.sequelize.query.mock.calls.filter(([sql]) => /^UPDATE/.test(sql.trim()))).toHaveLength(writesBefore);
     expect(row.canon_consequences.documents.shopping_list).toMatchObject({ version: 2, status: 'draft' });
 
     // Without a version it approves what is stored at that moment: the edit,
     // read FOR UPDATE inside the transaction.
-    const approved = await svc.approveDocument(models, { ...ids, type: 'shopping_list' });
+    const approved = await svc.approveDocument(models, { ...ids, type: 'shopping_list', actor: { id: 'admin-1' } });
     expect(approved).toMatchObject({ version: 2, status: 'approved' });
     expect(approved.items.map((i) => i.label)).toEqual(['Gold heels']);
     const lockRead = models.sequelize.query.mock.calls.find(([sql, opts]) => /FOR UPDATE$/.test(sql) && opts.transaction);
@@ -127,10 +128,20 @@ describe('eventDocumentsService', () => {
     expect(models.sequelize.transaction).toHaveBeenCalled();
   });
 
+  test('an approval is not written without the admin who is approving (V2-1, 2026-11-19)', async () => {
+    const { models, row } = fakeModels(EVENT);
+    await svc.draftDocument(models, { ...ids, type: 'shopping_list' });
+    for (const actor of [undefined, null, {}, { id: null }]) {
+      await expect(svc.approveDocument(models, { ...ids, type: 'shopping_list', actor })).rejects.toMatchObject({ status: 403 });
+    }
+    expect(row.canon_consequences.documents.shopping_list).toMatchObject({ version: 1, status: 'draft' });
+    expect(row.canon_consequences.documents.shopping_list.approved_by).toBeUndefined();
+  });
+
   test('a version that is not a whole number is a 400', async () => {
     const { models } = fakeModels(EVENT);
     await svc.draftDocument(models, { ...ids, type: 'shopping_list' });
-    await expect(svc.approveDocument(models, { ...ids, type: 'shopping_list', version: 'latest' })).rejects.toMatchObject({ status: 400 });
+    await expect(svc.approveDocument(models, { ...ids, type: 'shopping_list', version: 'latest', actor: { id: 'admin-1' } })).rejects.toMatchObject({ status: 400 });
   });
 
   test('history keeps the last ten versions', () => {
@@ -145,7 +156,7 @@ describe('eventDocumentsService', () => {
     const { models } = fakeModels(EVENT);
     await expect(svc.draftDocument(models, { ...ids, type: 'invoice' })).rejects.toMatchObject({ status: 400 });
     await expect(svc.editDocument(models, { ...ids, type: 'shopping_list', items: [{ label: 'x' }] })).rejects.toMatchObject({ status: 404 });
-    await expect(svc.approveDocument(models, { ...ids, type: 'shopping_list' })).rejects.toMatchObject({ status: 404 });
+    await expect(svc.approveDocument(models, { ...ids, type: 'shopping_list', actor: { id: 'admin-1' } })).rejects.toMatchObject({ status: 404 });
     await svc.draftDocument(models, { ...ids, type: 'shopping_list' });
     await expect(svc.editDocument(models, { ...ids, type: 'shopping_list', items: [{ label: ' ' }] })).rejects.toMatchObject({ status: 400 });
     await expect(svc.editDocument(models, { ...ids, type: 'shopping_list', items: 'nope' })).rejects.toMatchObject({ status: 400 });

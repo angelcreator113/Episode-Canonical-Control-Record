@@ -800,7 +800,8 @@ describe('reopen eligibility, pure', () => {
       }
       const complete = (f) => asAdmin(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
       const finalize = (f) => asAdmin(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/finalize-financials`)).send({});
-      const startUpload = (f) => auth(request(app).post(`/api/v1/episode-clips/${f.episode}/uploads`))
+      // Evoni, 2026-11-16: footage is uploaded by an ADMIN (footageAdminOnly.integration.test.js has the refusals).
+      const startUpload = (f) => asAdmin(request(app).post(`/api/v1/episode-clips/${f.episode}/uploads`))
         .send({ performer: 'lala', filename: 'take.mp4', content_type: 'video/mp4', size: 1024 });
 
       test.each([['off', off], ['on', on]])('switch %s: completion is refused 409 UNSUPPORTED_SECONDARY_OBLIGATIONS and books nothing', async (_n, set) => {
@@ -836,7 +837,7 @@ describe('reopen eligibility, pure', () => {
         const clips = require('../../src/services/rawClipsService');
         await expect(sequelize.transaction((transaction) => clips.assertFirstTakeAllowed(sequelize, f.episode, { transaction })))
           .rejects.toMatchObject({ status: 409, code: 'UNSUPPORTED_SECONDARY_OBLIGATIONS' });
-        const res = await auth(request(app).post(`/api/v1/episode-clips/${f.episode}`)).field('performer', 'lala');
+        const res = await asAdmin(request(app).post(`/api/v1/episode-clips/${f.episode}`)).field('performer', 'lala');
         expect(res.status).toBe(409);
         expect(res.body.code).toBe('UNSUPPORTED_SECONDARY_OBLIGATIONS');
         expect(await rows('SELECT id FROM episode_raw_clips WHERE episode_id = :episode', f)).toEqual([]);
@@ -960,7 +961,7 @@ describe('reopen eligibility, pure', () => {
         const res = await asAdmin(request(app).post(`/api/v1/world/${f.show}/episodes/${f.episode}/complete`)).send({});
         expect(res.status).toBe(409);
         expect(res.body).toMatchObject({ code: 'EPISODE_EVENT_LINK_INCONSISTENT', events: [{ id: f.second, name: 'Charity Gala', obligations: [] }] });
-        const take = await auth(request(app).post(`/api/v1/episode-clips/${f.episode}/uploads`)).send({ performer: 'lala', filename: 'take.mp4', content_type: 'video/mp4', size: 1024 });
+        const take = await asAdmin(request(app).post(`/api/v1/episode-clips/${f.episode}/uploads`)).send({ performer: 'lala', filename: 'take.mp4', content_type: 'video/mp4', size: 1024 });
         expect(take.status).toBe(409);
         expect(take.body.code).toBe('EPISODE_EVENT_LINK_INCONSISTENT');
         // Repaired (the other event removed, the source event linked again), it is no longer refused for this.

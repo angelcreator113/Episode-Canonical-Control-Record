@@ -11,7 +11,7 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 
 describe('Step 3 CP8 — mirrorFieldRoutes.js router.use migration', () => {
   test('imports requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
     expect(SRC).toMatch(/const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/);
   });
 
@@ -27,8 +27,9 @@ describe('Step 3 CP8 — mirrorFieldRoutes.js router.use migration', () => {
     expect(SRC).toMatch(/router\.post\('\/:id\/mirror\/confirm',\s*async/);
   });
 
-  test('GET /mirror/self-portrait inherits auth, no inline middleware', () => {
-    expect(SRC).toMatch(/router\.get\('\/mirror\/self-portrait',\s*async/);
+  // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+  test('GET /mirror/self-portrait inherits auth and is ADMIN only', () => {
+    expect(SRC).toMatch(/router\.get\('\/mirror\/self-portrait',\s*authorize\(\['ADMIN'\]\),\s*async/);
   });
 
   test('no optionalAuth references remain', () => {

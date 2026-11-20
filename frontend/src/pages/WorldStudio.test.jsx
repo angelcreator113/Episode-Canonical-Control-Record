@@ -10,7 +10,8 @@
  *   - 14 canonical mutations (POST/PUT/DELETE) → apiClient
  *   - 1 Tier 3 site (POST /world/generate-ecosystem-preview) → apiClient
  *     (D2 lock: ensures req.user?.id ownership tagging works when authed)
- *   - 7 Tier 4 GET sites stay raw fetch (Pattern E equivalents)
+ *   - 7 GET sites were raw fetch while their backend reads were Tier 4 PUBLIC; since 2026-11-16 those reads
+ *     are an ADMIN's (Evoni), so the 7 go through apiClient, which sends the session's token
  *   - 3 path-bug sites SKIPPED per D1 lock (filed as PE-9 in v2.27 §9.12)
  *   - 4 character-depth sites OUT OF SCOPE per D3 lock (different backend cluster)
  *
@@ -79,9 +80,9 @@ describe('WorldStudio — Track 7 mini-CP structural assertions (CP3 regression 
       expect(matches.length).toBe(17);
     });
 
-    test('exactly 13 fetch() calls remain (7 GET + 4 character-depth + 2 path-bug skipped; seed-cross-batch moved, Task #3119)', () => {
+    test('exactly 6 fetch() calls remain (4 character-depth + 2 path-bug skipped; the 7 world GETs moved to apiClient, 2026-11-16)', () => {
       const matches = WS_SOURCE.match(/\bfetch\(/g) || [];
-      expect(matches.length).toBe(13);
+      expect(matches.length).toBe(6);
     });
 
     test('zero fetch() calls reference /api/v1/world/* mutation paths (all migrated)', () => {
@@ -159,34 +160,28 @@ describe('WorldStudio — Track 7 mini-CP structural assertions (CP3 regression 
     });
   });
 
-  describe('Pattern E equivalents — 7 GET sites stay raw fetch (Tier 4 backend)', () => {
-    test('GET /world/characters (loadCharacters; line ~715) stays raw fetch', () => {
-      // Multiline url-construction → fetch(url) pattern
+  // These seven were raw fetch (no token) while the backend reads were open. The reads are an ADMIN's since
+  // 2026-11-16, so a request without the session's token is refused: each goes through apiClient.
+  describe('the 7 world GET sites send the session token (apiClient), since the reads are an ADMIN\'s', () => {
+    test('GET /world/characters (loadCharacters)', () => {
       expect(WS_SOURCE).toMatch(/`\$\{API\}\/world\/characters\?world_tag=/);
+      expect(WS_SOURCE).toMatch(/await apiClient\.get\(url\)/);
+      expect(WS_SOURCE).not.toMatch(/\bfetch\(url\)/);
     });
 
-    test('GET /world/characters/:id (loadCharDetail) stays raw fetch', () => {
-      expect(WS_SOURCE).toMatch(/fetch\(`\$\{API\}\/world\/characters\/\$\{id\}`\)/);
+    test.each([
+      ['GET /world/characters/:id (loadCharDetail)', /apiClient\.get\(`\$\{API\}\/world\/characters\/\$\{id\}`\)/],
+      ['GET /world/scenes?character_id (loadCharScenes)', /apiClient\.get\(`\$\{API\}\/world\/scenes\?character_id=/],
+      ['GET /world/batches', /apiClient\.get\(`\$\{API\}\/world\/batches`\)/],
+      ['GET /world/previews', /apiClient\.get\(`\$\{API\}\/world\/previews`\)/],
+      ['GET /world/preview/:pid', /apiClient\.get\(`\$\{API\}\/world\/preview\/\$\{pid\}`\)/],
+      ['GET /world/characters/:compareChar (compare loader)', /apiClient\.get\(`\$\{API\}\/world\/characters\/\$\{compareChar\}`\)/],
+    ])('%s', (name, pattern) => {
+      expect(WS_SOURCE).toMatch(pattern);
     });
 
-    test('GET /world/scenes?character_id (loadCharScenes) stays raw fetch', () => {
-      expect(WS_SOURCE).toMatch(/fetch\(`\$\{API\}\/world\/scenes\?character_id=/);
-    });
-
-    test('GET /world/batches stays raw fetch', () => {
-      expect(WS_SOURCE).toMatch(/fetch\(`\$\{API\}\/world\/batches`\)/);
-    });
-
-    test('GET /world/previews stays raw fetch', () => {
-      expect(WS_SOURCE).toMatch(/fetch\(`\$\{API\}\/world\/previews`\)/);
-    });
-
-    test('GET /world/preview/:pid stays raw fetch', () => {
-      expect(WS_SOURCE).toMatch(/fetch\(`\$\{API\}\/world\/preview\/\$\{pid\}`\)/);
-    });
-
-    test('GET /world/characters/:compareChar (compare loader) stays raw fetch', () => {
-      expect(WS_SOURCE).toMatch(/fetch\(`\$\{API\}\/world\/characters\/\$\{compareChar\}`\)/);
+    test('no raw fetch() reads a /world/ path under ${API}', () => {
+      expect(WS_SOURCE).not.toMatch(/\bfetch\(`\$\{API\}\/world\//);
     });
   });
 

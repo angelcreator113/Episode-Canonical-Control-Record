@@ -121,11 +121,12 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     });
     const id = res.body.asset.id;
     expect(tagged(await gallery(ids.sable)).map((i) => i.url)).toContain(url('secret'));
-    const asUser = await gallery(ids.sable, user);
-    expect(asUser.can_edit).toBe(false);
-    expect(tagged(asUser).map((i) => i.url)).not.toContain(url('secret'));
-    expect(tagged(asUser).every((i) => i.asset === undefined)).toBe(true);
-    // The library's reads are an ADMIN's since 2026-11-15 (tests/integration/pictureReadAuthorization):
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    // A character's gallery is one.
+    const asUser = await as(request(app).get(`/api/v1/cast/characters/${ids.sable}/gallery`), user);
+    expect(asUser.status).toBe(403);
+    expect(JSON.stringify(asUser.body)).not.toContain(url('secret'));
+    // The library's reads are an ADMIN's too (tests/integration/pictureReadAuthorization):
     // the route refuses; what that reader may see is still the library's own rule.
     for (const path of [`/api/v1/media/${id}`, `/api/v1/media?entity_type=character&entity_id=${ids.sable}`, `/api/v1/media/${id}/family`, `/api/v1/media/${id}/sources`]) {
       const refused = await as(request(app).get(path), user);
@@ -139,7 +140,11 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     expect(list.map((a) => a.url)).not.toContain(url('secret'));
 
     await as(request(app).put(`/api/v1/media/${id}`)).send({ status: 'approved', visibility: 'internal', details: { objects: ['tea cup'], season: 'autumn', junk: 'x' } });
-    expect(tagged(await gallery(ids.sable, user)).map((i) => i.url)).toContain(url('secret'));
+    // Approved and internal: the library's rule now shows it to that reader; both routes still refuse them.
+    const approved = await library.listFor(db, { entityType: 'character', entityId: ids.sable, audience: 'member' });
+    expect(approved.map((a) => a.url)).toContain(url('secret'));
+    expect((await as(request(app).get(`/api/v1/media?entity_type=character&entity_id=${ids.sable}`), user)).status).toBe(403);
+    expect((await as(request(app).get(`/api/v1/cast/characters/${ids.sable}/gallery`), user)).status).toBe(403);
     const [row] = await q('SELECT details FROM media_assets WHERE id = :id', { id });
     expect(row.details).toEqual({ objects: ['tea cup'], season: 'autumn' });
   });

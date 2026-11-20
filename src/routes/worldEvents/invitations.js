@@ -24,7 +24,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { isBudgetError } = require('../../services/imageCostService');
 const { loadScopedEvent } = require('../../utils/eventScope');
@@ -79,13 +79,19 @@ router.get('/world/:showId/events/:eventId/invitation', requireAuth, async (req,
 
 // ── APPROVE / REJECT ─────────────────────────────────────────────────────────
 
-// POST /world/:showId/events/:eventId/approve-invitation — { assetId }
-router.post('/world/:showId/events/:eventId/approve-invitation', requireAuth, async (req, res) => {
+// POST /world/:showId/events/:eventId/approve-invitation — { assetId, expectedInvitationAssetId? }
+// An ADMIN's (Evoni, 2026-11-19). `expectedInvitationAssetId` is the
+// approved invitation the sender saw (null for none); 409 when it has changed.
+router.post('/world/:showId/events/:eventId/approve-invitation', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { showId, eventId } = req.params;
-    const r = await invitationService().approveInvitation(models, { showId, eventId, assetId: req.body?.assetId });
+    const body = req.body || {};
+    const r = await invitationService().approveInvitation(models, {
+      showId, eventId, assetId: body.assetId, actor: req.user,
+      ...(Object.prototype.hasOwnProperty.call(body, 'expectedInvitationAssetId') ? { expectedInvitationAssetId: body.expectedInvitationAssetId } : {}),
+    });
     return res.json({
       success: true,
       message: 'Invitation approved and linked to event',

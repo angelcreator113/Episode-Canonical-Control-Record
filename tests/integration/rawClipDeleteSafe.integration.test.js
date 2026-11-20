@@ -210,15 +210,18 @@ const EDIT_TABLES = ['edit_versions', 'timeline_audio_items', 'timeline_items', 
 
   // ── who may delete ───────────────────────────────────────────────────────
   describe('who may delete a take', () => {
-    test('a signed-in user who is not an admin: 403, the take stays; uploading, starring and relabelling are as before', async () => {
+    // Evoni, 2026-11-16: starring and relabelling are an ADMIN's too (they kept requireAuth alone until then).
+    test('a signed-in user who is not an admin: 403, the take stays; starring and relabelling are refused too, and an admin still may', async () => {
       const w = await world();
       const before = await state(w.ep);
       const res = await del(w.ep, w.prime2, editor);
       expect(res.status).toBe(403);
       expect(await state(w.ep)).toEqual(before);
       expect((await request(app).delete(`/api/v1/episode-clips/${w.ep}/${w.prime2}`)).status).toBe(401);
-      // The take's other writes keep their own rule (requireAuth).
-      const star = await as(editor)(request(app).patch(`/api/v1/episode-clips/${w.ep}/${w.prime2}`)).send({ is_favorite: true, label: 'The good one' });
+      const refused = await as(editor)(request(app).patch(`/api/v1/episode-clips/${w.ep}/${w.prime2}`)).send({ is_favorite: true, label: 'The good one' });
+      expect(refused.status).toBe(403);
+      expect(await state(w.ep)).toEqual(before);
+      const star = await as(admin)(request(app).patch(`/api/v1/episode-clips/${w.ep}/${w.prime2}`)).send({ is_favorite: true, label: 'The good one' });
       expect(star.status).toBe(200);
       expect(await clipRow(w.prime2)).toMatchObject({ is_favorite: true, label: 'The good one', deleted_at: null });
     });

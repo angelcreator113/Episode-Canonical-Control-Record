@@ -78,7 +78,9 @@ describe('readableStatusWhere', () => {
     tokens.creator = token({ id: 'test-creator-feed-read', email: 'creator@feed.dev', name: 'Creator', groups: ['USER', 'EDITOR'], role: 'USER' });
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :name, :slug, NOW(), NOW())`,
       { id: showId, name: `Read ${showId.slice(0, 8)}`, slug: `rd-${showId.slice(0, 8)}` });
-    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:id, :showId, 'Gala Night', 1, 'draft', NOW(), NOW())`,
+    // The server decides the story moment a reader who is not an ADMIN reads at (2026-11-15, pulseReaderStoryMoment).
+    // This suite is about drafts and live posts, so its episode is out: its live posts are released.
+    await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:id, :showId, 'Gala Night', 1, 'published', NOW(), NOW())`,
       { id: episodeId, showId });
     const post = (fields) => models.FeedPost.create({ show_id: showId, poster_handle: 'lala', poster_display_name: 'Lala', ...fields });
     ids.live = (await post({ status: 'live', content_text: 'Out in the world.', posted_at: new Date(), episode_id: episodeId, likes: 3 })).id;
@@ -140,7 +142,7 @@ describe('readableStatusWhere', () => {
       const day = `day_from=${encodeURIComponent(new Date(Date.now() - 3 * 864e5).toISOString())}&day_to=${encodeURIComponent(new Date(Date.now() + 3 * 864e5).toISOString())}`;
       for (const q of [
         `show_id=${showId}&status=draft&from=wall`, `show_id=${showId}&status=draft&from=episode`, `show_id=${showId}&status=all&from=episode`,
-        `episode_id=${episodeId}&status=all&with=comments&limit=30`, `show_id=${showId}&status=all&with=comments`, `show_id=${showId}&status=all&${day}`,
+        `show_id=${showId}&episode_id=${episodeId}&status=all&with=comments&limit=30`, `show_id=${showId}&status=all&with=comments`, `show_id=${showId}&status=all&${day}`,
       ]) {
         const res = await get(who, `/api/v1/feed-posts?${q}`);
         expect(res.status).toBe(200);
@@ -254,7 +256,9 @@ describe('readableStatusWhere', () => {
         expect(res.body.count).toBe(1);
         // The scheduled draft's 900 likes are not in the total.
         expect(res.body.stats.total_likes).toBe(3);
-        expect(Object.values(res.body.grouped).flat().map((p) => p.id).filter(Boolean).every((id) => id === ids.live)).toBe(true);
+        // How the episode places its posts is the studio's (2026-11-15, feedPostPublicFields): no groups for this reader.
+        expect(res.body.grouped).toBeUndefined();
+        expect(Object.keys(res.body.stats).sort()).toEqual(['total_comments', 'total_likes']);
         clean(res);
       }
       const drafts = await get(who, `/api/v1/feed-posts/episode/${episodeId}?status=draft`);

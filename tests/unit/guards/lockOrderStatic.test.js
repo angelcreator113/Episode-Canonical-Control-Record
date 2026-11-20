@@ -35,6 +35,7 @@ const PINNED = {
   'src/services/financialTransactionService.js': { traced: false, locks: { episodes: 1 } },
   'src/services/sceneSetVersionService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/seasonFullSpecials.js': { traced: true, locks: { world_events: 1 } },
+  'src/services/styleSheetDistributionService.js': { traced: false, locks: { episodes: 1 } }, // 2026-11-15: writeMetadata locks the one episode row it then writes (its style-sheet entry) and takes no other lock in that transaction
   'src/services/seasonGoalCoverage.js': { traced: false, locks: { world_events: 1 } },
   'src/services/seasonIntentionService.js': { traced: true, locks: { season_slots: 1 } },
   'src/services/seasonLoader.js': { traced: true, locks: { show_arcs: 1, season_slots: 1 } },

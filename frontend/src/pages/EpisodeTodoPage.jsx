@@ -8,8 +8,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import apiClient from '../services/api';
+import { readReturn } from '../utils/returnPath';
 import { eventCreatorOrganizer } from '../utils/eventOrganizer';
 import { getEpisodeEvents } from '../services/episodeEventsApi';
 import SocialTaskBadge from '../components/SocialTaskBadge';
@@ -52,6 +53,9 @@ const TIMING_COLORS = { before: '#f59e0b', during: '#6366f1', after: '#16a34a' }
 
 export default function EpisodeTodoPage() {
   const { episodeId } = useParams();
+  // The way back: the tab this page was opened from, when the address says (PR-05); else the episode, as before.
+  const [searchParams] = useSearchParams();
+  const back = readReturn(searchParams, { episodeId, fallback: { href: `/episodes/${episodeId}`, text: 'Back to Episode' } });
   const [todoList, setTodoList] = useState(null);
   const [socialTasks, setSocialTasks] = useState([]);
   const [financials, setFinancials] = useState(null);
@@ -129,7 +133,7 @@ export default function EpisodeTodoPage() {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
         <div style={{ fontSize: 14, color: '#666', marginBottom: 12 }}>No Episode Run Sheet for this episode yet.</div>
-        <Link to={`/episodes/${episodeId}`} style={{ color: '#B8962E', fontWeight: 600, fontSize: 13 }}>Back to Episode</Link>
+        <Link to={back.href} style={{ color: '#B8962E', fontWeight: 600, fontSize: 13 }} data-testid="run-sheet-back-empty">{back.text}</Link>
       </div>
     );
   }
@@ -158,8 +162,8 @@ export default function EpisodeTodoPage() {
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '24px 16px' }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <Link to={`/episodes/${episodeId}`} style={{ fontSize: 11, color: '#B8962E', textDecoration: 'none', fontWeight: 600 }}>
-          ← Back to Episode
+        <Link to={back.href} style={{ fontSize: 11, color: '#B8962E', textDecoration: 'none', fontWeight: 600 }} data-testid="run-sheet-back">
+          ← {back.text}
         </Link>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1a1a2e', margin: '8px 0 4px', fontFamily: "'Lora', serif" }}>
           {episode?.title || 'Episode'} — Episode Run Sheet

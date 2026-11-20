@@ -46,7 +46,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-docs', email: 'test@docs.dev', name: 'Docs Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-docs', email: 'test@docs.dev', name: 'Docs Test', groups: ['USER', 'ADMIN'], role: 'ADMIN', // approving is an admin's (V2-1, 2026-11-19)
     }).accessToken;
   });
 

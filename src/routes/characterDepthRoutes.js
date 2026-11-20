@@ -238,7 +238,7 @@ function parseJSON(text) {
 /* ═══════════════════════════════════════════════════════════════════════════════
    GET /:charId — Get all depth dimensions for a character
    ═══════════════════════════════════════════════════════════════════════════════ */
-router.get('/:charId', requireAuth, async (req, res) => {
+router.get('/:charId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const character = await RegistryCharacter.findByPk(req.params.charId);
     if (!character) {

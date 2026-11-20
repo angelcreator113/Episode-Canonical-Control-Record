@@ -9,7 +9,11 @@
  * The database is the local migrated test DB; no AI call is made.
  */
 jest.unmock('uuid');
-jest.mock('../../src/middleware/auth', () => ({ requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } }));
+// The to-do reads are an ADMIN's (tests/integration/wardrobeReadAuthorization); the caller here is one.
+jest.mock('../../src/middleware/auth', () => ({
+  requireAuth: (req, _res, next) => { req.user = { id: 'u1', groups: ['ADMIN'] }; next(); },
+  authorize: () => (_req, _res, next) => next(),
+}));
 
 const express = require('express');
 const request = require('supertest');

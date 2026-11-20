@@ -11,6 +11,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { ScrollText } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { isAdmin } from '../../utils/authGroups';
 import showService from '../../services/showService';
 import { activeShowId } from '../../utils/activeShow';
 import './Sidebar.css';
@@ -96,7 +97,8 @@ function buildNav() {
 const FOOTER_ITEMS = [
   { icon: '🔍', label: 'Search', route: '/search' },
   { icon: '⚙️', label: 'Settings', route: '/settings' },
-  { icon: '🛡️', label: 'Admin', route: '/admin' },
+  // Admin is an admin's: the row is not offered to anyone else (the route and its APIs refuse them too).
+  { icon: '🛡️', label: 'Admin', route: '/admin', adminOnly: true },
 ];
 
 /* ─── Shows hook (uses showService with auth) ───────────────── */
@@ -438,7 +440,7 @@ function Sidebar({ isOpen, onClose }) {
 
         {/* ── Footer rows ── */}
         <div className="ps-footer-nav">
-          {FOOTER_ITEMS.map(item => (
+          {FOOTER_ITEMS.filter(item => !item.adminOnly || isAdmin(user)).map(item => (
             <NavLink
               key={item.route}
               to={item.route}

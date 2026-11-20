@@ -24,10 +24,21 @@ describe('Step 3 CP8 — socialProfileRoutes.js anchor mixed Tier 1+4', () => {
     expect(SRC).toMatch(/4th cumulative instance/);
   });
 
-  describe('Tier 4 PUBLIC GETs (3 catalog reads — D2 lock)', () => {
+  // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+  // Two reads stay open and give anyone but an ADMIN the public columns only (services/publicSocialProfile);
+  // the followers read, which names why each character follows, is an ADMIN's.
+  test('GET /:id/followers is ADMIN only', () => {
+    expect(SRC).toMatch(/router\.get\('\/:id\/followers',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*async/);
+  });
+  test('the two open reads cut to the public columns for anyone but an ADMIN', () => {
+    expect((SRC.match(/require\('\.\.\/services\/publicSocialProfile'\)\.readsAsAdmin\(req\)/g) || []).length).toBe(2);
+    expect(SRC).toMatch(/publicProfileList\(db, req\.query\)/);
+    expect(SRC).toMatch(/publicProfileById\(db, req\.params\.id\)/);
+  });
+
+  describe('Tier 4 PUBLIC GETs (2 catalog reads — D2 lock)', () => {
     [
       ['get', '/'],
-      ['get', '/:id/followers'],
       ['get', '/:id'],
     ].forEach(([verb, route]) => {
       test(`${verb.toUpperCase()} ${route} uses optionalAuth (Tier 4)`, () => {
@@ -96,13 +107,19 @@ describe('Step 3 CP8 — socialProfileRoutes.js anchor mixed Tier 1+4', () => {
 
   // Evoni, 2026-10-19 (the profile follow-up): every Pulse people write is
   // ADMIN only; crossing-preview writes nothing and calls no AI, so it is not.
-  test('every write but crossing-preview is ADMIN only, and no read is', () => {
+  test('every write but crossing-preview is ADMIN only; so is every read but the two open ones and Lala\'s two', () => {
     const handlers = SRC.match(/^router\.(get|post|put|patch|delete)\([^\n]+/gm) || [];
     const writes = handlers.filter((l) => !/^router\.get\(/.test(l));
     writes.filter((l) => !/'\/:id\/crossing-preview'/.test(l))
       .forEach((l) => expect(l).toMatch(/requireAuth,\s*authorize\(\['ADMIN'\]\)/));
     expect(writes.find((l) => /'\/:id\/crossing-preview'/.test(l))).not.toMatch(/authorize\(/);
-    handlers.filter((l) => /^router\.get\(/.test(l)).forEach((l) => expect(l).not.toMatch(/authorize\(/));
+    const reads = handlers.filter((l) => /^router\.get\(/.test(l));
+    const open = reads.filter((l) => /^router\.get\('(\/|\/:id)', optionalAuth,/.test(l));
+    const pulse = reads.filter((l) => /^router\.get\('\/lala(\/sidebar)?', requireAuth, async/.test(l));
+    expect([open.length, pulse.length]).toEqual([2, 2]);
+    reads.filter((l) => !open.includes(l) && !pulse.includes(l))
+      .forEach((l) => expect(l).toMatch(/requireAuth,\s*authorize\(\['ADMIN'\]\)/));
+    expect(reads.length - open.length - pulse.length).toBe(15);
   });
 
   describe('Sample Tier 1 handlers', () => {

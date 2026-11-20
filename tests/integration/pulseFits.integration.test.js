@@ -28,6 +28,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)("Lala's everyday fits", () => {
   let token;
+  // The Pulse's production reads are an ADMIN's (Evoni, 2026-11-15; pulseOperationalReads). This suite reads
+  // them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-fits', email: 'admin@fits.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (req) => req.set('Authorization', `Bearer ${adminToken}`);
   let png;
   const ids = { show: crypto.randomUUID(), other: crypto.randomUUID() };
   const savedBuckets = {};
@@ -80,26 +84,26 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const undated = (await post({ show_id: ids.show })).body.fit;
     await post({ show_id: ids.other, story_date: '2026-05-01' });
 
-    res = await auth(request(app).get(`/api/v1/pulse-fits?show_id=${ids.show}`));
+    res = await asAdmin(request(app).get(`/api/v1/pulse-fits?show_id=${ids.show}`));
     expect(res.status).toBe(200);
     expect(res.body.fits.map((f) => f.id)).toEqual([late.id, early.id, undated.id]);
 
     res = await auth(request(app).patch(`/api/v1/pulse-fits/${undated.id}`)).send({ caption: 'Gallery opening', story_date: '2026-05-02' });
     expect(res.status).toBe(200);
     expect(res.body.fit).toMatchObject({ caption: 'Gallery opening', story_date: '2026-05-02' });
-    res = await auth(request(app).get(`/api/v1/pulse-fits?show_id=${ids.show}`));
+    res = await asAdmin(request(app).get(`/api/v1/pulse-fits?show_id=${ids.show}`));
     expect(res.body.fits[0].id).toBe(undated.id);
 
     res = await auth(request(app).delete(`/api/v1/pulse-fits/${early.id}`));
     expect(res.status).toBe(200);
-    res = await auth(request(app).get(`/api/v1/pulse-fits?show_id=${ids.show}`));
+    res = await asAdmin(request(app).get(`/api/v1/pulse-fits?show_id=${ids.show}`));
     expect(res.body.fits.map((f) => f.id)).not.toContain(early.id);
     const [[row]] = await run('SELECT deleted_at FROM pulse_fits WHERE id = :id', { id: early.id });
     expect(row.deleted_at).not.toBeNull();
   });
 
   it('refuses bad show ids, bad dates, unknown shows, unknown fits and SVG', async () => {
-    expect((await auth(request(app).get('/api/v1/pulse-fits?show_id=nope'))).status).toBe(400);
+    expect((await asAdmin(request(app).get('/api/v1/pulse-fits?show_id=nope'))).status).toBe(400);
     expect((await post({ show_id: 'nope' })).status).toBe(400);
     expect((await post({ show_id: crypto.randomUUID() })).status).toBe(404);
 
@@ -114,5 +118,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     res = await auth(request(app).post('/api/v1/pulse-fits')).field('show_id', ids.show).attach('image', svg, { filename: 'f.svg', contentType: 'image/svg+xml' });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('WRONG_TYPE');
+  });
+  test("The Pulse's production reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/pulse-fits?show_id=00000000-0000-4000-8000-000000000000`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

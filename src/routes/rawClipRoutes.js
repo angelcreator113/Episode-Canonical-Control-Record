@@ -85,6 +85,8 @@ const parts = require('../services/rawClipMultipart');
 const { friendlyError, NO_ROOM, KeyNoRoomError } = require('../services/rawClipErrors');
 
 const router = express.Router();
+// Footage is production material (Evoni, 2026-11-16): every route here is an ADMIN's.
+const admin = [requireAuth, authorize(['ADMIN'])];
 
 const MAX_MB = Number(process.env.RAW_CLIP_MAX_MB) || 500;
 const VIDEO_EXTS = ['.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv', '.3gp'];
@@ -206,7 +208,7 @@ const isVideo = (filename, contentType) => {
   return String(contentType || '').startsWith('video/') || VIDEO_EXTS.includes(ext);
 };
 
-router.post('/:episodeId/uploads', requireAuth, async (req, res) => {
+router.post('/:episodeId/uploads', ...admin, async (req, res) => {
   try {
     const body = req.body || {};
     const fields = clips.readFields(body, { requirePerformer: true });
@@ -247,7 +249,7 @@ router.post('/:episodeId/uploads', requireAuth, async (req, res) => {
 // One part's raw bytes, held in memory (at most 10 MB), never on disk.
 const readPart = express.raw({ type: () => true, limit: '10mb' });
 
-router.put('/:episodeId/uploads/:uploadId/parts/:partNumber', requireAuth, (req, res) => {
+router.put('/:episodeId/uploads/:uploadId/parts/:partNumber', ...admin, (req, res) => {
   readPart(req, res, async (readErr) => {
     try {
       if (readErr) {
@@ -380,7 +382,7 @@ function endFields(fields, sent) {
   return next;
 }
 
-router.post('/:episodeId/uploads/:uploadId/complete', requireAuth, async (req, res) => {
+router.post('/:episodeId/uploads/:uploadId/complete', ...admin, async (req, res) => {
   try {
     const entry = ownUpload(req);
     // Finished already (its answer was lost on the way): the same clip, not a second one.
@@ -406,7 +408,7 @@ router.post('/:episodeId/uploads/:uploadId/complete', requireAuth, async (req, r
   }
 });
 
-router.delete('/:episodeId/uploads/:uploadId', requireAuth, async (req, res) => {
+router.delete('/:episodeId/uploads/:uploadId', ...admin, async (req, res) => {
   try {
     const entry = ownUpload(req);
     if (entry.result) return res.json({ success: true, finished: true });
@@ -419,7 +421,7 @@ router.delete('/:episodeId/uploads/:uploadId', requireAuth, async (req, res) => 
   }
 });
 
-router.get('/:episodeId', requireAuth, async (req, res) => {
+router.get('/:episodeId', ...admin, async (req, res) => {
   try {
     const rows = await clips.listClips(models.sequelize, req.params.episodeId, { activeIds: media.activeIds(), since: media.startedAt });
     // A running green removal says how far it has got (in memory, this process only).
@@ -431,7 +433,7 @@ router.get('/:episodeId', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/:episodeId', requireAuth, async (req, res) => {
+router.post('/:episodeId', ...admin, async (req, res) => {
   // An episode whose first take is refused (a second event with commitments
   // not handled yet) is answered before the file is taken.
   try {
@@ -523,7 +525,7 @@ router.post('/:episodeId', requireAuth, async (req, res) => {
   });
 });
 
-router.patch('/:episodeId/:clipId', requireAuth, async (req, res) => {
+router.patch('/:episodeId/:clipId', ...admin, async (req, res) => {
   try {
     const row = await clips.updateClip(models.sequelize, req.params.episodeId, req.params.clipId, req.body || {});
     if (!row) return res.status(404).json({ success: false, error: 'Clip not found' });
@@ -533,7 +535,7 @@ router.patch('/:episodeId/:clipId', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/:episodeId/:clipId/remove-green', requireAuth, async (req, res) => {
+router.post('/:episodeId/:clipId/remove-green', ...admin, async (req, res) => {
   try {
     const strength = clips.readStrength((req.body || {}).strength);
     const clip = await clips.getClip(models.sequelize, req.params.episodeId, req.params.clipId);
@@ -557,7 +559,7 @@ router.post('/:episodeId/:clipId/remove-green', requireAuth, async (req, res) =>
 
 // Stops a clip's green removal, queued or running (Evoni, 2026-10-31). The
 // clip then shows "Stopped" with Retry; nothing is changed or deleted.
-router.post('/:episodeId/:clipId/stop-green', requireAuth, async (req, res) => {
+router.post('/:episodeId/:clipId/stop-green', ...admin, async (req, res) => {
   try {
     const clip = await clips.getClip(models.sequelize, req.params.episodeId, req.params.clipId);
     if (!clip) return res.status(404).json({ success: false, error: 'Clip not found' });
@@ -576,8 +578,9 @@ router.post('/:episodeId/:clipId/stop-green', requireAuth, async (req, res) => {
 // ADMIN only, and only a take nothing uses (Evoni, 2026-11-12): a take the
 // edit, a saved version of it, Voice Studio or a voice job uses is kept,
 // 409 CLIP_IN_USE with blocked_by (rawClipsService.removeClip). No option
-// forces it. Uploading, starring and relabelling a take are as before.
-router.delete('/:episodeId/:clipId', requireAuth, authorize(['ADMIN']), async (req, res) => {
+// forces it. Every other route here is an ADMIN's too (Evoni, 2026-11-16): the
+// list, uploads, relabelling and green removal are production reads and writes.
+router.delete('/:episodeId/:clipId', ...admin, async (req, res) => {
   try {
     const removed = await clips.removeClip(models.sequelize, req.params.episodeId, req.params.clipId);
     if (!removed) return res.status(404).json({ success: false, error: 'Clip not found' });

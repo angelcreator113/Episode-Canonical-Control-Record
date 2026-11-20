@@ -49,6 +49,10 @@ const aiReturns = (tasks) => mockCreate.mockResolvedValueOnce({ content: [{ text
 
 (shouldSkip ? describe.skip : describe)('Career Checklist regenerate replaces its image (T4)', () => {
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-careerChecklistRegenerate', email: 'admin@careerChecklistRegenerate.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const shows = [];
 
   beforeAll(() => {
@@ -137,7 +141,7 @@ const aiReturns = (tasks) => mockCreate.mockResolvedValueOnce({ content: [{ text
     aiReturns([{ slot: 'content_main', label: 'Film the venue walkthrough', goal: true }]);
     const { assetUrl, tasks } = await generateCareerList(ids.ep, ids.show, models);
 
-    const res = await request(app).get(`/api/v1/episodes/${ids.ep}/todo/social`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get(`/api/v1/episodes/${ids.ep}/todo/social`).set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.career_asset_url).toBe(assetUrl);
     expect(res.body.social_tasks).toEqual(tasks);
@@ -146,8 +150,12 @@ const aiReturns = (tasks) => mockCreate.mockResolvedValueOnce({ content: [{ text
   it('an episode with no career image returns career_asset_url null', async () => {
     const ids = await seed();
     await run(`DELETE FROM assets WHERE id = :asset`, ids);
-    const res = await request(app).get(`/api/v1/episodes/${ids.ep}/todo/social`).set('Authorization', `Bearer ${token}`);
+    const res = await request(app).get(`/api/v1/episodes/${ids.ep}/todo/social`).set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.career_asset_url).toBeNull();
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/todo/social`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

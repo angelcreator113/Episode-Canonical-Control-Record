@@ -240,11 +240,13 @@ class AssetService {
       console.log(`🔢 File hash: ${fileHash}`);
 
       // Check for existing asset with same hash
+      // A document presentation is never the "same file" an upload reuses:
+      // reusing it would rewrite its episode link (V2-2a).
       const existingAsset = await Asset.findOne({
-        where: {
+        where: require('../utils/documentPresentationAssets').exceptDocumentPresentations({
           file_hash: fileHash,
           deleted_at: null,
-        },
+        }),
       });
 
       if (existingAsset) {
@@ -648,9 +650,9 @@ class AssetService {
   async getPendingAssets() {
     try {
       const assets = await Asset.findAll({
-        where: {
+        where: require('../utils/documentPresentationAssets').exceptDocumentPresentations({
           approval_status: 'PENDING',
-        },
+        }),
         order: [['created_at', 'ASC']],
         paranoid: true, // Exclude soft-deleted assets
         raw: true,
@@ -1279,10 +1281,15 @@ class AssetService {
         limit = 100,
       } = filters;
 
-      const where = { approval_status: approvalStatus };
+      let where = { approval_status: approvalStatus };
 
       if (assetType) {
         where.asset_type = assetType;
+      }
+      // Document presentations are found only when asked for by their type.
+      {
+        const { isDocumentPresentationType, exceptDocumentPresentations } = require('../utils/documentPresentationAssets');
+        if (!isDocumentPresentationType(assetType)) where = exceptDocumentPresentations(where);
       }
 
       if (mediaType) {

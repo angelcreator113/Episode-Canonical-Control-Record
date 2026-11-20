@@ -27,7 +27,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const uuid = () => crypto.randomUUID();
 
 (shouldSkip ? describe.skip : describe)("the tension scanner and tension-check are a show's", () => {
+  // World Studio and Show Bible reads are an ADMIN's (Evoni, 2026-11-16): the reads below are made as an ADMIN.
+  // The editor token is kept for what this suite writes, and for the refusal check.
   let token;
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-world-reads', email: 'admin@world-reads.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   const TAG = uuid().slice(0, 8);
   const name = (k) => `Tension Show ${TAG} ${k}`;
   const show = { a: uuid(), b: uuid() };
@@ -47,8 +50,9 @@ const uuid = () => crypto.randomUUID();
   const onsName = Object.fromEntries(Object.entries(ons).map(([k, id]) => [id, k]));
 
   const auth = (req) => req.set('Authorization', `Bearer ${token}`);
-  const scan = (qs = '') => auth(request(app).get(`/api/v1/world/tension-scanner${qs}`));
-  const check = (qs = '') => auth(request(app).get(`/api/v1/world/tension-check${qs}`));
+  const read = (req) => req.set('Authorization', `Bearer ${adminToken}`);
+  const scan = (qs = '') => read(request(app).get(`/api/v1/world/tension-scanner${qs}`));
+  const check = (qs = '') => read(request(app).get(`/api/v1/world/tension-check${qs}`));
   // Ours only: the shared test DB may hold other files' rows.
   const pairsOf = (body) => body.pairs.map((p) => relName[p.relationship_id]).filter(Boolean).sort();
   const triggeredOf = (body) => body.triggered
@@ -101,6 +105,15 @@ const uuid = () => crypto.randomUUID();
     await run('DELETE FROM world_characters WHERE id IN (:ids)', { ids: [...Object.values(wc), ...Object.values(ons)] });
     await run('DELETE FROM character_registries WHERE id IN (:ids)', { ids: Object.values(reg) });
     await run('DELETE FROM shows WHERE id IN (:ids)', { ids: Object.values(show) });
+  });
+
+  it('an editor is refused the scanner and the check (403), with nothing of the pairs', async () => {
+    for (const url of ['/api/v1/world/tension-scanner', '/api/v1/world/tension-check', `/api/v1/world/tension-scanner?show_id=${show.a}`]) {
+      const res = await auth(request(app).get(url));
+      expect([url, res.status]).toEqual([url, 403]);
+      expect(res.body.pairs).toBeUndefined();
+      expect(res.body.triggered).toBeUndefined();
+    }
   });
 
   it('the scanner: without a show, every pair', async () => {

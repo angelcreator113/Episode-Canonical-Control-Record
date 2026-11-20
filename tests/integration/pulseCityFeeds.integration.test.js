@@ -71,19 +71,21 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   test("a city's feed: its profiles' live posts only, with ?at= and reveals as before", async () => {
-    const all = await request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&city=dazzle_district`);
+    // The server decides the story moment a reader who is not an ADMIN reads at (2026-11-15, pulseReaderStoryMoment).
+    // These reads name a moment, or none (the director's view), so they are read as the suite's ADMIN.
+    const all = await as(request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&city=dazzle_district`));
     expect(all.status).toBe(200);
     expect(handles(all)).toEqual([`kim${tag}`, `marcus${tag}`, `marcus${tag}`]);
-    const at15 = await request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&city=dazzle_district&at=15`);
+    const at15 = await as(request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&city=dazzle_district&at=15`));
     // The later post is left out; Kim, not met yet, still shows (Evoni, 2026-10-18).
     expect(handles(at15).sort()).toEqual([`kim${tag}`, `marcus${tag}`].sort());
     expect(at15.body.total).toBe(2);
-    const echo = await request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&city=echo_park&at=15`);
+    const echo = await as(request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&city=echo_park&at=15`));
     expect(handles(echo)).toEqual([`nia${tag}`]);
-    expect((await request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&city=nova_prime`)).status).toBe(400);
-    expect((await request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&city=x'; drop`)).status).toBe(400);
+    expect((await as(request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&city=nova_prime`))).status).toBe(400);
+    expect((await as(request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&city=x'; drop`))).status).toBe(400);
     // Without ?city= nothing changes.
-    expect((await request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&at=15`)).body.total).toBe(4);
+    expect((await as(request(app).get(`/api/v1/feed-posts?show_id=${ids.show}&at=15`))).body.total).toBe(4);
   });
 
   test('trends as of a story moment, a character not met yet counted (Evoni, 2026-10-18); local trends per city', async () => {

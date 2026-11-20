@@ -739,7 +739,7 @@ router.post('/generate-job', requireAuth, authorize(['ADMIN']), aiRateLimiter, a
 
 // ── GET /jobs ────────────────────────────────────────────────────────────────
 // List recent import jobs
-router.get('/jobs', requireAuth, async (req, res) => {
+router.get('/jobs', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getModels();
     if (!db || !db.BulkImportJob) {
@@ -758,7 +758,7 @@ router.get('/jobs', requireAuth, async (req, res) => {
 
 // ── GET /jobs/:id ────────────────────────────────────────────────────────────
 // Get progress for a specific job
-router.get('/jobs/:id', requireAuth, async (req, res) => {
+router.get('/jobs/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const db = getModels();
     if (!db || !db.BulkImportJob) {
@@ -773,7 +773,7 @@ router.get('/jobs/:id', requireAuth, async (req, res) => {
 });
 
 // ── GET /jobs/:id/stream — SSE endpoint for real-time progress (#1) ──────────
-router.get('/jobs/:id/stream', requireAuth, (req, res) => {
+router.get('/jobs/:id/stream', requireAuth, authorize(['ADMIN']), (req, res) => {
   const jobId = String(req.params.id);
 
   res.writeHead(200, {

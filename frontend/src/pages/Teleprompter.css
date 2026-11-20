@@ -34,6 +34,9 @@
 .stp-pickers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 .stp-hint { margin: 0; font-size: 13px; color: var(--studio-ink-muted); }
 .stp-hint a { color: var(--studio-purple); }
+/* The way back to the episode's Script tab (PR-06). */
+.stp-back { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--studio-purple); text-decoration: none; overflow-wrap: anywhere; }
+.stp-back:hover, .stp-back:focus-visible { text-decoration: underline; }
 .stp-page-error { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--studio-warn-soft); color: var(--studio-warn); font-size: 14px; }
 .stp-start-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .stp-start {
