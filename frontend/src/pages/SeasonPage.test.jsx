@@ -177,24 +177,47 @@ describe('The tabs', () => {
 });
 
 describe('The hero', () => {
-  test('with a cover: the picture, "Season 1", the title, the tagline and the chips', async () => {
+  test('with a cover: a small picture (never a background), the show, "Season 1", the title, lifecycle, health, phase and dates', async () => {
     renderPage();
     const hero = await screen.findByTestId('szn-hero');
-    expect(hero.className).toContain('has-cover');
-    expect(hero.style.backgroundImage).toContain('https://cdn.example.com/cover.jpg');
+    // S2: the cover is a small picture beside the title; the full cover and the tagline are the Overview card's.
+    expect(hero.className).not.toContain('has-cover');
+    expect(hero.style.backgroundImage).toBe('');
+    const thumb = within(hero).getByTestId('szn-hero-thumb');
+    expect(thumb.getAttribute('src')).toBe('https://cdn.example.com/cover.jpg');
+    expect(thumb.getAttribute('loading')).toBe('lazy');
+    expect(thumb.getAttribute('alt')).toBe('');
     expect(within(hero).getByText('Season 1')).toBeTruthy();
-    expect(within(hero).getByRole('heading', { level: 1 }).textContent).toBe('Soft Luxury Ascension');
+    const title = within(hero).getByRole('heading', { level: 1 });
+    expect(title.textContent).toBe('Soft Luxury Ascension');
+    expect(title.getAttribute('title')).toBe('Soft Luxury Ascension');
     expect(within(hero).getByText('Styling Adventures with Lala')).toBeTruthy();
-    expect(within(hero).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['24 Episodes', '3 Phases', 'Jan 5, 2026 – Mar 29, 2026']);
+    expect(within(hero).getByTestId('szn-lifecycle').textContent).toBe('Active');
+    expect(within(hero).getByTestId('szn-hero-phase').textContent).toMatch(/^Phase 1/);
+    expect(within(hero).getByTestId('szn-hero-dates').textContent).toBe('Jan 5, 2026 – Mar 29, 2026');
+    // Health is named as health, apart from the lifecycle.
+    const health = await within(hero).findByTestId('szn-health');
+    expect(health.textContent).toMatch(/^Health/);
+    expect(within(health).getByTestId('szn-health-tone').textContent).not.toBe('Active');
+    // Said elsewhere now: the episode and phase counts (the stat cards, the phases card), the tagline (the season card).
+    expect(hero.textContent).not.toContain('24 Episodes');
+    expect(hero.textContent).not.toContain('3 Phases');
+    expect(hero.textContent).not.toContain(ARC.tagline);
+    const card = screen.getByTestId('szn-overview-card');
+    expect(within(card).getByTestId('szn-overview-cover').getAttribute('src')).toBe('https://cdn.example.com/cover.jpg');
+    expect(within(card).getByTestId('szn-overview-cover').getAttribute('loading')).toBe('lazy');
+    expect(within(card).getByTestId('szn-tagline').textContent).toBe(ARC.tagline);
   });
 
-  test('with no cover: the gradient, no picture', async () => {
+  test('with no cover and no dates: no picture anywhere, and the dates say so', async () => {
     state.arc = { ...ARC, cover_url: null, starts_on: null, ends_on: null };
     renderPage();
     const hero = await screen.findByTestId('szn-hero');
-    expect(hero.className).not.toContain('has-cover');
     expect(hero.style.backgroundImage).toBe('');
-    expect(within(hero).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['24 Episodes', '3 Phases']);
+    expect(within(hero).queryByTestId('szn-hero-thumb')).toBeNull();
+    expect(hero.querySelector('img')).toBeNull();
+    expect(within(hero).getByTestId('szn-hero-dates').textContent).toBe('No dates set');
+    expect(screen.queryByTestId('szn-overview-cover')).toBeNull();
   });
 
   test('the ⋯ menu: Use events and episodes, Draft with AI, and Start next season only once complete', async () => {
@@ -202,8 +225,10 @@ describe('The hero', () => {
     fireEvent.click(await screen.findByTestId('szn-hero-more'));
     const menu = screen.getByTestId('szn-hero-menu');
     const items = within(menu).getAllByRole('menuitem');
-    expect(items.map((b) => b.textContent)).toEqual(['Use events and episodes', 'Draft with AI', 'Start Season 2 (when this one is complete)']);
+    // S2: Print plan is the menu's fourth item, a link.
+    expect(items.map((b) => b.textContent.trim())).toEqual(['Use events and episodes', 'Draft with AI', 'Start Season 2 (when this one is complete)', 'Print plan']);
     expect(items[2].disabled).toBe(true);
+    expect(items[3].tagName).toBe('A');
     fireEvent.click(items[0]);
     expect(await screen.findByTestId('season-placement')).toBeTruthy();
   });
