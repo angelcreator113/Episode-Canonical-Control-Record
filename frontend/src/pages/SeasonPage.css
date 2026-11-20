@@ -42,11 +42,8 @@
 .szn-error { margin: 8px 0 0; font-weight: 700; color: var(--sp-pink-deep); }
 .szn-note { margin: 12px 0 0; padding: 10px 14px; border-radius: 12px; font-size: 13px; background: var(--sp-green-soft); color: var(--sp-green); }
 .szn-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.szn-back {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-bottom: 8px;
-  font-size: 13px; font-weight: 600; color: var(--sp-pink-deep); text-decoration: none;
-}
-.szn-back:hover { text-decoration: underline; }
+/* Producer Mode's six tabs above the season's header (ProducerNav): a little closer to it than on Producer Mode. */
+.szn-page > .wa-tab-bar { margin: 0 0 12px; }
 
 /* Buttons and links */
 .szn-btn {

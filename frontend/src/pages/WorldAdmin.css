@@ -313,6 +313,8 @@
   background: var(--surface-card); color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600;
   cursor: pointer; transition: border-color 0.15s, background 0.15s; text-decoration: none;
 }
+.wa-tab { min-height: 44px; }
+.wa-tab:focus-visible { outline: 3px solid var(--accent-dark); outline-offset: 2px; }
 .wa-tab svg { color: var(--accent-dark); }
 .wa-tab:hover { border-color: var(--accent-light); }
 .wa-tab.active { background: var(--accent-subtle); border: 2px solid var(--accent); padding: 9px 17px; color: var(--accent-dark); }
@@ -334,10 +336,11 @@
   .wa-hero { padding: 18px 16px 14px; }
   .wa-hero-refresh { top: 10px; right: 10px; width: 32px; height: 32px; }
   .wa-hero-title { font-size: 26px; margin-top: 4px; }
-  /* Six tabs (2026-10-25) fit a phone as two columns, so none hides off the edge. */
-  .wa-tab-bar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px; gap: 8px; border-radius: 14px; overflow-x: visible; }
-  .wa-tab { justify-content: center; min-width: 0; padding: 8px 10px; font-size: 13px; white-space: normal; text-align: center; }
-  .wa-tab.active { padding: 7px 9px; }
+  /* Six tabs on a phone are one row that slides sideways (Evoni, 2026-11-20; it was two columns): the open
+     tab is brought into view (ProducerNav), and the row fades at an edge that has more (sideScroll.css). */
+  .wa-tab-bar { padding: 8px; gap: 8px; border-radius: 14px; }
+  .wa-tab { padding: 8px 14px; font-size: 13px; }
+  .wa-tab.active { padding: 7px 13px; }
 }
 
 /* A section that failed to load says so, with Retry, instead of looking empty. */
