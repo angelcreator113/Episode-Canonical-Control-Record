@@ -63,7 +63,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Clapperboard, Target, CalendarHeart, Coins as CoinsIcon, MoreHorizontal, Pencil, ArrowLeft, CalendarClock, ChevronRight, Printer } from 'lucide-react';
+import { Clapperboard, Target, CalendarHeart, Coins as CoinsIcon, MoreHorizontal, Pencil, CalendarClock, ChevronRight, Printer } from 'lucide-react';
 import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import { useSeasonPlan, SeasonLoadError, BalanceTrend, coins, signedCoins } from '../components/Show/SeasonPlan';
@@ -76,6 +76,7 @@ import ShowEpisodesBoard from '../components/Show/ShowEpisodesBoard';
 import SeasonPlants from '../components/Show/SeasonPlants';
 import SeasonCast from '../components/Show/SeasonCast';
 import SeasonHealthLine from '../components/Show/SeasonHealthLine';
+import ProducerNav from '../components/Show/ProducerNav';
 import SeasonNextStep from '../components/Show/SeasonNextStep';
 import SeasonArcSuggestions from '../components/Show/SeasonArcSuggestions';
 import SeasonCarried from '../components/Show/SeasonCarried';
@@ -490,13 +491,12 @@ export default function SeasonPage() {
     });
   }, [setParams]);
 
-  if (loading) return <div className="szn-page"><p className="szn-loading" role="status">Loading the season…</p></div>;
+  // Producer Mode's six tabs, with Season open (components/Show/ProducerNav): the way to its other five, and back to its Overview.
+  // It took the place of the "← Producer Mode" link (Evoni, 2026-11-20). Links only: nothing is read for it.
+  const mainNav = <ProducerNav showId={showId} active="season-page" />;
 
-  const back = (
-    <Link className="szn-back" to={`/shows/${showId}/world?tab=overview`} data-testid="szn-back">
-      <ArrowLeft size={16} aria-hidden="true" /> Producer Mode
-    </Link>
-  );
+  if (loading) return <div className="szn-page">{mainNav}<p className="szn-loading" role="status">Loading the season…</p></div>;
+
 
   const tabProps = {
     plan, S, api, showId, setToast, episodes, episodesTotal, events, arc, roadmap, stats, goTab, params, setParams, showData,
@@ -543,7 +543,7 @@ export default function SeasonPage() {
     const open = SEASONLESS_TABS.includes(tab) ? tab : 'overview';
     return (
       <div className="szn-page" data-testid="season-page">
-        {back}
+        {mainNav}
         <SeasonLoadError plan={plan} />
         {toast && <p className="szn-note" role="status" data-testid="szn-toast">{toast}</p>}
         {!plan.failed.season && tabBar([{ key: 'overview', label: 'Set up the season' }, ...SEASON_TABS.filter((t) => SEASONLESS_TABS.includes(t.key))])}
@@ -569,7 +569,7 @@ export default function SeasonPage() {
 
   return (
     <div className="szn-page" data-testid="season-page">
-      {back}
+      {mainNav}
       <SeasonHero arc={arc} showName={showName} nextSeason={nextSeason}
         onEdit={() => openPanel(panel === 'edit' ? null : 'edit')} onPick={openPanel} readOnly={!isCurrent}
         health={health && health.tone !== 'complete' ? <SeasonHealthLine health={health} show="tone" /> : null}

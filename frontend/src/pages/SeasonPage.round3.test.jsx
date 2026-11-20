@@ -227,6 +227,20 @@ describe('what the Overview reads', () => {
   });
 });
 
+describe('Producer Mode\'s tabs with a past season open', () => {
+  test('Season stays the open tab; the other five go to Producer Mode for the same show, with no season in their address', async () => {
+    renderPage('?season=1&tab=results');
+    const nav = await screen.findByRole('navigation', { name: 'Producer Mode' });
+    await screen.findByTestId('szn-past-season');
+    const links = within(nav).getAllByRole('link');
+    expect(links.filter((a) => a.getAttribute('aria-current') === 'page').map((a) => a.textContent)).toEqual(['Season']);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/shows/show-1/world?tab=overview', '/shows/show-1/season', '/shows/show-1/world?tab=scene-sets',
+      '/shows/show-1/world?tab=characters-list', '/shows/show-1/world?tab=feed', '/shows/show-1/world?tab=release-next',
+    ]);
+  });
+});
+
 describe('Story and Secrets follow the switcher', () => {
   test('a past season\'s Story reads its own threads, twists, reveal plan and needs', async () => {
     renderPage('?season=1&tab=story');

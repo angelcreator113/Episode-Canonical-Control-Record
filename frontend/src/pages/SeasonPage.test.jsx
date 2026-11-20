@@ -577,12 +577,47 @@ describe('Events, Episodes, Opportunities, Results', () => {
   });
 });
 
-describe('The way back', () => {
-  test('"Producer Mode" goes to its Overview, not the retired Season Plan tab', async () => {
+describe('Producer Mode\'s tabs on the Season page', () => {
+  test('the six tabs, Season open; Overview goes to Producer Mode\'s Overview; the "← Producer Mode" link is gone', async () => {
     renderPage();
-    const back = await screen.findByTestId('szn-back');
-    expect(back.textContent.trim()).toBe('Producer Mode');
-    expect(back.getAttribute('href')).toBe('/shows/show-1/world?tab=overview');
+    const nav = await screen.findByRole('navigation', { name: 'Producer Mode' });
+    const tabs = within(nav).getAllByRole('link');
+    expect(tabs.map((a) => a.textContent)).toEqual(['Overview', 'Season', 'Assets', 'Cast & Continuity', 'World', 'Release']);
+    expect(tabs.map((a) => a.getAttribute('href'))).toEqual([
+      '/shows/show-1/world?tab=overview',
+      '/shows/show-1/season',
+      '/shows/show-1/world?tab=scene-sets',
+      '/shows/show-1/world?tab=characters-list',
+      '/shows/show-1/world?tab=feed',
+      '/shows/show-1/world?tab=release-next',
+    ]);
+    // Season is the open one, and the only one.
+    expect(tabs.filter((a) => a.getAttribute('aria-current') === 'page').map((a) => a.textContent)).toEqual(['Season']);
+    expect(within(nav).queryByRole('button')).toBeNull();
+    // No count is drawn here: the Season page reads nothing for this bar.
+    expect(nav.querySelector('.wa-tab-count')).toBeNull();
+    expect(screen.queryByTestId('szn-back')).toBeNull();
+    // Two navigations, each with its own name; the season's own sections come second.
+    const sections = screen.getByRole('tablist', { name: 'Season sections' });
+    expect(nav.compareDocumentPosition(sections) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(nav.compareDocumentPosition(screen.getByTestId('szn-hero')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test.each(['', '?tab=roadmap', '?tab=events&show=unplaced', '?tab=results&seasons=all', '?slot=2'])('Season stays the open tab at %s', async (query) => {
+    renderPage(query);
+    const nav = await screen.findByRole('navigation', { name: 'Producer Mode' });
+    await screen.findByTestId('szn-hero');
+    expect(within(nav).getByRole('link', { name: 'Season' }).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getByRole('link', { name: 'Overview' }).getAttribute('href')).toBe('/shows/show-1/world?tab=overview');
+  });
+
+  test('a show with no season yet still has the six tabs, Season open', async () => {
+    state.arc = null;
+    renderPage();
+    await screen.findByTestId('szn-empty');
+    const nav = screen.getByRole('navigation', { name: 'Producer Mode' });
+    expect(within(nav).getByRole('link', { name: 'Season' }).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('link')).toHaveLength(6);
   });
 });
 
