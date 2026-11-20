@@ -332,6 +332,13 @@
 .wa-subtab:hover { color: var(--text-primary); }
 .wa-subtab.active { border-bottom-color: var(--accent-dark); color: var(--text-primary); font-weight: 700; }
 
+/* A tablet: the six tabs fit the row without sliding (they overran it by a few pixels at 820px). */
+@media (min-width: 601px) and (max-width: 900px) {
+  .wa-tab-bar { gap: 8px; }
+  .wa-tab { padding: 10px 13px; }
+  .wa-tab.active { padding: 9px 12px; }
+}
+
 @media (max-width: 600px) {
   .wa-hero { padding: 18px 16px 14px; }
   .wa-hero-refresh { top: 10px; right: 10px; width: 32px; height: 32px; }
