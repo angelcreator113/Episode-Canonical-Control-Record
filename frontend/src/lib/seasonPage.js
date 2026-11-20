@@ -43,18 +43,32 @@ export const tabFrom = (value) => {
 };
 
 /**
- * The tab the Season page opens on when its address names none (Evoni,
- * 2026-11-12): the Roadmap once any slot is planned or started (an event
- * pencilled, an episode in production or done), else the Overview. A
- * `?tab=` in the address always wins; this is only for its absence.
+ * The values in an address that belong to one tab's own work: a slot or a
+ * Roadmap filter, an event or an Events filter, a new deal's company. An
+ * address that carries one and names no tab is still about that tab.
  */
-export function defaultSeasonTab(roadmap) {
-  const slots = (roadmap?.phases || []).flatMap((p) => p.slots || []);
-  return slots.some((s) => ['event_ready', 'in_production', 'done'].includes(s?.state)) ? 'roadmap' : 'overview';
+const CONTEXT_TABS = [
+  ['roadmap', ['slot', 'view', 'part', 'status']],
+  ['events', ['event', 'show', 'evpage', 'evq', 'evstate', 'evdeal', 'evsort']],
+  ['opportunities', ['deal_with']],
+];
+
+/**
+ * The tab the Season page opens on when its address names none: the
+ * Overview (Evoni, 2026-11-20; it was the Roadmap once the season was under
+ * way, 2026-11-12). The one exception is an address that carries a tab's own
+ * value (CONTEXT_TABS): `?slot=3` is the Roadmap, `?event=…` the Events tab,
+ * `?deal_with=…` Opportunities, so a link into a piece of work is not sent
+ * to the Overview for want of a `tab`. `params` is the address's query
+ * (URLSearchParams); without it, the Overview.
+ */
+export function defaultSeasonTab(params = null) {
+  if (typeof params?.has !== 'function') return 'overview';
+  return CONTEXT_TABS.find(([, keys]) => keys.some((k) => params.has(k)))?.[0] || 'overview';
 }
 
-/** The tab for an address: the one it names, else the default for this season. */
-export const tabForAddress = (value, roadmap) => (value ? tabFrom(value) : defaultSeasonTab(roadmap));
+/** The tab for an address: the one it names, else the default (defaultSeasonTab). */
+export const tabForAddress = (value, params = null) => (value ? tabFrom(value) : defaultSeasonTab(params));
 
 /**
  * The Season page, on one of its tabs: every in-app link to the season goes
@@ -63,8 +77,8 @@ export const tabForAddress = (value, roadmap) => (value ? tabFrom(value) : defau
  */
 export function seasonPageHref(showId, tab = null, extra = null) {
   const q = new URLSearchParams();
-  // The Overview is named too: an address with no tab opens the season's
-  // default tab (defaultSeasonTab), which may be the Roadmap.
+  // The Overview is named too, so a link to it says where it goes whatever
+  // the default is (defaultSeasonTab).
   if (tab) q.set('tab', tab);
   for (const [k, v] of Object.entries(extra || {})) if (v != null && v !== '') q.set(k, String(v));
   const qs = q.toString();

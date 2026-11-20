@@ -348,8 +348,13 @@ export default function SeasonPage() {
   const [toast, setToast] = useState(null);
   const plan = useSeasonPlan({ showId, api, setToast, season });
   const { arc, roadmap, goals, insights, panel, setPanel, setupNote, setSetupNote, loading, nextSeason, isCurrent } = plan;
-  // The tab the address names; with none, the Roadmap once the season has a planned or started slot, else the Overview.
-  const tab = tabForAddress(tabParam, roadmap);
+  // The tab the address names; with none, the Overview, unless the address carries a tab's own value (a slot, an event, a new deal).
+  const tab = tabForAddress(tabParam, params);
+  // That exception is written into the address, so the tab stays open when its value is used up (the Roadmap removes `slot` once the panel is open).
+  useEffect(() => {
+    if (tabParam || tab === 'overview') return;
+    setParams((prev) => { const next = new URLSearchParams(prev); if (!next.get('tab')) next.set('tab', tab); return next; }, { replace: true });
+  }, [tabParam, tab, setParams]);
   const [showName, setShowName] = useState(null);
   const [episodes, setEpisodes] = useState([]);
   const [episodesTotal, setEpisodesTotal] = useState(null);
@@ -552,8 +557,7 @@ export default function SeasonPage() {
       {back}
       <SeasonHero arc={arc} roadmap={roadmap} showName={showName} nextSeason={nextSeason}
         onEdit={() => openPanel(panel === 'edit' ? null : 'edit')} onPick={openPanel} readOnly={!isCurrent}
-        health={<SeasonHealthLine health={health}
-          nextStepSlot={isCurrent && attention.length ? <SeasonNextStep api={api} showId={showId} items={attention} /> : null} />}
+        health={<SeasonHealthLine health={health} show="tone" />}
         planHref={`/shows/${encodeURIComponent(showId)}/season/plan${season ? `?season=${encodeURIComponent(season)}` : ''}`}
         switcher={<SeasonSwitcher seasons={plan.seasons} arc={arc} currentArcId={plan.currentArcId} onPick={pickSeason} />} />
       {!isCurrent && (
@@ -584,14 +588,18 @@ export default function SeasonPage() {
         )}
       </div>
 
-      <SeasonStats stats={stats} hrefFor={hrefFor} nextRelease={nextRelease} goalsAreCurrent={!isCurrent} releaseHref={`/shows/${encodeURIComponent(showId)}/world?tab=release`} />
-
       {tabBar(SEASON_TABS, badges)}
 
       <section id="szn-tabpanel" role="tabpanel" aria-labelledby={`szn-tab-${tab}`} className="szn-tabpanel" data-testid={`szn-panel-${tab}`}>
         {/* What the tab is for, in a line (Evoni, 2026-10-25). */}
         {note}
-        {tab === 'overview' && <SeasonOverviewTab {...tabProps} />}
+        {/* The counts, the stat cards and "What should I do next?" are the Overview's (Evoni, 2026-11-20); the hero keeps the tone. */}
+        {tab === 'overview' && (
+          <SeasonOverviewTab {...tabProps}
+            healthDetails={<SeasonHealthLine health={health} show="details"
+              nextStepSlot={isCurrent && attention.length ? <SeasonNextStep api={api} showId={showId} items={attention} /> : null} />}
+            glance={<SeasonStats stats={stats} hrefFor={hrefFor} nextRelease={nextRelease} goalsAreCurrent={!isCurrent} releaseHref={`/shows/${encodeURIComponent(showId)}/world?tab=release`} />} />
+        )}
         {tab === 'roadmap' && <SeasonRoadmapTab {...tabProps} />}
         {tab === 'episodes' && <SeasonEpisodesTab {...scopedProps} />}
         {tab === 'events' && <SeasonEventsTab {...tabProps} />}

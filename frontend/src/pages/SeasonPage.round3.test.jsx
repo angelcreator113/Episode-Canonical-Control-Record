@@ -138,26 +138,89 @@ beforeEach(() => {
 const getUrls = () => vi.mocked(api.get).mock.calls.map((c) => c[0]);
 
 describe('the health line', () => {
-  test('in the hero: the tone chip, the part in progress, the goals behind, the next release', async () => {
+  test('the tone chip in the hero; the phase in progress, the goals behind and the AI spot on the Overview', async () => {
     renderPage();
     const line = await screen.findByTestId('szn-health');
     expect(within(screen.getByTestId('szn-hero')).getByTestId('szn-health')).toBe(line);
     // A release within three days (Needs attention's own "soon" item): Needs attention.
     await waitFor(() => expect(within(line).getByTestId('szn-health-tone').textContent).toBe('Needs attention'));
-    expect(within(line).getByTestId('szn-health-part').textContent).toMatch(/Phase 1 is 2 of 3 ready/);
-    expect(within(line).getByTestId('szn-health-goals').textContent).toMatch(/1 goal behind/);
-    expect(within(line).getByTestId('szn-health-release').textContent).toMatch(/next release \w{3}, Nov 1/);
-    // The AI's "What should I do next?" spot is there, empty.
+    // The hero keeps the tone alone (2026-11-20): the counts and the AI spot are the Overview's.
+    for (const k of ['part', 'goals', 'release']) expect(within(line).queryByTestId(`szn-health-${k}`)).toBeNull();
+    expect(within(screen.getByTestId('szn-hero')).queryByTestId('szn-slot-next-step')).toBeNull();
+    const details = within(screen.getByTestId('szn-panel-overview')).getByTestId('szn-health-details');
+    expect(within(details).getByTestId('szn-health-part').textContent).toMatch(/Phase 1 is 2 of 3 ready/);
+    expect(within(details).getByTestId('szn-health-goals').textContent).toMatch(/1 goal behind/);
+    // The next release is said once, by its card (it was also a line here).
+    expect(within(details).queryByTestId('szn-health-release')).toBeNull();
+    expect(within(screen.getByTestId('szn-panel-overview')).getByTestId('szn-next-release').textContent).toMatch(/\w{3}, Nov 1/);
     // The AI button sits in its spot; nothing is asked until it is pressed.
-    expect(within(within(line).getByTestId('szn-slot-next-step')).getByTestId('szn-next-step-ask')).toBeTruthy();
+    expect(within(within(details).getByTestId('szn-slot-next-step')).getByTestId('szn-next-step-ask')).toBeTruthy();
+    expect(vi.mocked(api.post)).not.toHaveBeenCalled();
+  });
+
+  test('on another tab the hero still says the tone, and the counts are not there', async () => {
+    renderPage('?tab=roadmap');
+    const line = await screen.findByTestId('szn-health');
+    await waitFor(() => expect(within(line).getByTestId('szn-health-tone').textContent).toBe('Needs attention'));
+    expect(screen.queryByTestId('szn-health-details')).toBeNull();
+    expect(screen.queryByTestId('szn-stats')).toBeNull();
+    expect(screen.queryByTestId('szn-next-step-ask')).toBeNull();
   });
 
   test('a past season: Season complete, its own episodes, no goals', async () => {
     renderPage('?season=1');
     const line = await screen.findByTestId('szn-health');
     expect(within(line).getByTestId('szn-health-tone').textContent).toBe('Season complete');
-    expect(within(line).getByTestId('szn-health-part').textContent).toMatch(/The episode is done/);
-    expect(within(line).queryByTestId('szn-health-goals')).toBeNull();
+    const details = await screen.findByTestId('szn-health-details');
+    expect(within(details).getByTestId('szn-health-part').textContent).toMatch(/The episode is done/);
+    expect(within(details).queryByTestId('szn-health-goals')).toBeNull();
+    // A past season is read, not acted on: no AI button.
+    expect(within(details).queryByTestId('szn-next-step-ask')).toBeNull();
+  });
+});
+
+// What an open of the Overview reads (S1, 2026-11-20): the stat cards, the
+// season's counts and "What should I do next?" moved into it from the page's
+// header, and they read nothing of their own. The list is what the page
+// read before the move (the same test passes on the page as it was, opened
+// at ?tab=overview); a read added to the Overview fails here.
+const OVERVIEW_READS = [
+  '/api/v1/episodes?show_id=show-1&limit=100&page=1',
+  '/api/v1/opportunities/show-1',
+  '/api/v1/shows/show-1',
+  '/api/v1/world/show-1/arc',
+  '/api/v1/world/show-1/events',
+  '/api/v1/world/show-1/goals',
+  '/api/v1/world/show-1/release-schedule',
+  '/api/v1/world/show-1/release-schedule',
+  '/api/v1/world/show-1/season/goal-coverage',
+  '/api/v1/world/show-1/season/goal-coverage',
+  '/api/v1/world/show-1/season/insights',
+  '/api/v1/world/show-1/season/knows',
+  '/api/v1/world/show-1/season/needs',
+  '/api/v1/world/show-1/season/proposals',
+  '/api/v1/world/show-1/season/reveals',
+  '/api/v1/world/show-1/season/roadmap',
+  '/api/v1/world/show-1/season/threads',
+];
+describe('what the Overview reads', () => {
+  const settle = async () => {
+    await screen.findByTestId('szn-stats');
+    await waitFor(() => expect(within(screen.getByTestId('szn-health')).getByTestId('szn-health-tone').textContent).toBe('Needs attention'));
+    await screen.findByTestId('szn-reveal-matrix').catch(() => null);
+    await new Promise((r) => setTimeout(r, 50));
+  };
+  test('the default open and ?tab=overview make the same reads as before, each as often, and no write', async () => {
+    renderPage();
+    await settle();
+    expect([...getUrls()].sort()).toEqual(OVERVIEW_READS);
+    for (const m of ['post', 'put', 'patch', 'delete']) if (api[m]) expect(vi.mocked(api[m])).not.toHaveBeenCalled();
+  });
+
+  test('?tab=overview reads the same', async () => {
+    renderPage('?tab=overview');
+    await settle();
+    expect([...getUrls()].sort()).toEqual(OVERVIEW_READS);
   });
 });
 
