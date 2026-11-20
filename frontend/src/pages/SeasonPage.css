@@ -428,6 +428,8 @@
 
 /* Tablet: two columns of everything. */
 @media (max-width: 1180px) {
+  /* A tablet, like a phone, has no hover to read a cut title by: the whole title is shown (S2 review, 2026-11-20). */
+  .szn-hero-title { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
   .szn-overview-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .szn-overview-row > :last-child { grid-column: 1 / -1; }
   .szn-summary-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
