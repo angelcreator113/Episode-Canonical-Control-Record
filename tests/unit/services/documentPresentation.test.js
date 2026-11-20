@@ -518,11 +518,18 @@ describe('the in-world document presented for video (V1)', () => {
     });
 
     test('what the module offers: the presentation is added, nothing is taken away', () => {
-      expect(Object.keys(svc).sort()).toEqual([
+      const V1 = [
         'DocumentPresentationError', 'EDGE_PADDING_PX', 'MIN_READABLE_PX', 'PANEL_OVERLAP', 'PRESENTATIONS',
         'documentByline', 'drawingAvailable', 'makeDocumentOverlay', 'measureDocumentText', 'overlayState',
         'panelSlices', 'presentDocument', 'renderDocument', 'shoppingLines', 'shoppingListContext',
-      ]);
+      ];
+      // V2-2a-2 (2026-11-20): keeping the panels. Added beside V1's, which are all still there.
+      const STORED = [
+        'LABELS', 'PRESENTATION_REVISION', 'PresentationStorageError', 'documentDrawData', 'drawPresentations',
+        'presentationPanelId', 'presentationRenderKey', 'presentationSetId', 'presentationStorageAvailable',
+        'readStoredImage', 'sha256', 'storePresentationPanel',
+      ];
+      expect(Object.keys(svc).sort()).toEqual([...V1, ...STORED].sort());
     });
   });
 

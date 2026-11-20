@@ -716,6 +716,224 @@ async function storePng(buffer, eventId, type) {
 
 const LABELS = { shopping_list: 'Shopping list', offer_letter: 'Offer letter' };
 
+const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
+
+/**
+ * What the page is drawn from, as it stands now: the document, its event,
+ * and for a shopping list the look and Lala's coins, for an offer letter
+ * the deal's terms. { data, pieces } where `data` is what renderDocument
+ * and presentDocument take. One reading of it for the canonical drawing
+ * and for the presentations' check against it.
+ */
+async function documentDrawData(sequelize, { event, type, doc, terms = null }) {
+  let balance = null;
+  let look = null;
+  if (type === 'shopping_list') {
+    ({ look, balance } = await shoppingListContext(sequelize, event));
+  }
+  const pieces = look ? look.pieces : null;
+  return { data: { doc, event, balance, pieces, terms: terms || [] }, pieces };
+}
+
+// ─── The presentations, stored (V2-2a-2, Evoni 2026-11-20) ──────────────────
+//
+// presentDocument draws the panels; this keeps them. A panel's file is
+// named by its own bytes and written only where no file is: the same
+// panel made twice is one file, and a file once written is never written
+// over. Where the store cannot promise that, nothing is stored.
+
+/** Raised when the panels' drawing changes: a set made under another revision is not this one. */
+const PRESENTATION_REVISION = 1;
+/** The namespace the sets' and panels' ids are derived in (any fixed uuid). */
+const PRESENTATION_NAMESPACE = '6f1d1b0e-5a0e-4a53-9c0e-2f7d3f1a8b21';
+
+class PresentationStorageError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'PresentationStorageError';
+    this.code = code;
+  }
+}
+
+/** The key in our bucket of one of our own file addresses, or null for anything else. */
+function ownStorageKey(url) {
+  const bucket = storageBucket();
+  if (!bucket || typeof url !== 'string') return null;
+  let parsed;
+  try { parsed = new URL(url); } catch (err) { return null; }
+  if (parsed.protocol !== 'https:' || !parsed.hostname.startsWith(`${bucket}.s3.`) || !parsed.hostname.endsWith('.amazonaws.com')) return null;
+  return decodeURIComponent(parsed.pathname.slice(1)) || null;
+}
+
+function storageClient() {
+  const { S3Client } = require('@aws-sdk/client-s3');
+  return new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
+}
+
+async function readOwnObject(key) {
+  const { GetObjectCommand } = require('@aws-sdk/client-s3');
+  const got = await storageClient().send(new GetObjectCommand({ Bucket: storageBucket(), Key: key }));
+  return Buffer.from(await got.Body.transformToByteArray());
+}
+
+/**
+ * The bytes of a stored document image, read with the app's own
+ * credentials (never by its open address): a file in our bucket, or the
+ * data: address used where there is no bucket. Null when it is neither or
+ * cannot be read.
+ */
+async function readStoredImage(url) {
+  if (typeof url === 'string' && url.startsWith('data:image/png;base64,')) {
+    return Buffer.from(url.slice('data:image/png;base64,'.length), 'base64');
+  }
+  const key = ownStorageKey(url);
+  if (!key) return null;
+  try {
+    return await readOwnObject(key);
+  } catch (err) {
+    console.error('[DocumentPresentation] a stored image could not be read:', err.name || err.message);
+    return null;
+  }
+}
+
+/** Whether panels can be kept at all: only in a bucket (a 1920x1080 frame is not kept as a data: address). */
+function presentationStorageAvailable() {
+  return Boolean(storageBucket());
+}
+
+/**
+ * Keep one panel. The key carries the panel's own hash. What is already
+ * there is read first: these very bytes are reused, anything else is
+ * PresentationStorageError('STORAGE_CONFLICT') and is not written over.
+ * Where nothing is there the write is "only if nothing is there"
+ * (If-None-Match: *), and what it left is read back. A store that does not
+ * know the condition is refused ('STORAGE_NOT_IMMUTABLE'). Returns
+ * { url, key, sha256, reused }.
+ */
+async function storePresentationPanel(buffer, { eventId, type, version, presentation, index, count }) {
+  const bucket = storageBucket();
+  if (!bucket) throw new PresentationStorageError('STORAGE_NOT_CONFIGURED', 'No storage is configured for presentation panels.');
+  const { PutObjectCommand } = require('@aws-sdk/client-s3');
+  const region = process.env.AWS_REGION || 'us-east-1';
+  const hash = sha256(buffer);
+  const key = `overlays/event-documents/${eventId}/presentations/${type}-v${version}-${presentation}-${index}of${count}-${hash}.png`;
+  const url = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+  const missing = (err) => {
+    const status = err && err.$metadata ? err.$metadata.httpStatusCode : null;
+    return status === 404 || err.name === 'NoSuchKey' || err.name === 'NotFound';
+  };
+  // What is there already is looked at first and never written over: the
+  // very same panel is reused, anything else is a conflict.
+  let stored = null;
+  try {
+    stored = await readOwnObject(key);
+  } catch (err) {
+    if (!missing(err)) throw new PresentationStorageError('STORAGE_UNREADABLE', `The storage could not be read to see whether this panel is kept (${err.name || 'error'}).`);
+  }
+  let reused = stored !== null;
+  if (!stored) {
+    try {
+      await storageClient().send(new PutObjectCommand({
+        Bucket: bucket, Key: key, Body: buffer, ContentType: 'image/png', CacheControl: 'max-age=31536000, immutable', IfNoneMatch: '*',
+      }));
+    } catch (err) {
+      const status = err && err.$metadata ? err.$metadata.httpStatusCode : null;
+      const taken = status === 412 || err.name === 'PreconditionFailed';
+      if (!taken) {
+        // 501: the store does not know the condition, so it cannot promise
+        // a file is written once. Anything else is simply not written.
+        if (status === 501 || err.name === 'NotImplemented') throw new PresentationStorageError('STORAGE_NOT_IMMUTABLE', 'This storage cannot promise a file is written only once.');
+        throw new PresentationStorageError('STORAGE_WRITE_FAILED', `A presentation panel could not be stored (${err.name || 'error'}).`);
+      }
+      // Another request wrote it between the look and the write.
+      reused = true;
+    }
+    // Read back what is there now, written here or by that other request.
+    try {
+      stored = await readOwnObject(key);
+    } catch (err) {
+      throw new PresentationStorageError('STORAGE_UNREADABLE', `A stored presentation panel could not be read back (${err.name || 'error'}).`);
+    }
+  }
+  if (sha256(stored) !== hash) {
+    throw new PresentationStorageError('STORAGE_CONFLICT', 'A different file is already stored where this panel belongs. It was not replaced.');
+  }
+  return { url, key, sha256: hash, reused };
+}
+
+/**
+ * A name-based uuid (version 5, RFC 4122: SHA-1 of the namespace's bytes
+ * and the name): the same names always give the same id.
+ */
+function derivedId(...names) {
+  const namespace = Buffer.from(PRESENTATION_NAMESPACE.replace(/-/g, ''), 'hex');
+  const hash = crypto.createHash('sha1').update(namespace).update(names.join('|')).digest();
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/**
+ * Who a set of panels is: the event's document at a version, drawn from
+ * the inputs `renderKey` stands for, in one presentation. And each of its
+ * panels. The same set made again has the same ids.
+ */
+function presentationSetId({ eventId, type, version, renderKey, presentation }) {
+  return derivedId('set', eventId, type, version, renderKey, presentation);
+}
+function presentationPanelId(setId, index, count) {
+  return derivedId('panel', setId, index, count);
+}
+
+/**
+ * The one string a set is made under: the document's version, the look's
+ * total or the terms it was drawn with, the canonical page's own bytes and
+ * the panels' revision. Any of them changing makes another set.
+ */
+function presentationRenderKey({ version, lookTotal = null, termsKey = null, canonicalSha256, revision = PRESENTATION_REVISION }) {
+  return sha256(Buffer.from(JSON.stringify([version, lookTotal, termsKey, canonicalSha256, revision])));
+}
+
+/**
+ * Both presentations of a page, drawn (not stored). For each:
+ *   { presentation, ok: true, readable, body_px_on_screen, past_page, panels: [{ index, count, buffer, sha256, rect, source }] }
+ * or { presentation, ok: false, code, message } when it cannot be shown
+ * whole or, for reading, not at a size to read (READING_NOT_READABLE: a
+ * reading set that cannot be read is not kept). A floating page too small
+ * to read is kept, with readable: false. Null when drawing is unavailable.
+ * `present` is presentDocument (a test may stand in for it).
+ */
+function drawPresentations(type, data, present = presentDocument) {
+  const out = [];
+  for (const presentation of PRESENTATIONS) {
+    let drawn;
+    try {
+      drawn = present(type, data, { presentation });
+    } catch (err) {
+      if (!(err instanceof DocumentPresentationError)) throw err;
+      out.push({ presentation, ok: false, code: err.code, message: err.message });
+      continue;
+    }
+    if (!drawn) return null;
+    if (presentation === 'reading' && !drawn.readable) {
+      out.push({ presentation, ok: false, code: 'READING_NOT_READABLE', message: `The reading panels' text would be ${drawn.text.body_px_on_screen} px on screen; ${MIN_READABLE_PX} px is the least that reads.` });
+      continue;
+    }
+    out.push({
+      presentation,
+      ok: true,
+      readable: drawn.readable,
+      body_px_on_screen: drawn.text.body_px_on_screen,
+      past_page: drawn.text.past_page,
+      panels: drawn.panels.map((panel) => ({
+        index: panel.index, count: panel.of, buffer: panel.buffer, sha256: sha256(panel.buffer), rect: panel.rect, source: panel.source,
+      })),
+    });
+  }
+  return out;
+}
+
 /**
  * Draw an approved document as its overlay and record it on the document.
  * Returns the overlay { asset_id, url, version, made_at }, or null when it
@@ -724,18 +942,16 @@ const LABELS = { shopping_list: 'Shopping list', offer_letter: 'Offer letter' };
 async function makeDocumentOverlay(models, { event, type, doc, terms = null }) {
   const { sequelize } = models;
   if (!doc || doc.status !== 'approved') return null;
-  let balance = null;
-  let look = null;
-  if (type === 'shopping_list') {
-    ({ look, balance } = await shoppingListContext(sequelize, event));
-  }
-  const pieces = look ? look.pieces : null;
-  const buffer = renderDocument(type, { doc, event, balance, pieces, terms: terms || [] });
+  const { data, pieces } = await documentDrawData(sequelize, { event, type, doc, terms });
+  const buffer = renderDocument(type, data);
   if (!buffer) return null;
   const url = await storePng(buffer, event.id, type);
   const assetId = crypto.randomUUID();
   const madeAt = new Date().toISOString();
-  const metadata = { source: 'event_document', event_id: event.id, document_type: type, document_version: doc.version };
+  // What was drawn, by its bytes: the presentations are made only beside
+  // the very image they match (V2-2a-2).
+  const contentSha256 = sha256(buffer);
+  const metadata = { source: 'event_document', event_id: event.id, document_type: type, document_version: doc.version, content_sha256: contentSha256 };
   await sequelize.transaction(async (transaction) => {
     await sequelize.query(
       `INSERT INTO assets (id, name, asset_type, asset_role, asset_group, asset_scope, purpose, category, entity_type,
@@ -753,7 +969,7 @@ async function makeDocumentOverlay(models, { event, type, doc, terms = null }) {
           AND metadata->>'event_id' = :eventId AND metadata->>'document_type' = :type`,
       { replacements: { assetId, eventId: event.id, type }, transaction });
   });
-  const drawn = { asset_id: assetId, url, version: doc.version, made_at: madeAt };
+  const drawn = { asset_id: assetId, url, version: doc.version, made_at: madeAt, content_sha256: contentSha256 };
   // The total it was drawn with: a look that changes after approval leaves
   // the image out of date (overlayState), and Approve draws it again.
   if (type === 'shopping_list') drawn.look_total = shoppingLines(doc, pieces || event?.outfit_pieces).total;
@@ -816,4 +1032,16 @@ module.exports = {
   documentByline,
   makeDocumentOverlay,
   overlayState,
+  sha256,
+  documentDrawData,
+  PRESENTATION_REVISION,
+  PresentationStorageError,
+  readStoredImage,
+  presentationStorageAvailable,
+  storePresentationPanel,
+  presentationSetId,
+  presentationPanelId,
+  presentationRenderKey,
+  drawPresentations,
+  LABELS,
 };
