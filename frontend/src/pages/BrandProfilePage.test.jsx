@@ -197,6 +197,52 @@ describe('BrandProfilePage', () => {
     expect((await screen.findByTestId('bp-pictures')).textContent).toContain('No library pictures are tagged with Velour Atelier yet.');
   });
 
+  // Evoni, 2026-11-20: the picture library is an ADMIN's to read, so only an ADMIN has the Pictures tab.
+  test('someone who is not ADMIN has no Pictures tab, and nothing asks the library for pictures', async () => {
+    auth.user = { groups: ['viewer'] };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/media') throw Object.assign(new Error('forbidden'), { response: { status: 403 } });
+      return { data: withPictures() };
+    });
+    renderAt();
+    await screen.findByTestId('bp-identity');
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent.trim());
+    expect(tabs).not.toContain('Pictures');
+    // Every other tab the profile has is still there, in order.
+    expect(tabs).toEqual(withPictures().sections.filter((x) => x.key !== 'pictures').map((x) => x.label));
+    expect(screen.queryByTestId('bp-pictures')).toBeNull();
+    expect(vi.mocked(api.get).mock.calls.some(([url]) => String(url).startsWith('/api/v1/media'))).toBe(false);
+  });
+
+  test('an address that names Pictures opens their first tab instead: no error, no request for pictures', async () => {
+    auth.user = { groups: ['viewer'] };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/media') throw Object.assign(new Error('forbidden'), { response: { status: 403 } });
+      return { data: withPictures() };
+    });
+    renderAt('/brands/velour_atelier?tab=pictures');
+    await screen.findByTestId('bp-identity');
+    expect(screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true').textContent.trim()).toBe(withPictures().sections[0].label);
+    expect(screen.queryByTestId('bp-pictures')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(vi.mocked(api.get).mock.calls.some(([url]) => String(url).startsWith('/api/v1/media'))).toBe(false);
+  });
+
+  test('a signed-out reader (no user) is treated the same: no Pictures tab', async () => {
+    auth.user = null;
+    vi.mocked(api.get).mockImplementation(async () => ({ data: withPictures() }));
+    renderAt('/brands/velour_atelier?tab=pictures');
+    await screen.findByTestId('bp-identity');
+    expect(screen.getAllByRole('tab').map((t) => t.textContent.trim())).not.toContain('Pictures');
+  });
+
+  test('an ADMIN still has the Pictures tab, in its place', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/media' ? { data: { success: true, items: [] } } : { data: withPictures() }));
+    renderAt();
+    await screen.findByTestId('bp-identity');
+    expect(screen.getAllByRole('tab').map((t) => t.textContent.trim())).toEqual(withPictures().sections.map((x) => x.label));
+  });
+
   test('Business: a deal with an event shows its deliverables\' progress; one without shows none', async () => {
     const withEvent = { ...velour().business[0], id: 'o-2', name: 'Velour stories', event_id: 'e-9' };
     vi.mocked(api.get).mockImplementation(async (url) => {
