@@ -169,8 +169,11 @@ describe('the health line', () => {
 
   test('a past season: Season complete, its own episodes, no goals', async () => {
     renderPage('?season=1');
-    const line = await screen.findByTestId('szn-health');
-    expect(within(line).getByTestId('szn-health-tone').textContent).toBe('Season complete');
+    // A finished season is said once on the header, by its lifecycle (S2): no health chip saying "Season complete" beside it.
+    const hero = await screen.findByTestId('szn-hero');
+    expect(within(hero).getByTestId('szn-lifecycle').textContent).toBe('Completed');
+    expect(within(hero).queryByTestId('szn-health')).toBeNull();
+    expect(within(hero).queryByTestId('szn-hero-phase')).toBeNull();
     const details = await screen.findByTestId('szn-health-details');
     expect(within(details).getByTestId('szn-health-part').textContent).toMatch(/The episode is done/);
     expect(within(details).queryByTestId('szn-health-goals')).toBeNull();
@@ -297,13 +300,24 @@ describe('the Calendar view', () => {
 });
 
 describe('Print plan', () => {
-  test('the hero links the one-pager, for the season shown', async () => {
+  test('the header\'s ⋯ menu links the one-pager, for the season shown (it was a button on the hero)', async () => {
     renderPage();
-    expect((await screen.findByTestId('szn-print-plan')).getAttribute('href')).toBe('/shows/show-1/season/plan');
+    expect(screen.queryByTestId('szn-print-plan')).toBeNull();
+    fireEvent.click(await screen.findByTestId('szn-hero-more'));
+    const link = within(screen.getByTestId('szn-hero-menu')).getByRole('menuitem', { name: 'Print plan' });
+    expect(link).toBe(screen.getByTestId('szn-print-plan'));
+    expect(link.tagName).toBe('A');
+    expect(link.getAttribute('href')).toBe('/shows/show-1/season/plan');
+    // Escape closes the menu, as before.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('szn-hero-menu')).toBeNull();
   });
   test('a past season keeps Print plan (and only that)', async () => {
     renderPage('?season=1');
-    expect((await screen.findByTestId('szn-print-plan')).getAttribute('href')).toBe('/shows/show-1/season/plan?season=1');
+    fireEvent.click(await screen.findByTestId('szn-hero-more'));
+    const items = within(screen.getByTestId('szn-hero-menu')).getAllByRole('menuitem');
+    expect(items.map((i) => i.textContent.trim())).toEqual(['Print plan']);
+    expect(items[0].getAttribute('href')).toBe('/shows/show-1/season/plan?season=1');
     expect(screen.queryByTestId('szn-edit-season')).toBeNull();
   });
 });

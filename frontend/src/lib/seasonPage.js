@@ -210,11 +210,15 @@ export const slotsLine = (stats) => `${stats.slots.done} completed · ${stats.sl
 export const goalsLine = (stats) => `${stats.goals.done} complete · ${stats.goals.remaining} remaining`;
 export const eventsLine = (stats) => `${stats.events.scheduled} scheduled · ${stats.events.remaining} remaining`;
 
-/** The hero's chips: "24 Episodes", "3 Parts", the dates when set. */
-export function heroChips({ roadmap, arc }) {
-  const chips = [plural(roadmap?.slot_count ?? 24, 'Episode', 'Episodes'), plural((arc?.phases || []).length || 3, 'Phase', 'Phases')];
-  const dates = dateRange(arc?.starts_on, arc?.ends_on);
-  if (dates) chips.push(dates);
-  return chips;
+/**
+ * The season's lifecycle, as the header says it: where the season is in its
+ * life (ShowArc.status: upcoming, active, completed), which is not its
+ * health (lib/seasonHealth: on track, needs attention, behind). A status
+ * that is none of the three is not named.
+ */
+const LIFECYCLE = { upcoming: 'Upcoming', active: 'Active', completed: 'Completed' };
+export function seasonLifecycle(arc) {
+  const key = arc?.status;
+  return typeof key === 'string' && Object.hasOwn(LIFECYCLE, key) ? { key, label: LIFECYCLE[key] } : null;
 }
 

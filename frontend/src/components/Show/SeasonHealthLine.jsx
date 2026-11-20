@@ -41,6 +41,8 @@ export default function SeasonHealthLine({ health, nextStepSlot = null, show = '
   return (
     <div className="shl" data-testid="szn-health">
       <p className="shl-line">
+        {/* On the header the tone is named for what it is, beside the lifecycle chip. */}
+        {show === 'tone' && <span className="shl-prefix">Health</span>}
         <span className={`shl-tone is-${health.tone}`} data-testid="szn-health-tone">{health.label}</span>
         {show === 'all' && health.pieces.map((p) => (
           <span key={p.key} className="shl-piece" data-testid={`szn-health-${p.key}`}>

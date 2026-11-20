@@ -31,3 +31,4 @@
 .shl.is-details .shl-line { color: var(--sp-ink, #3A1236); }
 .shl-heading { font-size: 13px; font-weight: 700; color: var(--sp-muted, #6E4A68); margin-right: 4px; }
 .shl.is-details .shl-piece { background: var(--sp-purple-soft, #F1E6F8); color: var(--sp-ink, #3A1236); }
+.shl-prefix { font-size: 12px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }

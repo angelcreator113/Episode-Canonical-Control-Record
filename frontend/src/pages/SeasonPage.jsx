@@ -84,7 +84,7 @@ import OpportunitiesTab from '../components/Show/OpportunitiesTab';
 import { S as PRODUCER_S } from '../components/Show/producerStyles';
 import CareerGoals, { NarrativeDebt, SeasonPhasesHistory } from '../components/Show/CareerGoals';
 import CareerBrands from '../components/Career/CareerBrands';
-import { SEASON_TABS, tabForAddress, seasonStats, heroChips, slotsLine, goalsLine, eventsLine, seasonPageHref } from '../lib/seasonPage';
+import { SEASON_TABS, tabForAddress, seasonStats, slotsLine, goalsLine, eventsLine, seasonPageHref, dateRange, arcPart, seasonLifecycle } from '../lib/seasonPage';
 import { episodesInProduction } from '../components/Show/ShowOverview';
 import { rememberShow } from '../utils/activeShow';
 import { useReleaseSchedule, nextReleaseOf } from '../lib/releaseSchedule';
@@ -268,7 +268,7 @@ export function SeasonOpportunitiesTab({ showId, api, setToast, episodes, reload
 }
 
 /** The hero's ⋯ menu: the season's other actions. */
-function HeroMenu({ arc, nextSeason, onPick }) {
+function HeroMenu({ arc, nextSeason, onPick, readOnly = false, planHref = null }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -289,51 +289,66 @@ function HeroMenu({ arc, nextSeason, onPick }) {
       </button>
       {open && (
         <div className="szn-menu" role="menu" data-testid="szn-hero-menu">
-          <button type="button" role="menuitem" disabled={complete} onClick={() => pick('place')}>Use events and episodes</button>
-          <button type="button" role="menuitem" disabled={complete} onClick={() => pick('draft')}>Draft with AI</button>
-          <button type="button" role="menuitem" disabled={!complete} onClick={() => pick('new')}
-            title={complete ? undefined : 'Once this season is complete'}>
-            Start Season {nextSeason}{complete ? '' : ' (when this one is complete)'}
-          </button>
+          {/* A past season is read here: its setup actions would write the season in progress. Print plan reads any season. */}
+          {!readOnly && (
+            <>
+              <button type="button" role="menuitem" disabled={complete} onClick={() => pick('place')}>Use events and episodes</button>
+              <button type="button" role="menuitem" disabled={complete} onClick={() => pick('draft')}>Draft with AI</button>
+              <button type="button" role="menuitem" disabled={!complete} onClick={() => pick('new')}
+                title={complete ? undefined : 'Once this season is complete'}>
+                Start Season {nextSeason}{complete ? '' : ' (when this one is complete)'}
+              </button>
+            </>
+          )}
+          {planHref && (
+            <Link role="menuitem" to={planHref} onClick={() => setOpen(false)} data-testid="szn-print-plan">
+              <Printer size={16} aria-hidden="true" style={{ marginRight: 8 }} /> Print plan
+            </Link>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-export function SeasonHero({ arc, roadmap, showName, nextSeason, onEdit, onPick, readOnly = false, switcher = null, health = null, planHref = null }) {
+export function SeasonHero({ arc, showName, nextSeason, onEdit, onPick, readOnly = false, switcher = null, health = null, planHref = null }) {
   const cover = arc?.cover_url || null;
+  const life = seasonLifecycle(arc);
+  // The phase the season is in: said for the season in progress, not for a finished or a past one.
+  const phase = !readOnly && arc?.status !== 'completed' ? arcPart(arc, arc?.current_phase) : null;
+  const dates = dateRange(arc?.starts_on, arc?.ends_on);
   return (
-    <header className={`szn-hero${cover ? ' has-cover' : ''}`} data-testid="szn-hero"
-      style={cover ? { backgroundImage: `url("${cover}")` } : undefined}>
-      <div className="szn-hero-shade">
-        {showName && <p className="szn-hero-show">{showName}</p>}
-        <p className="szn-hero-eyebrow">Season {arc?.season_number || 1}</p>
-        <h1 className="szn-hero-title">{arc?.title}</h1>
-        {arc?.tagline && <p className="szn-hero-tagline">{arc.tagline}</p>}
-        <ul className="szn-hero-chips" aria-label="The season">
-          {heroChips({ roadmap, arc }).map((c) => <li key={c}>{c}</li>)}
-          {arc?.status === 'completed' && <li className="is-done">Complete</li>}
-        </ul>
-        {/* The season's health in a line (round 3, 2026-10-26). */}
-        {health}
+    <header className="szn-hero" data-testid="szn-hero">
+      {/* Small, beside the title; the stylesheet leaves it out on a phone, and a lazy picture that is not shown is not fetched. */}
+      {cover && <img className="szn-hero-thumb" src={cover} alt="" loading="lazy" data-testid="szn-hero-thumb" />}
+      <div className="szn-hero-id">
+        <p className="szn-hero-eyebrow">
+          {showName && <span className="szn-hero-show">{showName}</span>}
+          <span>Season {arc?.season_number || 1}</span>
+        </p>
+        <h1 className="szn-hero-title" title={arc?.title || undefined}>{arc?.title}</h1>
+        <div className="szn-hero-meta" aria-label="The season" data-testid="szn-hero-meta">
+          {life && <span className={`szn-hero-chip is-life is-${life.key}`} data-testid="szn-lifecycle" title="Where the season is in its life">{life.label}</span>}
+          {/* The season's health (SeasonHealthLine): not drawn for a finished season, whose lifecycle says the same. */}
+          {health}
+          {phase && (
+            <span className="szn-hero-chip" data-testid="szn-hero-phase">Phase {phase.phase}{phase.title ? `: ${phase.title}` : ''}</span>
+          )}
+          {dates
+            ? <span className="szn-hero-chip" data-testid="szn-hero-dates">{dates}</span>
+            : <span className="szn-hero-chip is-quiet" data-testid="szn-hero-dates">No dates set</span>}
+        </div>
+      </div>
+      <div className="szn-hero-side">
         {switcher}
-        {/* A past season is read here; its setup actions would write the season in progress. Print plan reads any season. */}
-        {(!readOnly || planHref) && (
-          <div className="szn-hero-actions">
-            {!readOnly && (
-              <button type="button" className="szn-btn" onClick={onEdit} data-testid="szn-edit-season">
-                <Pencil size={16} aria-hidden="true" /> Edit Season
-              </button>
-            )}
-            {planHref && (
-              <Link className="szn-btn is-ghost" to={planHref} data-testid="szn-print-plan">
-                <Printer size={16} aria-hidden="true" /> Print plan
-              </Link>
-            )}
-            {!readOnly && <HeroMenu arc={arc} nextSeason={nextSeason} onPick={onPick} />}
-          </div>
-        )}
+        <div className="szn-hero-actions">
+          {!readOnly && (
+            <button type="button" className="szn-btn" onClick={onEdit} data-testid="szn-edit-season">
+              <Pencil size={16} aria-hidden="true" /> Edit Season
+            </button>
+          )}
+          {(!readOnly || planHref) && <HeroMenu arc={arc} nextSeason={nextSeason} onPick={onPick} readOnly={readOnly} planHref={planHref} />}
+        </div>
       </div>
     </header>
   );
@@ -555,9 +570,9 @@ export default function SeasonPage() {
   return (
     <div className="szn-page" data-testid="season-page">
       {back}
-      <SeasonHero arc={arc} roadmap={roadmap} showName={showName} nextSeason={nextSeason}
+      <SeasonHero arc={arc} showName={showName} nextSeason={nextSeason}
         onEdit={() => openPanel(panel === 'edit' ? null : 'edit')} onPick={openPanel} readOnly={!isCurrent}
-        health={<SeasonHealthLine health={health} show="tone" />}
+        health={health && health.tone !== 'complete' ? <SeasonHealthLine health={health} show="tone" /> : null}
         planHref={`/shows/${encodeURIComponent(showId)}/season/plan${season ? `?season=${encodeURIComponent(season)}` : ''}`}
         switcher={<SeasonSwitcher seasons={plan.seasons} arc={arc} currentArcId={plan.currentArcId} onPick={pickSeason} />} />
       {!isCurrent && (

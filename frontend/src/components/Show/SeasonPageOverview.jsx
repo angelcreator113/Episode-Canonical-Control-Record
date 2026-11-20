@@ -87,7 +87,10 @@ function SeasonOverviewCard({ arc, roadmap, api, showId, release }) {
       <header className="szn-card-head">
         <h2 className="szn-card-title">Season Overview</h2>
       </header>
+      {/* The season's cover and tagline: the header's until S2 (2026-11-20), which keeps a small picture only. */}
+      {arc.cover_url && <img className="szn-overview-cover" src={arc.cover_url} alt="" loading="lazy" data-testid="szn-overview-cover" />}
       <dl className="szn-facts">
+        {arc.tagline && <div><dt>Tagline</dt><dd data-testid="szn-tagline">{arc.tagline}</dd></div>}
         <div><dt>Logline</dt><dd>{arc.logline || <span className="szn-muted">No logline yet</span>}</dd></div>
         <ReleasesFact api={api} showId={showId} release={release} seasonNumber={roadmap?.season_number ?? arc.season_number ?? null} />
         <div>
