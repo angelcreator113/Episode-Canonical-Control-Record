@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const AssetRoleService = require('../services/AssetRoleService');
 const { requireAuth, authorize } = require('../middleware/auth');
+const { protectDocumentPresentations } = require('../utils/documentPresentationAssets');
+const { validateBodyAssetIdItems } = require('../middleware/requestValidation');
 
 // Studio configuration, admin only (SEC-2, Evoni's admin-only ruling
 // 2026-10-29): every route here was optionalAuth, so anyone, signed in or
@@ -181,7 +183,7 @@ router.delete('/:roleKey', ...admin, async (req, res) => {
  * POST /api/v1/roles/bulk-assign
  * Bulk assign roles to assets
  */
-router.post('/bulk-assign', ...admin, async (req, res) => {
+router.post('/bulk-assign', ...admin, validateBodyAssetIdItems('assignments', 'assetId'), protectDocumentPresentations((req) => (Array.isArray(req.body?.assignments) ? req.body.assignments.map((a) => a && a.assetId) : [])), async (req, res) => {
   try {
     const { assignments } = req.body; // [{ assetId, roleKey }, ...]
 

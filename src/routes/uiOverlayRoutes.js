@@ -4,6 +4,11 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { requireAuth, authorize } = require('../middleware/auth');
+const { protectDocumentPresentations } = require('../utils/documentPresentationAssets');
+
+// These routes find their asset by id and show alone. A document
+// presentation is kept by its document and is not one of the phone's (V2-2a).
+const presentationByAssetId = protectDocumentPresentations((req) => req.params.assetId);
 const { isBudgetError } = require('../services/imageCostService');
 
 // Images only (phone audit, 2026-10-07): the stored file keeps the type it
@@ -526,7 +531,7 @@ router.put('/:showId/style-prefix', requireAuth, async (req, res) => {
 const NO_LIVE_IMAGE = "That image was replaced or removed. Reload Lala's Phone and try again.";
 const updatedNothing = (meta) => meta && typeof meta.rowCount === 'number' && meta.rowCount === 0;
 
-router.put('/:showId/category/:assetId', requireAuth, async (req, res) => {
+router.put('/:showId/category/:assetId', requireAuth, presentationByAssetId, async (req, res) => {
   try {
     const models = require('../models');
     const { category, name } = req.body;
@@ -563,7 +568,7 @@ router.put('/:showId/category/:assetId', requireAuth, async (req, res) => {
 // ── IMAGE FIT (resize/position settings) ────────────────────────────────
 
 // PUT /api/v1/ui-overlays/:showId/image-fit/:assetId — save image fit settings
-router.put('/:showId/image-fit/:assetId', requireAuth, async (req, res) => {
+router.put('/:showId/image-fit/:assetId', requireAuth, presentationByAssetId, async (req, res) => {
   try {
     const models = require('../models');
     const { image_fit } = req.body;
@@ -596,7 +601,7 @@ router.put('/:showId/image-fit/:assetId', requireAuth, async (req, res) => {
 // ── SCREEN LINKS (tap zones with icon overlays) ───────────────────────────
 
 // PUT /api/v1/ui-overlays/:showId/screen-links/:assetId — save screen links for an overlay
-router.put('/:showId/screen-links/:assetId', requireAuth, async (req, res) => {
+router.put('/:showId/screen-links/:assetId', requireAuth, presentationByAssetId, async (req, res) => {
   try {
     const models = require('../models');
     const { validateScreenLinks } = require('../services/phoneConditionSchema');
@@ -660,7 +665,7 @@ router.get('/:showId/screen-links/:assetId', requireAuth, async (req, res) => {
 });
 
 // POST /api/v1/ui-overlays/:showId/screen-links/:assetId/icon — upload icon image for a link zone
-router.post('/:showId/screen-links/:assetId/icon', requireAuth, upload.single('icon'), async (req, res) => {
+router.post('/:showId/screen-links/:assetId/icon', requireAuth, presentationByAssetId, upload.single('icon'), async (req, res) => {
   try {
     const models = require('../models');
     const { uploadOverlayToS3 } = require('../services/uiOverlayService');
@@ -747,7 +752,7 @@ function contentZonesProblem(zones) {
 }
 
 // PUT /api/v1/ui-overlays/:showId/content-zones/:assetId — save content zones for an overlay
-router.put('/:showId/content-zones/:assetId', requireAuth, async (req, res) => {
+router.put('/:showId/content-zones/:assetId', requireAuth, presentationByAssetId, async (req, res) => {
   try {
     const models = require('../models');
     const { content_zones } = req.body;
@@ -1090,7 +1095,7 @@ router.delete('/:showId/types/:typeId', requireAuth, async (req, res) => {
 });
 
 // DELETE /api/v1/ui-overlays/:showId/asset/:assetId — soft-delete an overlay asset
-router.delete('/:showId/asset/:assetId', requireAuth, async (req, res) => {
+router.delete('/:showId/asset/:assetId', requireAuth, presentationByAssetId, async (req, res) => {
   try {
     const models = require('../models');
     const { showId, assetId } = req.params;

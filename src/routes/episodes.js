@@ -111,6 +111,8 @@ router.delete(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   requireAuth,
+  // It also clears the asset's own episode link; not for a document presentation (V2-2a).
+  require('../utils/documentPresentationAssets').protectDocumentPresentations((req) => req.params.assetId),
   asyncHandler(episodeController.removeEpisodeAsset)
 );
 

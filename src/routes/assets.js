@@ -15,7 +15,21 @@ const AssetService = require('../services/AssetService');
 const { models } = require('../models');
 const { isBudgetError } = require('../services/imageCostService');
 const { requireAuth, authorize, optionalAuth } = require('../middleware/auth');
-const { validateAssetUpload, validateUUIDParam } = require('../middleware/requestValidation');
+const { validateAssetUpload, validateUUIDParam, validateBodyAssetIds, validateBodyAssetId } = require('../middleware/requestValidation');
+const {
+  protectDocumentPresentations, refuseDocumentPresentationType, isDocumentPresentationType, exceptDocumentPresentations,
+  hideDocumentPresentations, isAdmin,
+} = require('../utils/documentPresentationAssets');
+
+// A document presentation is kept by its document (V2-2a): the operations
+// below that change assets refuse one, whichever of these names it.
+const presentationById = protectDocumentPresentations((req) => req.params.id);
+const presentationAmongIds = protectDocumentPresentations((req) => req.body?.assetIds);
+// The four bulk routes take a list of asset id strings and nothing else.
+const assetIdList = validateBodyAssetIds('assetIds');
+// Reading one through this API is an ADMIN's. Anyone else is answered as
+// for an id that is no asset, each route in its own words.
+const presentationHidden = (asIfMissing) => hideDocumentPresentations((req) => req.params.id, asIfMissing);
 
 const router = express.Router();
 
@@ -103,12 +117,22 @@ router.get('/', optionalAuth, async (req, res) => {
     const { category, character_name, entity_type: entityTypeFilter, location_name, include_global, search } = req.query;
     const { Op } = require('sequelize');
 
-    const where = {};
+    let where = {};
     if (approval_status) {
       where.approval_status = approval_status;
     }
     if (asset_type) {
       where.asset_type = asset_type;
+    }
+    // Document presentations are left out of this list (every picker reads
+    // it) unless they are asked for by their type, and then only for an
+    // ADMIN: this route is otherwise open.
+    if (isDocumentPresentationType(asset_type)) {
+      if (!req.user) return res.status(401).json({ error: 'Authentication required', message: 'Sign in to list document presentations.' });
+      if (!isAdmin(req)) return res.status(403).json({ error: 'Forbidden', message: 'Only an admin can list document presentations.' });
+      where.asset_type = asset_type.trim().toUpperCase();
+    } else {
+      where = exceptDocumentPresentations(where);
     }
     // When show_id is provided, also include GLOBAL assets (available everywhere)
     if (show_id) {
@@ -288,10 +312,10 @@ router.get('/eligible', optionalAuth, async (req, res) => {
 
     // Combine role/approval with scope conditions
     const { Op } = require('sequelize');
-    const finalWhere = {
+    const finalWhere = exceptDocumentPresentations({
       ...where,
       [Op.or]: scopeConditions,
-    };
+    });
 
     const assets = await models.Asset.findAll({
       where: finalWhere,
@@ -399,10 +423,10 @@ router.get('/by-folder', optionalAuth, async (req, res) => {
 
     console.log('🔍 Scope conditions:', JSON.stringify(scopeConditions, null, 2));
 
-    const finalWhere = {
+    const finalWhere = exceptDocumentPresentations({
       ...where,
       [Op.or]: scopeConditions,
-    };
+    });
 
     console.log('🔍 Final where clause:', JSON.stringify(finalWhere, null, 2));
 
@@ -574,7 +598,7 @@ router.post('/labels', requireAuth, async (req, res) => {
  * POST /api/v1/assets/bulk/delete
  * Bulk delete assets
  */
-router.post('/bulk/delete', requireAuth, async (req, res) => {
+router.post('/bulk/delete', requireAuth, assetIdList, presentationAmongIds, async (req, res) => {
   try {
     const { assetIds } = req.body;
 
@@ -606,7 +630,7 @@ router.post('/bulk/delete', requireAuth, async (req, res) => {
  * Bulk background removal
  */
 // The four processing routes in this file are an ADMIN's (Evoni, 2026-11-16): paid background removal.
-router.post('/bulk/process-background', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.post('/bulk/process-background', requireAuth, authorize(['ADMIN']), assetIdList, presentationAmongIds, async (req, res) => {
   try {
     const { assetIds } = req.body;
 
@@ -637,7 +661,7 @@ router.post('/bulk/process-background', requireAuth, authorize(['ADMIN']), async
  * POST /api/v1/assets/bulk/add-labels
  * Bulk add labels to assets
  */
-router.post('/bulk/add-labels', requireAuth, async (req, res) => {
+router.post('/bulk/add-labels', requireAuth, assetIdList, presentationAmongIds, async (req, res) => {
   try {
     const { assetIds, labelIds } = req.body;
 
@@ -675,7 +699,7 @@ router.post('/bulk/add-labels', requireAuth, async (req, res) => {
  * POST /api/v1/assets/bulk/change-type
  * Bulk change asset type
  */
-router.post('/bulk/change-type', requireAuth, async (req, res) => {
+router.post('/bulk/change-type', requireAuth, assetIdList, refuseDocumentPresentationType((req) => req.body?.assetType), presentationAmongIds, async (req, res) => {
   try {
     const { assetIds, assetType } = req.body;
 
@@ -718,6 +742,9 @@ router.post('/bulk/change-type', requireAuth, async (req, res) => {
 router.post('/search', requireAuth, async (req, res) => {
   try {
     const filters = req.body;
+    if (isDocumentPresentationType(filters?.assetType) && !isAdmin(req)) {
+      return res.status(403).json({ error: 'Forbidden', message: 'Only an admin can list document presentations.' });
+    }
     const assets = await AssetService.searchAssets(filters);
 
     res.json({
@@ -738,7 +765,8 @@ router.post('/search', requireAuth, async (req, res) => {
  * GET /api/v1/assets/:id
  * Get asset by ID
  */
-router.get('/:id', optionalAuth, validateUUIDParam('id'), async (req, res) => {
+router.get('/:id', optionalAuth, validateUUIDParam('id'),
+  presentationHidden((req, res) => res.status(404).json({ error: 'Asset not found' })), async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await AssetService.getAsset(id);
@@ -935,7 +963,7 @@ router.post('/', requireAuth, authorize(['ADMIN']), upload.single('file'), valid
  * PUT /api/v1/assets/:id/approve
  * Approve asset (admin only)
  */
-router.put('/:id/approve', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.put('/:id/approve', requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await AssetService.approveAsset(id, req.user?.id);
@@ -967,7 +995,7 @@ router.put('/:id/approve', requireAuth, authorize(['ADMIN']), async (req, res) =
  * PUT /api/v1/assets/:id/reject
  * Reject asset (admin only)
  */
-router.put('/:id/reject', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.put('/:id/reject', requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -1001,7 +1029,7 @@ router.put('/:id/reject', requireAuth, authorize(['ADMIN']), async (req, res) =>
  * PUT /api/v1/assets/:id/process
  * Process asset background removal
  */
-router.put('/:id/process', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.put('/:id/process', requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1036,7 +1064,7 @@ router.put('/:id/process', requireAuth, authorize(['ADMIN']), async (req, res) =
  * POST /api/v1/assets/:id/process-background
  * On-demand background removal
  */
-router.post('/:id/process-background', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.post('/:id/process-background', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await AssetService.processAssetBackgroundRemoval(id);
@@ -1060,7 +1088,7 @@ router.post('/:id/process-background', validateUUIDParam('id'), requireAuth, aut
  * PUT /api/v1/assets/:id
  * Update asset metadata
  */
-router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.put('/:id', validateUUIDParam('id'), requireAuth, refuseDocumentPresentationType((req) => req.body?.asset_type), presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -1085,7 +1113,7 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
  * DELETE /api/v1/assets/:id
  * Delete asset
  */
-router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.delete('/:id', validateUUIDParam('id'), requireAuth, presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     await AssetService.bulkDeleteAssets([id]);
@@ -1107,7 +1135,7 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => 
  * POST /api/v1/assets/:id/labels
  * Add labels to asset
  */
-router.post('/:id/labels', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/labels', validateUUIDParam('id'), requireAuth, presentationById, async (req, res) => {
   try {
     const { id } = req.params;
     const { labelIds } = req.body;
@@ -1139,7 +1167,7 @@ router.post('/:id/labels', validateUUIDParam('id'), requireAuth, async (req, res
  * DELETE /api/v1/assets/:id/labels/:labelId
  * Remove label from asset
  */
-router.delete('/:id/labels/:labelId', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.delete('/:id/labels/:labelId', validateUUIDParam('id'), requireAuth, presentationById, async (req, res) => {
   try {
     const { id, labelId } = req.params;
     const asset = await AssetService.removeLabelFromAsset(id, labelId);
@@ -1164,7 +1192,9 @@ router.delete('/:id/labels/:labelId', validateUUIDParam('id'), requireAuth, asyn
  * GET /api/v1/assets/:id/usage
  * Get asset usage information
  */
-router.get('/:id/usage', optionalAuth, validateUUIDParam('id'), async (req, res) => {
+router.get('/:id/usage', optionalAuth, validateUUIDParam('id'),
+  // An id that is no asset has no usages.
+  presentationHidden((req, res) => res.json({ status: 'SUCCESS', data: [], count: 0 })), async (req, res) => {
   try {
     const { id } = req.params;
     const usages = await AssetService.getAssetUsage(id);
@@ -1188,7 +1218,10 @@ router.get('/:id/usage', optionalAuth, validateUUIDParam('id'), async (req, res)
  * Generate pre-signed download URL for asset
  * @param {string} type - 'raw' or 'processed'
  */
-router.get('/:id/download/:type', optionalAuth, validateUUIDParam('id'), async (req, res) => {
+router.get('/:id/download/:type', optionalAuth, validateUUIDParam('id'),
+  presentationHidden((req, res) => (['raw', 'processed'].includes(req.params.type)
+    ? res.status(500).json({ error: 'Failed to generate download URL', message: `Asset ${req.params.id} not found` })
+    : res.status(400).json({ error: 'Invalid download type', message: 'Type must be "raw" or "processed"' }))), async (req, res) => {
   try {
     const { id, type } = req.params;
 
@@ -1222,7 +1255,7 @@ router.get('/:id/download/:type', optionalAuth, validateUUIDParam('id'), async (
  * Process an asset with transformations (background removal, enhancement, etc.)
  * Body: { asset_id, template_id, processing: { removeBackground, smoothSkin, autoEnhance }, provider }
  */
-router.post('/process', requireAuth, authorize(['ADMIN']), async (req, res) => {
+router.post('/process', requireAuth, authorize(['ADMIN']), validateBodyAssetId('asset_id'), protectDocumentPresentations((req) => req.body?.asset_id), async (req, res) => {
   try {
     const { asset_id, template_id, processing = {}, provider = 'runway' } = req.body;
 
