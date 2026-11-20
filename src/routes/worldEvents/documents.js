@@ -85,13 +85,23 @@ router.put('/world/:showId/events/:eventId/documents/:type', requireAuth, async 
 // `intent`: 'approve' refuses a document that is already approved, so two
 // approvals at once do not both succeed; 'render' only draws an approved
 // document's overlay; with neither it does whichever applies, as before.
+// 'present' makes an approved document's presentation panels, or makes them
+// again, and never draws or replaces the overlay (V2-2a-2, 2026-11-20).
+// 'redraw_canonical' is the recovery that does replace the overlay, on
+// purpose: { confirm: true, version, expected_canonical_asset_id }.
 router.post('/world/:showId/events/:eventId/documents/:type/approve', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
     const { approveDocument } = require('../../services/eventDocumentsService');
     const { showId, eventId, type } = req.params;
-    const data = await approveDocument(models, { showId, eventId, type, version: req.body?.version, intent: req.body?.intent, actor: req.user });
+    const body = req.body || {};
+    const data = await approveDocument(models, {
+      showId, eventId, type, version: body.version, intent: body.intent, actor: req.user,
+      // For intent 'redraw_canonical' only (the recovery; see approveDocument).
+      confirm: body.confirm,
+      ...(Object.prototype.hasOwnProperty.call(body, 'expected_canonical_asset_id') ? { expectedCanonicalAssetId: body.expected_canonical_asset_id } : {}),
+    });
     return res.json({ success: true, data });
   } catch (err) {
     return eventDocumentsError(res, err, 'approve');
