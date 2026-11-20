@@ -354,7 +354,14 @@ async function getDocuments(models, { showId, eventId }) {
   // Whether each document's presentations can be used: its own record and
   // one read of which of their panels are live rows. No file is read here.
   const live = await livePresentationIds(models.sequelize, Object.values(docs));
-  const presentation_readiness = Object.fromEntries(Object.entries(docs).map(([type, doc]) => [type, presentationReadiness(doc, live)]));
+  const offer = await offerState(models.sequelize, event, docs.offer_letter);
+  // And whether the overlay each stands beside is out of date, by the one
+  // calculation that says so (currentOverlayState), with what was read above.
+  const canonical = {
+    shopping_list: await currentOverlayState(models, event, 'shopping_list', docs.shopping_list, { look }),
+    offer_letter: await currentOverlayState(models, event, 'offer_letter', docs.offer_letter, { terms: offer.offer_eligible ? offer.offer_terms : null }),
+  };
+  const presentation_readiness = Object.fromEntries(Object.entries(docs).map(([type, doc]) => [type, presentationReadiness(doc, live, Date.now(), canonical[type])]));
   return {
     ...docs,
     presentation_readiness,
@@ -364,7 +371,7 @@ async function getDocuments(models, { showId, eventId }) {
     // (it was kept per browser tab before).
     look_changed: Boolean(list && typeof list.look_key === 'string' && list.look_key !== lookKey),
     closet: list ? await closetSuggestions(models.sequelize, event, list, look) : {},
-    ...(await offerState(models.sequelize, event, docs.offer_letter)),
+    ...offer,
   };
 }
 
@@ -909,17 +916,34 @@ async function thenPresentations(models, event, type, doc) {
  * its panels that are live rows now (`liveIds`): no file is read. Pure.
  *   { floating: { ready, state, reason?, code?, message?, warning?, panel_count?, missing? }, reading: … }
  * state: 'ready' | 'making' | 'not_made' | 'stale' | 'incomplete' |
- *        'failed' | 'mismatch' | 'unavailable' | 'not_approved'.
+ *        'failed' | 'mismatch' | 'unavailable' | 'not_approved' |
+ *        'canonical_outdated'.
  * Each presentation is judged alone: floating's warning or failure says
- * nothing about reading.
+ * nothing about reading. `canonical` is the overlay's own state
+ * (currentOverlayState): when it is 'outdated' neither is ready, and
+ * `panels` still says what is kept ({ kept, panel_count, missing, complete }).
  */
-function presentationReadiness(doc, liveIds = new Set(), now = Date.now()) {
+function presentationReadiness(doc, liveIds = new Set(), now = Date.now(), canonical = null) {
   const { PRESENTATION_REVISION } = require('./eventDocumentOverlayService');
   const out = {};
   for (const presentation of Object.keys(PRESENTATION_NAMES)) {
     const not = (state, more = {}) => ({ ready: false, state, ...more });
     if (!doc || doc.status !== 'approved') { out[presentation] = not('not_approved'); continue; }
     if (presentationInProgress(doc, now)) { out[presentation] = not('making'); continue; }
+    // The overlay they stand beside is out of date (currentOverlayState):
+    // they are not to be used until it is current again, however whole
+    // they are. What is kept is said all the same, and nothing is removed.
+    if (canonical === 'outdated') {
+      const entry = doc.presentations?.[presentation];
+      const ids = entry && Array.isArray(entry.asset_ids) ? entry.asset_ids : [];
+      const missing = ids.filter((id) => !liveIds.has(id)).length;
+      out[presentation] = not('canonical_outdated', {
+        code: 'CANONICAL_OUTDATED',
+        message: 'The overlay is out of date, so the presentations made beside it are not used. Draw the overlay again.',
+        panels: { kept: entry?.status === 'ok', panel_count: entry?.panel_count ?? 0, missing, complete: entry?.status === 'ok' && ids.length === entry.panel_count && missing === 0 },
+      });
+      continue;
+    }
     const kept = doc.presentations;
     const current = kept && kept.version === doc.version && kept.revision === PRESENTATION_REVISION
       && kept.canonical_asset_id === (doc.overlay?.asset_id || null) && doc.overlay?.version === doc.version;
@@ -978,7 +1002,6 @@ async function approveDocument(models, { showId, eventId, type, version, actor =
   const expectedVersion = readExpectedVersion(version);
   if (intent != null && !APPROVE_INTENTS.includes(intent)) throw new EventDocumentError(400, `intent must be one of: ${APPROVE_INTENTS.join(', ')}`);
   const label = DOC_TYPES[type].label.toLowerCase();
-  const { overlayState } = require('./eventDocumentOverlayService');
   if (intent === 'present') return presentDocumentNow(models, { showId, eventId, type, expectedVersion, actor, label });
   if (intent === 'redraw_canonical') {
     return redrawCanonical(models, { showId, eventId, type, expectedVersion, actor, label, confirm, expectedCanonicalAssetId });
@@ -1008,17 +1031,30 @@ async function approveDocument(models, { showId, eventId, type, version, actor =
   if (written) return thenPresentations(models, event, type, await withOverlay(models, event, type, prev));
   // Already approved: draw its overlay again when missing or out of date
   // (a shopping list's look total, or an offer letter's terms, changed).
+  if ((await currentOverlayState(models, event, type, prev)) === 'current') return prev;
+  return thenPresentations(models, event, type, await withOverlay(models, event, type, prev));
+}
+
+/**
+ * Whether a document's canonical overlay is 'current', 'outdated' or
+ * 'not_made', as it stands now: overlayState (eventDocumentOverlayService)
+ * given the look's total for a shopping list, the deal's terms for an offer
+ * letter. The one calculation, for drawing the overlay again and for
+ * whether the presentations beside it can be used. `known` carries a look
+ * or terms the caller has already read ({ look } or { terms }).
+ */
+async function currentOverlayState(models, event, type, doc, known = {}) {
+  const overlays = require('./eventDocumentOverlayService');
   let lookTotal = null;
   let currentTermsKey = null;
   if (type === 'shopping_list') {
-    const { shoppingListContext, shoppingLines } = require('./eventDocumentOverlayService');
-    const { look } = await shoppingListContext(models.sequelize, event);
-    if (look) lookTotal = shoppingLines(prev, look.pieces).total;
+    const look = 'look' in known ? known.look : (await overlays.shoppingListContext(models.sequelize, event)).look;
+    if (look && doc) lookTotal = overlays.shoppingLines(doc, look.pieces).total;
   } else if (type === 'offer_letter') {
-    currentTermsKey = require('./offerLetterService').termsKey(await offerTermsOf(models.sequelize, event));
+    const terms = 'terms' in known ? known.terms : await offerTermsOf(models.sequelize, event);
+    if (terms) currentTermsKey = require('./offerLetterService').termsKey(terms);
   }
-  if (overlayState(prev, lookTotal, currentTermsKey) === 'current') return prev;
-  return thenPresentations(models, event, type, await withOverlay(models, event, type, prev));
+  return overlays.overlayState(doc, lookTotal, currentTermsKey);
 }
 
 const APPROVE_INTENTS = Object.freeze(['approve', 'render', 'present', 'redraw_canonical']);
