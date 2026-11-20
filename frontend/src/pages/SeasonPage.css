@@ -124,7 +124,13 @@
 }
 .szn-hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 2px 0 0; font-size: 13px; font-weight: 600; }
 .szn-hero-meta .shl { margin: 0; }
-.szn-hero-meta .shl-line { font-size: 13px; }
+/* "Health" and its tone read as one pill: the name on the header's dark chip, the tone joined to it. */
+.szn-hero-meta .shl-line { gap: 0; font-size: 13px; flex-wrap: nowrap; }
+.szn-hero-meta .shl-prefix {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 2px 8px 2px 12px; border-radius: 999px 0 0 999px;
+  background: rgba(42, 14, 42, 0.55); border: 1px solid rgba(255, 255, 255, 0.45); border-right: 0; color: var(--sp-white);
+}
+.szn-hero-meta .shl-tone { border-radius: 0 999px 999px 0; }
 .szn-hero-chip {
   display: inline-flex; align-items: center; min-height: 28px; padding: 2px 12px; border-radius: 999px; font-size: 13px; font-weight: 700;
   background: rgba(42, 14, 42, 0.55); border: 1px solid rgba(255, 255, 255, 0.45); color: var(--sp-white);
@@ -441,6 +447,9 @@
   .szn-hero-id { flex-basis: 100%; }
   .szn-hero-title { font-size: 22px; }
   .szn-hero-side { flex: 1 1 100%; justify-content: space-between; margin-left: 0; }
+  /* The actions keep to the right edge with or without a switcher, so the menu under ⋯ opens inside the screen. */
+  .szn-hero-actions { margin-left: auto; }
+  .szn-hero-chip, .szn-hero-meta .shl-prefix, .szn-hero-meta .shl-tone { font-size: 12px; padding-left: 9px; padding-right: 9px; }
   .szn-stats { gap: 10px; }
   .szn-stat { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'icon' 'body' 'bar' 'line'; padding: 12px; row-gap: 8px; }
   .szn-stat.is-budget { grid-template-areas: 'icon' 'body' 'spark' 'line'; }
