@@ -17,7 +17,7 @@ import {
   Sparkles, ArrowRight, LayoutDashboard, Heart, Mic, Users, Globe2, ImagePlus, Trash2,
   BarChart3, CalendarDays, Download, Link2, MapPin, Palette, Crown, Instagram,
   Quote, Star, TrendingUp, Briefcase, IdCard, Activity, FileText, CirclePlay, Flame,
-  Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search,
+  Copy, BadgeCheck, Lock, Eye, Smartphone, Plus, ExternalLink, Share2, Search, Images,
   Building2, BookOpen, Radio, Settings as SettingsIcon, AlertTriangle, Archive, RotateCcw, Link as LinkIcon, MessageCircle,
 } from 'lucide-react';
 import Pager, { usePaged } from '../components/Pager/Pager';
@@ -138,12 +138,6 @@ export const getStoryTrailApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/story-trail`);
 export const getPlacesApi = (id) =>
   apiClient.get(`${API_URL}/cast/characters/${id}/places`);
-export const sharePlaceApi = (id, sceneSetId) =>
-  apiClient.post(`${API_URL}/cast/characters/${id}/places/share`, { scene_set_id: sceneSetId });
-export const showSceneSetsApi = (showId) =>
-  apiClient.get(`${API_URL}/scene-sets`, { params: { show_id: showId } });
-export const linkPlaceApi = (showId, payload) =>
-  apiClient.post(`${API_URL}/shows/${showId}/character-places`, payload);
 export const updateSocialProfileApi = (profileId, payload) =>
   apiClient.put(`${API_URL}/social-profiles/${profileId}`, payload);
 export const getSocialProfileApi = (profileId) =>
@@ -186,9 +180,12 @@ export const TABS = [
   { id: 'connections', label: 'Connections',  icon: Users },
   { id: 'world',       label: 'In the World', icon: Globe2 },
   // Evoni, 2026-10-17: their home, closet and place of work, and the events they host.
-  // Evoni, 2026-10-18: "maybe the gallery and places tab should be one": every
-  // picture already linked to them sits under their places.
-  { id: 'places',      label: 'Places & Gallery', icon: MapPin },
+  // Evoni, 2026-11-21: Life & Locations and the Media Gallery are two tabs
+  // again (it replaces 2026-10-18's "the gallery and places tab should be
+  // one"). The id stays `places`, so every ?tab=places link still opens it.
+  { id: 'places',      label: 'Life & Locations', icon: MapPin },
+  // Their photographs: headshot, camera roll, albums and the gallery tools.
+  { id: 'gallery',     label: 'Media Gallery', icon: Images },
   // Evoni, 2026-10-18: their episodes, events, posts, stories and chapters in one place.
   { id: 'story',       label: 'Story & Events', icon: CalendarDays },
   // Evoni, 2026-10-18: a confidential session with them, as Dr. Amara Sinclair.
@@ -1626,119 +1623,6 @@ export function GeneratePosts({ characterId, onDrafted }) {
 }
 
 /**
- * Their places: home, closet and others (the character homes of #3228),
- * each with its everyday picture, and "Share to The Pulse", which makes a
- * draft post from their feed profile with the picture and the venue
- * (Evoni, 2026-10-15: "their everyday scene sets which can be shared on the
- * pulse"). With no home yet, one of the show's scene sets can be chosen.
- */
-function TheirPlaces({ character }) {
-  const [data, setData] = useState(null);
-  const [sets, setSets] = useState(null);
-  const [choice, setChoice] = useState('');
-  const [busy, setBusy] = useState(null);
-  const [note, setNote] = useState(null);
-  const id = character.id;
-
-  const load = useCallback(async () => {
-    try {
-      const res = await getPlacesApi(id);
-      setData(res.data || { places: [] });
-    } catch (err) {
-      console.error('[CharacterProfilePage] places load failed:', err);
-      setData({ places: [], error: err.response?.data?.error || 'Could not load their places.' });
-    }
-  }, [id]);
-  useEffect(() => { load(); }, [load]);
-
-  const places = data?.places || [];
-  const hasHome = places.some((p) => p.role === 'home');
-  const locked = character.status === 'finalized';
-
-  const openPicker = async () => {
-    setNote(null);
-    try {
-      const res = await showSceneSetsApi(data.show_id);
-      const list = res.data?.data || res.data?.sceneSets || res.data?.scene_sets || [];
-      setSets(list.filter((s) => s && s.id));
-    } catch (err) {
-      console.error('[CharacterProfilePage] scene sets load failed:', err);
-      setNote({ error: true, text: 'Could not load the scene sets.' });
-    }
-  };
-  const linkHome = async () => {
-    if (!choice) return;
-    setBusy('link'); setNote(null);
-    try {
-      await linkPlaceApi(data.show_id, { character_id: id, scene_set_id: choice, role: 'home' });
-      setSets(null); setChoice('');
-      await load();
-    } catch (err) {
-      console.error('[CharacterProfilePage] link home failed:', err);
-      setNote({ error: true, text: err.response?.data?.error || 'Could not set their home.' });
-    } finally { setBusy(null); }
-  };
-  const share = async (place) => {
-    setBusy(place.scene_set_id); setNote(null);
-    try {
-      await sharePlaceApi(id, place.scene_set_id);
-      setNote({ shared: true, text: `A draft of their ${PLACE_LABEL[place.role]?.toLowerCase() || place.label || 'place'} is waiting in The Pulse's Review.` });
-    } catch (err) {
-      console.error('[CharacterProfilePage] share place failed:', err);
-      setNote({ error: true, text: err.response?.data?.error || 'Could not share it.' });
-    } finally { setBusy(null); }
-  };
-
-  return (
-    <section className="ch-card" aria-labelledby="ch-places" data-testid="ch-places">
-      <h2 id="ch-places" className="ch-h2"><MapPin size={20} aria-hidden className="ch-h2-icon" /> Their places</h2>
-      {!data ? <p className="ch-note">Loading…</p>
-        : data.error ? <p className="ch-note is-error">{data.error}</p>
-        : !data.show_id ? <p className="ch-note">Not in a show&rsquo;s cast yet, so no home to set.</p>
-        : (<>
-          {places.length === 0 && <p className="ch-note">No home yet.</p>}
-          <ul className="ch-places">
-            {places.map((p) => (
-              <li key={`${p.role}-${p.scene_set_id}`} className="ch-place">
-                {p.image_url
-                  ? <img className="ch-place-img" src={p.image_url} alt={`${PLACE_LABEL[p.role] || p.label || 'Place'}: ${p.scene_set_name}`} />
-                  : <div className="ch-place-img is-empty" aria-hidden="true" />}
-                <div className="ch-place-text">
-                  <span className="ch-show-kind">{PLACE_LABEL[p.role] || p.label || 'Place'}{p.everyday ? ' · everyday look' : ''}</span>
-                  <strong>{p.scene_set_name}</strong>
-                  {character.feed_profile_id && p.image_url && (
-                    <button type="button" className="ch-btn-chip" disabled={!!busy} onClick={() => share(p)}>
-                      {busy === p.scene_set_id ? 'Sharing…' : 'Share to The Pulse'}
-                    </button>
-                  )}
-                  {!p.image_url && <span className="ch-note">No picture yet</span>}
-                </div>
-              </li>
-            ))}
-          </ul>
-          {!hasHome && !locked && (sets ? (
-            <div className="ch-row">
-              <select className="ch-input" aria-label="Their home set" value={choice} onChange={(e) => setChoice(e.target.value)}>
-                <option value="">Choose a scene set…</option>
-                {sets.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              <button type="button" className="ch-btn" disabled={!choice || busy === 'link'} onClick={linkHome}>{busy === 'link' ? 'Saving…' : 'Make it home'}</button>
-            </div>
-          ) : (
-            <button type="button" className="ch-link" onClick={openPicker}>Choose their home</button>
-          ))}
-          {places.length > 0 && !character.feed_profile_id && <p className="ch-note">Sharing on The Pulse needs a Pulse profile.</p>}
-        </>)}
-      {note && (
-        <p className={`ch-note${note.error ? ' is-error' : ''}`} role="status">
-          {note.text}{note.shared && <> <Link to={PULSE_REVIEW}>Open Review</Link></>}
-        </p>
-      )}
-    </section>
-  );
-}
-
-/**
  * The Overview to Evoni's mock (2026-10-18): Quick facts, Who they are with
  * their wants and fears, Key stats, Their voice, Profile images, Where they
  * show up and Recent activity first; the rest of what the page already
@@ -1773,7 +1657,8 @@ function TabOverview({ character, appearances, feedProfile, relationships, entan
         <RecentActivity appearances={appearances} trail={trail} />
         <WithLala appearances={appearances} />
         <TheirEvents appearances={appearances} />
-        <TheirPlaces character={character} />
+        {/* A summary; their places are managed on Life & Locations (2026-11-21). */}
+        <WorldPlaces character={character} openTab={openTab} />
       </div>
     </div>
   );
@@ -2985,7 +2870,7 @@ export function WorldPlaces({ character, openTab }) {
       </div>
       {!data ? <p className="ch-note">Loading…</p>
         : data.error ? <p className="ch-note is-error">{data.error}</p>
-        : places.length === 0 ? <p className="ch-note">No places yet: no home, closet or place of work.</p> : (
+        : places.length === 0 ? <p className="ch-note">No places yet: no home, closet, place of work or other place.</p> : (
           <ul className="ch-wpl">
             {pageItems.map((p) => (
               <li key={`${p.role}-${p.scene_set_id}`} className="ch-wpl-item">
@@ -3802,12 +3687,9 @@ export default function CharacterProfilePage() {
         )}
         {activeTab === 'connections' && <TabConnections character={character} relationships={listOf(relationships)} entanglements={listOf(entanglements)} person={person} />}
         {activeTab === 'world' && <TabWorld character={character} feedProfile={feedProfile} appearances={appearances} onSaved={onSaved} gen={gen} openTab={setActiveTab} />}
-        {activeTab === 'places' && (
-          <>
-            <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} appearances={appearances} /></div>
-            <div className="ch-card"><CharacterGalleryTab key={character.id} character={character} openTab={setActiveTab} hide={['places']} /></div>
-          </>
-        )}
+        {activeTab === 'places' && <div className="ch-card"><CharacterPlacesTab key={character.id} character={character} appearances={appearances} /></div>}
+        {/* The places group stays out: a location's backgrounds are not their photographs. */}
+        {activeTab === 'gallery' && <div className="ch-card"><CharacterGalleryTab key={character.id} character={character} openTab={setActiveTab} hide={['places']} /></div>}
         {activeTab === 'story' && <TabStory character={character} feedProfile={feedProfile} appearances={appearances} openTab={setActiveTab} person={person} />}
         {activeTab === 'talk' && <div className="ch-card"><CharacterTalkTab key={character.id} character={character} onSaved={onSaved} /></div>}
         {activeTab === 'settings' && <TabSettings character={character} feedProfile={feedProfile} onSaved={onSaved} onExport={exportJson} onDeleted={() => navigate('/character-registry')} />}
