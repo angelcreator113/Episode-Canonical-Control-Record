@@ -35,8 +35,8 @@ describe('CharacterGalleryTab', () => {
     expect(api.get).toHaveBeenCalledWith('/api/v1/cast/characters/c-1/gallery');
     expect(within(screen.getByTestId('gallery-wardrobe')).getByAltText('Silk slip dress').getAttribute('loading')).toBe('lazy');
     const places = screen.getByTestId('gallery-places');
-    expect(places.textContent).toContain('Link their home, closet or work on the Places & Gallery tab');
-    fireEvent.click(within(places).getByRole('button', { name: 'Open Places & Gallery' }));
+    expect(places.textContent).toContain('Link their home, closet or work on the Life & Locations tab');
+    fireEvent.click(within(places).getByRole('button', { name: 'Open Life & Locations' }));
     expect(openTab).toHaveBeenCalledWith('places');
   });
 

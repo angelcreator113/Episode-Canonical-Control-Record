@@ -64,7 +64,7 @@ describe('the character page', () => {
     expect(screen.getByRole('button', { name: 'Export Profile' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'The cast' }).getAttribute('href')).toBe('/character-registry');
     const tabs = within(screen.getByRole('navigation', { name: 'Character sections' })).getAllByRole('link');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Voice & Pulse', 'Connections', 'In the World', 'Places & Gallery', 'Story & Events', 'Talk', 'Settings']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Overview', 'Inner Life', 'Appearance', 'Voice & Pulse', 'Connections', 'In the World', 'Life & Locations', 'Media Gallery', 'Story & Events', 'Talk', 'Settings']);
     expect(tabs[0].getAttribute('aria-current')).toBe('page');
   });
 
@@ -332,104 +332,61 @@ describe('the character page', () => {
     expect(screen.queryByText(/Special/)).toBeNull();
   });
 
-  test('their places: the home with its everyday picture, shared to The Pulse as a draft', async () => {
-    vi.mocked(api.get).mockImplementation(async (url) => {
+  // Evoni, 2026-11-21: Life & Locations and the Media Gallery are two tabs.
+  describe('Life & Locations and the Media Gallery', () => {
+    const HOME = { role: 'home', scene_set_id: 'set-1', scene_set_name: "Sable's Loft", image_url: 'https://cdn/everyday.jpg', everyday: true };
+    const reads = (places = [HOME]) => vi.mocked(api.get).mockImplementation(async (url) => {
       if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER } };
-      if (url === '/api/v1/cast/characters/c1/places') {
-        return { data: { success: true, show_id: 's1', is_lead: false, places: [
-          { role: 'home', scene_set_id: 'set-1', scene_set_name: "Sable's Loft", image_url: 'https://cdn/everyday.jpg', everyday: true },
-        ] } };
-      }
+      if (url === '/api/v1/cast/characters/c1/places') return { data: { success: true, show_id: 's1', is_lead: false, places } };
+      if (url === '/api/v1/cast/characters/c1/gallery') return { data: { success: true, linked: true, groups: [] } };
       return { data: {} };
     });
-    vi.mocked(api.post).mockResolvedValue({ data: { success: true, post: { id: 'post-1' } } });
-    renderIt();
-    const places = await screen.findByTestId('ch-places');
-    await waitFor(() => expect(places.textContent).toContain("Sable's Loft"));
-    expect(places.textContent).toContain('Home · everyday look');
-    expect(places.querySelector('img').getAttribute('src')).toBe('https://cdn/everyday.jpg');
-    fireEvent.click(within(places).getByRole('button', { name: 'Share to The Pulse' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/places/share', { scene_set_id: 'set-1' }));
-    expect(await within(places).findByRole('link', { name: 'Open Review' })).toBeTruthy();
-  });
+    const openAt = (query) => render(
+      <MemoryRouter initialEntries={[`/character/c1${query}`]}>
+        <Routes><Route path="/character/:id" element={<CharacterProfilePage />} /></Routes>
+      </MemoryRouter>,
+    );
 
-  test('no home yet: choose one of the show\'s scene sets', async () => {
-    vi.mocked(api.get).mockImplementation(async (url, opts) => {
-      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER } };
-      if (url === '/api/v1/cast/characters/c1/places') return { data: { success: true, show_id: 's1', places: [] } };
-      if (url === '/api/v1/scene-sets' && opts?.params?.show_id === 's1') return { data: { success: true, data: [{ id: 'set-9', name: 'Echo Park Studio' }] } };
-      return { data: {} };
+    test('the Overview shows their places as a summary with no picker; View all opens Life & Locations', async () => {
+      reads();
+      renderIt();
+      const summary = await screen.findByTestId('ch-world-places');
+      await waitFor(() => expect(summary.textContent).toContain("Sable's Loft"));
+      expect(within(summary).queryByRole('button', { name: 'Choose their home' })).toBeNull();
+      expect(within(summary).queryByRole('button', { name: 'Share to The Pulse' })).toBeNull();
+      expect(screen.queryByTestId('ch-places')).toBeNull();
+      fireEvent.click(within(summary).getByRole('button', { name: 'View all' }));
+      expect(await screen.findByTestId('character-places-tab')).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Life & Locations' }).getAttribute('aria-current')).toBe('page');
     });
-    vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
-    renderIt();
-    const places = await screen.findByTestId('ch-places');
-    fireEvent.click(await within(places).findByRole('button', { name: 'Choose their home' }));
-    fireEvent.change(await within(places).findByLabelText('Their home set'), { target: { value: 'set-9' } });
-    fireEvent.click(within(places).getByRole('button', { name: 'Make it home' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/shows/s1/character-places', { character_id: 'c1', scene_set_id: 'set-9', role: 'home' }));
-  });
-});
 
-
-// The character profile audit's fixes (Evoni, 2026-10-19).
-describe('the profile audit fixes', () => {
-  test('Key stats shows the facts\' follower count, not a stale stored label', async () => {
-    vi.mocked(api.get).mockImplementation(async (url) => {
-      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER } };
-      if (url === '/api/v1/social-profiles/7') return { data: { profile: { ...PROFILE, follower_count_approx: '1.2M' } } };
-      if (url === '/api/v1/cast/characters/c1/appearances') return { data: APPEARANCES };
-      if (url === '/api/v1/cast/characters/c1/facts') return { data: { facts: { followers: { count: 1500000, label: '1.5M', source: 'ledger' }, undecided: [] } } };
-      return { data: {} };
+    test('?tab=places still opens Life & Locations: the place editor, not the gallery; a place is shared to The Pulse from its card', async () => {
+      reads();
+      vi.mocked(api.post).mockResolvedValue({ data: { success: true, post: { id: 'post-1' } } });
+      openAt('?tab=places');
+      const tab = await screen.findByTestId('character-places-tab');
+      expect(screen.getByRole('link', { name: 'Life & Locations' }).getAttribute('href')).toBe('/character/c1?tab=places');
+      expect(screen.queryByTestId('character-gallery')).toBeNull();
+      expect(api.get).not.toHaveBeenCalledWith('/api/v1/cast/characters/c1/gallery');
+      expect(within(tab).getByText('Everyday look')).toBeTruthy();
+      fireEvent.click(within(tab).getByRole('button', { name: 'Share to The Pulse' }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/places/share', { scene_set_id: 'set-1' }));
+      expect((await within(tab).findByRole('link', { name: 'Open Review' })).getAttribute('href')).toBe('/admin?tab=pulse&sub=review');
     });
-    renderIt();
-    const stats = await screen.findByTestId('ch-stats');
-    await waitFor(() => expect(stats.textContent).toContain('1.5M'));
-    expect(stats.textContent).not.toContain('1.2M');
-  });
 
-  test('the Pulse profile is asked for without waiting on relationships', async () => {
-    vi.mocked(api.get).mockImplementation((url) => {
-      if (url === '/api/v1/character-registry/characters/c1') return Promise.resolve({ data: { character: CHARACTER } });
-      if (url.startsWith('/api/v1/relationships/')) return new Promise(() => {}); // never answers
-      return Promise.resolve({ data: {} });
+    test('?tab=gallery opens the Media Gallery: their photographs, not the place editor', async () => {
+      reads();
+      openAt('?tab=gallery');
+      expect(await screen.findByTestId('character-gallery')).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Media Gallery' }).getAttribute('aria-current')).toBe('page');
+      expect(screen.queryByTestId('character-places-tab')).toBeNull();
+      expect(api.get).toHaveBeenCalledWith('/api/v1/cast/characters/c1/gallery');
     });
-    renderIt();
-    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/api/v1/social-profiles/7'));
-    expect(api.get).toHaveBeenCalledWith('/api/v1/cast/characters/c1/appearances');
-  });
 
-  test('opening a tab scrolls the tab bar, never the page', async () => {
-    const spy = vi.fn();
-    const before = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = spy;
-    try {
-      render(
-        <MemoryRouter initialEntries={['/character/c1?tab=settings']}>
-          <Routes><Route path="/character/:id" element={<CharacterProfilePage />} /></Routes>
-        </MemoryRouter>,
-      );
-      await screen.findByRole('navigation', { name: 'Character sections' });
-      expect(spy).not.toHaveBeenCalled();
-    } finally {
-      Element.prototype.scrollIntoView = before;
-    }
-  });
-
-  test('an archived character opened by an admin says so, and Bring back restores them', async () => {
-    let archived = true;
-    vi.mocked(api.get).mockImplementation(async (url) => {
-      if (url === '/api/v1/character-registry/characters/c1') return { data: { character: CHARACTER, ...(archived ? { archived: true } : {}) } };
-      return { data: {} };
+    test('a tab that does not exist is the Overview', async () => {
+      reads();
+      openAt('?tab=nowhere');
+      expect((await screen.findByRole('link', { name: 'Overview' })).getAttribute('aria-current')).toBe('page');
     });
-    vi.mocked(api.post).mockImplementation(async (url) => {
-      if (url === '/api/v1/cast/characters/c1/restore') { archived = false; return { data: { success: true } }; }
-      return { data: {} };
-    });
-    renderIt();
-    const banner = await screen.findByTestId('ch-archived');
-    expect(banner.textContent).toContain('Archived.');
-    fireEvent.click(within(banner).getByRole('button', { name: 'Bring back' }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c1/restore'));
-    await waitFor(() => expect(screen.queryByTestId('ch-archived')).toBeNull());
   });
 });

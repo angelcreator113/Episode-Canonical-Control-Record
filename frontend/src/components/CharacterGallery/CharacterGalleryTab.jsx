@@ -3,11 +3,11 @@
  * this tab will get over crowded"): every picture already linked to the
  * character, grouped: portraits, places, wardrobe, events and posts.
  * Reads GET /api/v1/cast/characters/:id/gallery (services/characterGallery);
- * portraits are made on the Appearance tab and places linked on the Places &
- * Gallery tab. A picture opens larger on click.
- * Evoni, 2026-10-18: "maybe the gallery and places tab should be one": it
- * sits under their places there, with `hide` leaving out the places group
- * the place editor above already shows.
+ * portraits are made on the Appearance tab and places linked on the Life &
+ * Locations tab. A picture opens larger on click.
+ * Evoni, 2026-11-21: the Media Gallery is its own tab again, apart from
+ * Life & Locations (it replaces 2026-10-18's one tab). `hide` leaves out
+ * the places group there: a location's backgrounds are not their photographs.
  * Visual Memory, phase 1 (2026-10-18): a "Tagged" group holds the shared
  * library's pictures tagged with them; an ADMIN (the read's `can_edit`) can
  * add a picture, tag it with whoever else is in it, and in the larger view
@@ -41,13 +41,13 @@ const GROUP_ICONS = { portraits: UserRound, places: MapPin, wardrobe: Shirt, eve
 // Where each kind of picture is added, for a group with none yet.
 const EMPTY = {
   portraits: ['No portraits yet. Make one on the Appearance tab.', 'appearance'],
-  places: ['No places with pictures yet. Link their home, closet or work on the Places & Gallery tab.', 'places'],
+  places: ['No places with pictures yet. Link their home, closet or work on the Life & Locations tab.', 'places'],
   wardrobe: ['No wardrobe pieces name them yet.', null],
   events: ['No event invitations or event sets yet.', 'story'],
   posts: ['No posts with photos yet.', 'voice'],
   tagged: ['No other pictures are tagged with them yet.', null],
 };
-const TAB_WORDS = { appearance: 'Appearance', places: 'Places & Gallery', story: 'Story & Events', voice: 'Voice & Pulse' };
+const TAB_WORDS = { appearance: 'Appearance', places: 'Life & Locations', story: 'Story & Events', voice: 'Voice & Pulse' };
 const RECENT = 7;
 const ALBUM_LABEL = Object.fromEntries(ALBUMS.map((a) => [a.key, a.label]));
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
