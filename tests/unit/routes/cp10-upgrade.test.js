@@ -12,8 +12,12 @@ const path = require('path');
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'upgradeRoutes.js'), 'utf8');
 
 describe('Step 3 CP10 — upgradeRoutes.js', () => {
-  test('requireAuth import', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+  // authorize joined the import on 2026-11-16: the writing plan read (/multi-product/all) is an ADMIN's (Evoni).
+  test('requireAuth + authorize import', () => {
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+  });
+  test('the writing plan read is an ADMIN\'s', () => {
+    expect(SRC).toMatch(/router\.get\('\/multi-product\/all', requireAuth, authorize\(\['ADMIN'\]\),/);
   });
 
   test('aiRateLimiter import', () => {

@@ -21,7 +21,7 @@
 const express = require('express');
 const router = express.Router();
 const { createAnthropicClient } = require('../services/anthropicClient');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
@@ -152,7 +152,8 @@ router.get('/session/brief/latest', requireAuth, async (req, res) => {
     if (!db.SessionBrief) return res.json({ brief: null });
     const brief = await db.SessionBrief.findOne({ order: [['created_at', 'DESC']] });
     if (!brief) return res.json({ brief: null });
-    await brief.update({ used_at: new Date() });
+    // A read must not write for a reader who may not write (Evoni, 2026-11-16): only an ADMIN's read marks it used.
+    if (require('../services/publicSocialProfile').readsAsAdmin(req)) await brief.update({ used_at: new Date() });
     return res.json({ brief });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -363,7 +364,9 @@ router.patch('/writing-rhythm/goal', requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // GET all multi-product content (must be before :storyId param route)
-router.get('/multi-product/all', requireAuth, async (req, res) => {
+// ADMIN: the writing plan is production material (Evoni, 2026-11-16). This router is mounted before
+// franchiseBrainRoutes, which declares the same path, so this is the handler that answers.
+router.get('/multi-product/all', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const content = await db.MultiProductContent.findAll({
       order: [['created_at', 'DESC']],

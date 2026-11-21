@@ -45,14 +45,17 @@ import { packageHref } from '../lib/eventFlow';
 import { episodeSeasonHref } from '../lib/episodePlace';
 import { EP_TABS, resolveEpisodeTab, withEpisodeTab, pillGroups, pillFor, gatedTab } from '../utils/episodeTabs';
 import { isAdmin } from '../utils/authGroups';
+import { withReturn, tabOrigin } from '../utils/returnPath';
 import { voiceStudioOn } from '../lib/voiceStudioApi';
 import { closetBeat } from '../lib/scriptMoments';
-import { checklistProgress, coinsLabel } from '../lib/episodeShell';
+import { checklistProgress, checklistReadability, coinsLabel } from '../lib/episodeShell';
 import { isScreen } from '../lib/overlayUtils';
 import { beatOrder } from '../lib/storyClock';
 import './EpisodeDetail.css';
 import useSideScroll from '../hooks/useSideScroll';
 import { deleteFailureText } from '../lib/frozenEpisode';
+import { rememberEpisode, rememberEpisodeLocation, forgetEpisode } from '../utils/activeEpisode';
+import { rememberShow } from '../utils/activeShow';
 
 // Track 6 CP14 module-scope helpers — page structural shape; partial-
 // migration extension per v2.20 §9.11 (file already partial-migrated
@@ -248,29 +251,96 @@ const EpisodeDetail = () => {
   // production checks, read the way the checklist reads them. The checklist
   // reports again after each of its re-checks, so the badge follows it.
   // The Overview's Production checklist tile reads the same progress.
-  const [checksProgress, setChecksProgress] = useState(null);
-  // The checks themselves, for Production's step bar and progress card.
-  const [productionChecks, setProductionChecks] = useState({ checks: null, sections: null });
-  const checksLeft = checksProgress?.left ?? null;
-  const reportChecks = useCallback((checks, sections) => {
-    setChecksProgress(checklistProgress(checks, sections));
-    setProductionChecks({ checks, sections });
-  }, []);
+  // One record, with the episode it belongs to: { episodeId, status:
+  // 'ready' | 'failed', checks, sections, read }. Everything shown is taken
+  // from it only while it is this episode's, so another episode's badge,
+  // count or next step is never shown; until this episode's own checks
+  // answer, the checklist is "loading". `read` is what the loader could
+  // read (loadProductionChecks' `read`), or null when a report came without it.
+  const [checksInfo, setChecksInfo] = useState({ episodeId: null });
   const checksEpisodeId = episode?.id;
+  // What this page and its Overview tab have already read for the episode,
+  // handed to the checklist's loader as `loaded` so it does not ask again
+  // (PR-08 of docs/design/2026-11-studio-home-episode-command-center.md).
+  // Each is tagged with its episode; nothing is kept beyond the first run.
+  //   sourceEventRead  the header's own read of the episode's events, once
+  //                    it has answered: { episodeId, usable, event }
+  //   overviewReads    the Overview tab's brief and scene sets, as it
+  //                    reports them: { episodeId, brief?, sceneSets? }, each
+  //                    { ok, value }
+  const [sourceEventRead, setSourceEventRead] = useState(null);
+  const [overviewReads, setOverviewReads] = useState({ episodeId: null });
+  // The episode on the page now. A report for any other episode (a slow
+  // answer for the one she just left) is dropped, so it cannot displace
+  // this episode's.
+  const checksEpisodeNow = useRef(checksEpisodeId);
+  checksEpisodeNow.current = checksEpisodeId;
+  const checksMine = checksEpisodeId != null && checksInfo.episodeId === checksEpisodeId ? checksInfo : null;
+  const checksStatus = checksMine?.status || 'loading';
+  const checksProgress = useMemo(
+    () => (checksMine?.status === 'ready' ? checklistProgress(checksMine.checks, checksMine.sections) : null),
+    [checksMine],
+  );
+  const productionChecks = useMemo(
+    () => (checksMine?.status === 'ready' ? { checks: checksMine.checks, sections: checksMine.sections } : { checks: null, sections: null }),
+    [checksMine],
+  );
+  const checksLeft = checksProgress?.left ?? null;
+  const hasShowForChecks = !!(episode?.show_id || episode?.showId);
+  // Done, incomplete and unreadable, when the loader said what it read; else null.
+  const checksRead = useMemo(
+    () => (checksMine?.status === 'ready' ? checklistReadability(checksMine.checks, checksMine.sections, checksMine.read, { hasShow: hasShowForChecks }) : null),
+    [checksMine, hasShowForChecks],
+  );
+  // The badge keeps "N left"; how many of those could not be read goes in its hover and spoken label.
+  const checksUnreadNote = checksRead?.unreadable || 0;
+  // The Checklist tab's re-checks ({ read, episodeId } with them): one for
+  // another episode is dropped.
+  const reportChecks = useCallback((checks, sections, meta) => {
+    const forEpisodeId = meta?.episodeId ?? checksEpisodeNow.current;
+    if (forEpisodeId == null || forEpisodeId !== checksEpisodeNow.current) return;
+    setChecksInfo({ episodeId: forEpisodeId, status: 'ready', checks, sections, read: meta?.read || null });
+  }, []);
+  const reportOverviewRead = useCallback((forEpisodeId, key, result) => {
+    if (forEpisodeId !== checksEpisodeNow.current) return;
+    setOverviewReads((prev) => (prev.episodeId === forEpisodeId
+      ? { ...prev, [key]: result }
+      : { episodeId: forEpisodeId, [key]: result }));
+  }, []);
+  // The loader runs once per episode. It starts when the header's events
+  // read has answered and, on the Overview tab, when that tab has reported
+  // its brief and its scene sets (answered or failed). On any other tab
+  // there is nothing to wait for. A read that failed is not handed over, so
+  // the loader makes it itself.
+  const checksStartedFor = useRef(null);
+  const pageAlive = useRef(true);
+  useEffect(() => { pageAlive.current = true; return () => { pageAlive.current = false; }; }, []);
   useEffect(() => {
-    if (!checksEpisodeId || !episode) return undefined;
-    let cancelled = false;
+    if (!checksEpisodeId || !episode) return;
+    if (checksStartedFor.current === checksEpisodeId) return;
+    const events = sourceEventRead && sourceEventRead.episodeId === String(checksEpisodeId) ? sourceEventRead : null;
+    if (!events) return;
+    const reports = overviewReads.episodeId === checksEpisodeId ? overviewReads : {};
+    if (tabKey === 'overview' && !(reports.brief && reports.sceneSets)) return;
+    checksStartedFor.current = checksEpisodeId;
+    const loaded = {};
+    if (events.usable) loaded.linkedEvent = events.event;
+    if (reports.brief?.ok) loaded.brief = reports.brief.value;
+    if (reports.sceneSets?.ok) loaded.sceneSets = reports.sceneSets.value;
     import('../components/Episodes/EpisodeProductionChecklist')
-      .then((m) => m.loadProductionChecks(episode, episode.show_id || episode.showId)
-        .then(({ checks }) => {
-          if (cancelled) return;
-          setChecksProgress(checklistProgress(checks, m.CHECKLIST_SECTIONS));
-          setProductionChecks({ checks, sections: m.CHECKLIST_SECTIONS });
+      .then((m) => m.loadProductionChecks(episode, episode.show_id || episode.showId, { loaded })
+        .then(({ checks, read }) => {
+          if (!pageAlive.current || checksEpisodeNow.current !== checksEpisodeId) return;
+          setChecksInfo({ episodeId: checksEpisodeId, status: 'ready', checks, sections: m.CHECKLIST_SECTIONS, read: read || null });
         }))
-      .catch((err) => { console.error('[EpisodeDetail] production checks load failed:', err); });
-    return () => { cancelled = true; };
+      .catch((err) => {
+        console.error('[EpisodeDetail] production checks load failed:', err);
+        if (!pageAlive.current || checksEpisodeNow.current !== checksEpisodeId) return;
+        // Said on the page; checks the Checklist tab has since reported stand.
+        setChecksInfo((prev) => (prev.episodeId === checksEpisodeId && prev.status === 'ready' ? prev : { episodeId: checksEpisodeId, status: 'failed' }));
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checksEpisodeId]);
+  }, [checksEpisodeId, sourceEventRead, overviewReads, tabKey]);
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   // The header's ⋮ menu closes on Escape (focus back on the ⋮) and on a
@@ -409,12 +479,24 @@ const EpisodeDetail = () => {
       setError(null);
       const data = await episodeService.getEpisode(episodeId);
       if (seq !== loadSeqRef.current) return;
+      // A deleted episode is not found (PR-04): the read still answers with
+      // it, marked deleted. It is not shown, and it is forgotten as the
+      // episode last opened; nothing else in the browser is touched.
+      if (data?.deleted_at) {
+        forgetEpisode(episodeId);
+        toast.showError('Episode not found — it may have been deleted.');
+        navigate('/shows', { replace: true });
+        return;
+      }
       setEpisode(data);
     } catch (err) {
       console.error('[EpisodeDetail] episode load failed:', err);
       if (seq !== loadSeqRef.current) return;
       const msg = err.message || '';
       if (msg.includes('Not Found') || msg.includes('404')) {
+        // Forgotten only on the server's own "not found" (404). A network
+        // error, a server failure or a refusal leaves what is remembered.
+        if (err?.response?.status === 404) forgetEpisode(episodeId);
         toast.showError('Episode not found — it may have been deleted.');
         navigate('/shows', { replace: true });
         return;
@@ -442,10 +524,31 @@ const EpisodeDetail = () => {
   // Set this as the "working episode" for Studio tools (Timeline, Scene Composer)
   useEffect(() => {
     if (episodeId && episode) {
-      localStorage.setItem('working-episode-id', episodeId);
-      localStorage.setItem('working-episode-title', episode.title || episode.episodeTitle || 'Untitled');
+      rememberEpisode({ id: episodeId, title: episode.title, episodeTitle: episode.episodeTitle });
     }
   }, [episodeId, episode]);
+
+  // The episode on the page is the one the address names (not the last
+  // one, still on screen while the next loads).
+  const loadedEpisodeId = episode && String(episode.id) === String(episodeId) ? String(episode.id) : null;
+  // The show being worked on follows the episode (PR-04): remembered once
+  // per episode loaded, never again on a save, so a later choice of show in
+  // another window is not put back by this one.
+  const loadedShowId = loadedEpisodeId ? (episode.show_id || episode.showId || null) : null;
+  useEffect(() => {
+    if (loadedEpisodeId && loadedShowId) rememberShow(loadedShowId);
+  }, [loadedEpisodeId, loadedShowId]);
+  // The episode's last working location (PR-04): the tab now open, when it
+  // is a place of work. The Overview is never recorded, nor Voice unless it
+  // is open to this admin. The address alone decides the tab; this only
+  // remembers it for a control that says "Resume".
+  const locationTab = epSubTab || activeTab;
+  const voiceOpen = admin && voiceStudio;
+  // Edit details, carrying the tab it is opened from so Save and Back return to it (PR-05). From the Overview nothing is added.
+  const editDetailsHref = episode?.id ? withReturn(`/episodes/${episode.id}/edit`, tabOrigin(episode.id, locationTab) || {}) : null;
+  useEffect(() => {
+    if (loadedEpisodeId) rememberEpisodeLocation(loadedEpisodeId, locationTab, { voiceStudio: voiceOpen });
+  }, [loadedEpisodeId, locationTab, voiceOpen]);
 
   // ── End-of-show suggestions overlay ──────────────────────────────────────
   // Auto-opens only on the WRAP TRANSITION — evaluation_status going to
@@ -624,6 +727,7 @@ const EpisodeDetail = () => {
     // A new episode drops the last one's link until its own arrives (Task #3107).
     setSourceEvent(null);
     setSourceEventStatus('loading');
+    setSourceEventRead(null);
     // Optional header detail: any failure, synchronous or not, leaves the
     // link off and never breaks the page.
     const loadSourceEvent = async () => {
@@ -631,11 +735,17 @@ const EpisodeDetail = () => {
         const data = await getEpisodeEvents(episodeId);
         if (cancelled) return;
         const events = data?.events || [];
-        setSourceEvent(events.find((ev) => ev.link?.anchor) || null);
+        const anchor = events.find((ev) => ev.link?.anchor) || null;
+        setSourceEvent(anchor);
         setSourceEventStatus('ready');
+        // For the checklist: the header shows only a flagged source event,
+        // the checklist falls back to the first event listed. They agree
+        // when one is flagged or none is linked; otherwise the checklist
+        // reads the events itself.
+        setSourceEventRead({ episodeId: String(episodeId), usable: !!anchor || events.length === 0, event: anchor });
       } catch (err) {
         console.error('Failed to load the source event:', err);
-        if (!cancelled) { setSourceEvent(null); setSourceEventStatus('failed'); }
+        if (!cancelled) { setSourceEvent(null); setSourceEventStatus('failed'); setSourceEventRead({ episodeId: String(episodeId), usable: false, event: null }); }
       }
     };
     loadSourceEvent();
@@ -753,7 +863,7 @@ const EpisodeDetail = () => {
       return {
         title: 'Publish your episode',
         description: 'Everything looks good! Ready to publish?',
-        action: () => leaveTo(`/episodes/${episode.id}/edit`),
+        action: () => leaveTo(editDetailsHref),
         buttonText: 'Update Status'
       };
     }
@@ -785,7 +895,7 @@ const EpisodeDetail = () => {
     }
     
     if (episode.status !== 'published' && primaryAction?.title !== 'Publish your episode') {
-      steps.push({ title: 'Publish Episode', status: 'pending', action: () => leaveTo(`/episodes/${episode.id}/edit`) });
+      steps.push({ title: 'Publish Episode', status: 'pending', action: () => leaveTo(editDetailsHref) });
     } else if (episode.status === 'published') {
       steps.push({ title: 'Publish Episode', status: 'complete' });
     }
@@ -986,7 +1096,7 @@ const EpisodeDetail = () => {
                   <div className="ed-dropdown">
                     <button
                       onClick={() => {
-                        leaveTo(`/episodes/${episode.id}/edit`);
+                        leaveTo(editDetailsHref);
                         setShowMoreActions(false);
                       }}
                       className="ed-dropdown-item"
@@ -1007,6 +1117,7 @@ const EpisodeDetail = () => {
                           const after = showIdForLinks ? episodeSeasonHref(showIdForLinks, episode, 'episodes') : '/episodes';
                           try {
                             await episodeService.deleteEpisode(episode.id);
+                            forgetEpisode(episode.id);
                             toast.showSuccess('Episode deleted');
                             navigate(after);
                           } catch (err) {
@@ -1071,7 +1182,8 @@ const EpisodeDetail = () => {
                 {Icon && <Icon size={16} className="ed-tab-icon" aria-hidden="true" />}
                 <span className="ed-tab-label">{t.label}</span>
                 {t.key === 'production' && checksLeft > 0 && (
-                  <span className="ed-tab-badge" data-testid="ed-production-left" aria-label={`${checksLeft} left`}>{checksLeft}<span className="ed-tab-badge-word"> left</span></span>
+                  <span className="ed-tab-badge" title={checksUnreadNote ? `${checksUnreadNote} of these couldn't be checked` : undefined}
+                    data-testid="ed-production-left" aria-label={`${checksLeft} left${checksUnreadNote ? `, ${checksUnreadNote} couldn't be checked` : ''}`}>{checksLeft}<span className="ed-tab-badge-word"> left</span></span>
                 )}
               </button>
             );
@@ -1124,6 +1236,7 @@ const EpisodeDetail = () => {
               onOpenTab={openTab}
               onMarkReady={() => changeStatus('in_review')}
               statusSaving={statusSaving}
+              returnTab={locationTab}
             />
           </Suspense>
         )}
@@ -1144,7 +1257,10 @@ const EpisodeDetail = () => {
             onUpdate={handleUpdateEpisode}
             onOpenTab={openTab}
             checks={checksProgress}
+            checksStatus={checksStatus}
+            checksRead={checksRead}
             balance={headerBalance}
+            onRead={reportOverviewRead}
           />
         )}
 

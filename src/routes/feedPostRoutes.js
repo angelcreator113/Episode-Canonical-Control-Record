@@ -17,7 +17,7 @@ const { optionalAuth, requireAuth } = require('../middleware/auth');
 // Setting a draft's release time is an admin's (step 6c, services/postRelease).
 const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
-const { statusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostStatus');
+const { statusWhere, readableStatusWhere, isLive, LOCKED_MESSAGE } = require('../services/feedPostStatus');
 const { cleanTags } = require('../utils/postTags');
 const { draftReactions, pickReactors, recountComments, DraftError, COMMENT_LOCKED } = require('../services/feedCommentDrafter');
 
@@ -124,11 +124,59 @@ function applyPostReveal(post, reveals) {
  * feed with no library picture that is not approved and public, and no story
  * past its 24 hours. An ADMIN (Review, the director's view) sees everything.
  */
-async function forReader(req, posts) {
+/**
+ * Whether this request reads as an ADMIN: the one test for who sees what is
+ * not public on these read routes (the pictures and stories below, and since
+ * 2026-11-15 unpublished posts and comments). services/mediaLibrary audienceOf,
+ * as before. A post and a comment record no author account, so there is no
+ * "their own drafts" for anyone else: a token alone opens nothing.
+ */
+function readsAsAdmin(req) {
   // optionalAuth reads only cognito:groups; a local token carries its own groups claim.
   const raw = req.user?.raw || {};
   const groups = [...(req.user?.groups || []), ...(Array.isArray(raw.groups) ? raw.groups : [])];
-  if (require('../services/mediaLibrary').audienceOf({ groups }) === 'admin') {
+  return require('../services/mediaLibrary').audienceOf({ groups }) === 'admin';
+}
+
+/**
+ * The story's release boundary for this reader (Evoni, 2026-11-15): the moment
+ * is the server's to decide (services/storyClock readerAt), and anyone but an
+ * ADMIN reads at the present at the latest, whether a moment was sent or not.
+ * null: no boundary (an ADMIN who named none). Else:
+ *   atOrder      the moment, as a story order
+ *   reveals      what is hidden or a first look then (services/pulseReveals)
+ *   where(alias) Sequelize conditions for feed_posts: released by then, not hidden
+ * Throws storyClock's 400-shaped error for a moment that cannot be read.
+ */
+async function readerBoundary(req, showId, value) {
+  const models = require('../models');
+  const clock = require('../services/storyClock');
+  const asked = value === undefined || value === null ? undefined : String(value);
+  const atOrder = await clock.readerAt(models, showId, asked, { admin: readsAsAdmin(req) });
+  if (atOrder === undefined) return null;
+  const { Op } = require('sequelize');
+  const { lalaProfileId } = require('../services/lalaFeedProfile');
+  const reveals = showId
+    ? await require('../services/pulseReveals').revealsAt(models, showId, atOrder, { lalaProfileId: await lalaProfileId(models.sequelize) })
+    : null;
+  return {
+    atOrder,
+    reveals,
+    where(alias = 'FeedPost') {
+      const order = clock.postOrderSql(alias);
+      const hidden = reveals ? reveals.hiddenIds('post') : [];
+      return [
+        models.sequelize.literal(`(${order} IS NULL OR ${order} <= ${Number(atOrder)})`),
+        ...(hidden.length ? [{ id: { [Op.notIn]: hidden } }] : []),
+      ];
+    },
+    // A comment at or before the moment; one of no story time reads as its post's.
+    comments: { [Op.or]: [{ story_order: null }, { story_order: { [Op.lte]: atOrder } }] },
+  };
+}
+
+async function forReader(req, posts) {
+  if (readsAsAdmin(req)) {
     // A draft that will get a picture on approval says so, with what it costs
     // (services/postPictures): the estimate before, the job's cost after.
     const pp = require('../services/postPictures');
@@ -139,11 +187,11 @@ async function forReader(req, posts) {
   }
   // A post's picture job is the studio's (services/postPictures), not the reader's.
   const shown = await require('../services/postMedia').publicPosts(require('../models'), posts);
-  return shown.map((p) => {
-    if (!p || typeof p !== 'object' || !('picture_job' in p)) return p;
-    const { picture_job: _job, ...rest } = p;
-    return rest;
-  });
+  // Then only what The Pulse draws, the nested author, place, photos and comments
+  // included (services/publicFeedPost; Evoni, 2026-11-15): a post's row also holds
+  // Lala's internal thought, the review gate, its story purpose, its episode.
+  const { publicPost } = require('../services/publicFeedPost');
+  return shown.map((p) => (p && typeof p === 'object' ? publicPost(p) : p));
 }
 
 // ── GET FEED TIMELINE (QUERY COMPAT) ────────────────────────────────────────
@@ -157,9 +205,13 @@ router.get('/', optionalAuth, async (req, res) => {
     if (!show_id && !episode_id) {
       return res.status(400).json({ error: 'show_id or episode_id is required' });
     }
+    // The story's present is a show's: anyone but an ADMIN reads one show, within its release.
+    if (!show_id && !readsAsAdmin(req)) return res.status(400).json({ error: 'show_id is required' });
 
     // Live posts by default (?status=draft|live|all): services/feedPostStatus.js.
-    const scoped = statusWhere(status);
+    // Unpublished posts are an ADMIN's to read; anyone else gets the live
+    // ones whatever status is asked for, and the count below is of those.
+    const scoped = readableStatusWhere(status, readsAsAdmin(req));
     if (scoped.error) return res.status(400).json({ error: scoped.error });
     const where = { deleted_at: null, ...scoped };
     if (show_id) where.show_id = show_id;
@@ -171,7 +223,8 @@ router.get('/', optionalAuth, async (req, res) => {
       if (!episode_id) where.episode_id = from === 'episode' ? { [require('sequelize').Op.ne]: null } : null;
     }
     if (profile_id) where.social_profile_id = profile_id;
-    if (narrative_function) where.narrative_function = narrative_function;
+    // What a post is for in the story is not the reader's: filtering by it would tell them.
+    if (narrative_function && readsAsAdmin(req)) where.narrative_function = narrative_function;
     // ?post_type= (e.g. 'relationship', docs/FEED_POSTS.md rule 8).
     if (post_type) {
       if (typeof post_type !== 'string' || post_type.length > 30) return res.status(400).json({ error: 'post_type must be a short string' });
@@ -192,13 +245,18 @@ router.get('/', optionalAuth, async (req, res) => {
     let order = [['posted_at', 'DESC'], ['sort_order', 'ASC']];
     let reveals = null;
     let atOrder;
-    if (at !== undefined) {
-      if (at === 'present' && !show_id) return res.status(400).json({ error: 'at=present needs show_id' });
+    if (at === 'present' && !show_id) return res.status(400).json({ error: 'at=present needs show_id' });
+    {
+      // The moment is the server's to decide (services/storyClock readerAt): an ADMIN reads as asked
+      // (no moment, no boundary); anyone else at the present at the latest, sent or not.
       const clock = require('../services/storyClock');
-      try { atOrder = await clock.resolveAt(require('../models'), show_id, at); } catch (err) {
+      try { atOrder = await clock.readerAt(require('../models'), show_id, at === undefined ? undefined : String(at), { admin: readsAsAdmin(req) }); } catch (err) {
         if (err.status === 400) return res.status(400).json({ error: err.message });
         throw err;
       }
+    }
+    if (atOrder !== undefined) {
+      const clock = require('../services/storyClock');
       const storyOrder = clock.postOrderSql('FeedPost');
       const { Op } = require('sequelize');
       and.push(sequelize.literal(`(${storyOrder} IS NULL OR ${storyOrder} <= ${Number(atOrder)})`));
@@ -361,7 +419,8 @@ router.get('/places', requireAuth, async (req, res) => {
 //      line of the saved script with its draft, if it has one.
 // POST the same path: drafts a feed post for each one that has none, linked
 //      to its beat (services/scriptPostDrafts). Saving again drafts nothing twice.
-router.get('/episodes/:episodeId/script-drafts', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/episodes/:episodeId/script-drafts', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { getScriptPostDrafts } = require('../services/scriptPostDrafts');
@@ -385,7 +444,8 @@ router.post('/episodes/:episodeId/script-drafts', requireAuth, async (req, res) 
 
 // ── PENDING REACTION DRAFTS ACROSS A SHOW (the wall's Requests box) ─────────
 // GET /api/v1/feed-posts/comments/pending?show_id=
-router.get('/comments/pending', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/comments/pending', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { FeedComment, FeedPost } = require('../models');
     const { show_id } = req.query;
@@ -417,12 +477,20 @@ router.get('/:showId/timeline', optionalAuth, async (req, res) => {
     const { episode_id, profile_id, narrative_function, limit, offset, status } = req.query;
     const { FeedPost, SocialProfile } = require('../models');
 
-    const scoped = statusWhere(status);
+    const scoped = readableStatusWhere(status, readsAsAdmin(req));
     if (scoped.error) return res.status(400).json({ error: scoped.error });
     const where = { show_id: showId, deleted_at: null, ...scoped };
     if (episode_id) where.episode_id = episode_id;
     if (profile_id) where.social_profile_id = profile_id;
-    if (narrative_function) where.narrative_function = narrative_function;
+    // What a post is for in the story is not the reader's: filtering by it would tell them.
+    if (narrative_function && readsAsAdmin(req)) where.narrative_function = narrative_function;
+    // The story's release for this reader (readerBoundary): a later episode's posts and hidden ones stay back.
+    let boundary;
+    try { boundary = await readerBoundary(req, showId, req.query.at); } catch (err) {
+      if (err.status === 400) return res.status(400).json({ error: err.message });
+      throw err;
+    }
+    if (boundary) where[require('sequelize').Op.and] = boundary.where();
 
     const posts = await FeedPost.findAll({
       where,
@@ -439,7 +507,8 @@ router.get('/:showId/timeline', optionalAuth, async (req, res) => {
     });
 
     const total = await FeedPost.count({ where });
-    const data = await forReader(req, posts.map((p) => p.toJSON()));
+    const plain = posts.map((p) => p.toJSON());
+    const data = await forReader(req, boundary && boundary.reveals ? plain.map((p) => applyPostReveal(p, boundary.reveals)) : plain);
 
     return res.json({
       data,
@@ -462,13 +531,33 @@ router.get('/post/:postId', optionalAuth, async (req, res) => {
       include: [
         ...(SocialProfile ? [{ model: SocialProfile, as: 'socialProfile', attributes: ['id', 'handle', 'display_name', 'platform'], required: false }] : []),
         // The post's live comments, as records (docs/FEED_POSTS.md rule 6).
-        ...(FeedComment ? [{ model: FeedComment, as: 'comments', where: { status: 'live' }, required: false, attributes: ['id', 'handle', 'display_name', 'text', 'posted_at', 'sort_order', 'social_profile_id'] }] : []),
+        ...(FeedComment ? [{ model: FeedComment, as: 'comments', where: { status: 'live' }, required: false, attributes: ['id', 'handle', 'display_name', 'text', 'posted_at', 'sort_order', 'social_profile_id', 'story_order'] }] : []),
       ],
       order: FeedComment ? [[{ model: FeedComment, as: 'comments' }, 'sort_order', 'ASC']] : [],
     });
-    if (!post) return res.status(404).json({ error: 'Post not found' });
-    const [shown] = await forReader(req, [post.toJSON()]);
+    // An unpublished post is not there for anyone but an ADMIN: the same 404
+    // as a post that does not exist, so its id says nothing.
+    if (!post || (!isLive(post) && !readsAsAdmin(req))) return res.status(404).json({ error: 'Post not found' });
+    // A post the story has not released to this reader is not there either: the same 404, so its id
+    // says nothing. A first look reads as one; comments after the moment stay back.
+    let boundary;
+    try { boundary = await readerBoundary(req, post.show_id, req.query.at); } catch (err) {
+      if (err.status === 400) return res.status(400).json({ error: err.message });
+      throw err;
+    }
+    let json = post.toJSON();
+    if (boundary) {
+      const released = await FeedPost.count({ where: { id: post.id, deleted_at: null, [require('sequelize').Op.and]: boundary.where() } });
+      if (!released) return res.status(404).json({ error: 'Post not found' });
+      if (Array.isArray(json.comments)) json.comments = json.comments.filter((c) => c.story_order == null || c.story_order <= boundary.atOrder);
+      if (boundary.reveals) json = applyPostReveal(json, boundary.reveals);
+    }
+    // Read only to place the comments in story time; the answer is as it was.
+    if (Array.isArray(json.comments)) json.comments = json.comments.map(({ story_order: _order, ...c }) => c);
+    const [shown] = await forReader(req, [json]);
     if (!shown) return res.status(404).json({ error: 'Post not found' });
+    // Which beats show it name episodes: the studio's, not the reader's.
+    if (!readsAsAdmin(req)) return res.json({ data: shown });
     // Which beats show this post (feed_moments.feed_post_id), for the wall.
     const { FeedMoment, Episode } = require('../models');
     const beats = FeedMoment ? await FeedMoment.findAll({
@@ -488,13 +577,35 @@ router.get('/post/:postId', optionalAuth, async (req, res) => {
 // GET /api/v1/feed-posts/:postId/comments?status=live|draft|all — live by default.
 router.get('/:postId/comments', optionalAuth, async (req, res) => {
   try {
-    const { FeedComment } = require('../models');
-    const scoped = statusWhere(req.query.status);
+    const { FeedComment, FeedPost } = require('../models');
+    const admin = readsAsAdmin(req);
+    const scoped = readableStatusWhere(req.query.status, admin);
     if (scoped.error) return res.status(400).json({ error: scoped.error });
+    // The comments of an unpublished post are unpublished too: for anyone but
+    // an ADMIN it answers as a post with no comments does, as an unknown id does.
+    const post = await FeedPost.findOne({ where: { id: req.params.postId, deleted_at: null }, attributes: ['id', 'status', 'show_id'] });
+    if (!admin && (!post || !isLive(post))) return res.json({ data: [], count: 0 });
+    // Nor are the comments of a post the story has not released to this reader, or comments after the moment.
+    let boundary = null;
+    if (post) {
+      try { boundary = await readerBoundary(req, post.show_id, req.query.at); } catch (err) {
+        if (err.status === 400) return res.status(400).json({ error: err.message });
+        throw err;
+      }
+    }
+    if (boundary) {
+      const released = await FeedPost.count({ where: { id: post.id, deleted_at: null, [require('sequelize').Op.and]: boundary.where() } });
+      const state = boundary.reveals ? boundary.reveals.stateOf('post', post.id) : 'revealed';
+      if (!released || state !== 'revealed') return res.json({ data: [], count: 0 });
+    }
     const comments = await FeedComment.findAll({
-      where: { feed_post_id: req.params.postId, deleted_at: null, ...scoped },
+      where: { feed_post_id: req.params.postId, deleted_at: null, ...scoped, ...(boundary ? boundary.comments : {}) },
       order: [['sort_order', 'ASC'], ['created_at', 'ASC']],
     });
+    if (!admin) {
+      const { publicComment } = require('../services/publicFeedPost');
+      return res.json({ data: comments.map(publicComment), count: comments.length });
+    }
     return res.json({ data: comments, count: comments.length });
   } catch (err) {
     console.error('[FeedComments] List error:', err);
@@ -503,7 +614,8 @@ router.get('/:postId/comments', optionalAuth, async (req, res) => {
 });
 
 // GET /api/v1/feed-posts/:postId/comments/reactors — who would react, and why.
-router.get('/:postId/comments/reactors', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/:postId/comments/reactors', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const post = await models.FeedPost.findOne({ where: { id: req.params.postId, deleted_at: null } });
@@ -630,13 +742,43 @@ router.delete('/comments/:commentId', requireAuth, async (req, res) => {
 router.get('/episode/:episodeId', optionalAuth, async (req, res) => {
   try {
     const { FeedPost } = require('../models');
-    // The episode's own view: its drafts and its live posts alike, unless asked.
-    const scoped = statusWhere(req.query.status === undefined ? 'all' : req.query.status);
+    // The episode's own view: its drafts and its live posts alike, unless
+    // asked. That view is an ADMIN's; anyone else reads its live posts, and
+    // the groups and stats below are of those.
+    const scoped = readableStatusWhere(req.query.status === undefined ? 'all' : req.query.status, readsAsAdmin(req));
     if (scoped.error) return res.status(400).json({ error: scoped.error });
+    // The story's release for this reader: an episode not yet out has no posts for them, and neither a
+    // hidden post nor a first look is listed here (this view has no first-look form).
+    const { Episode } = require('../models');
+    const episode = Episode ? await Episode.findByPk(req.params.episodeId, { attributes: ['id', 'show_id'] }) : null;
+    let boundary = null;
+    if (episode || !readsAsAdmin(req)) {
+      try { boundary = await readerBoundary(req, episode ? episode.show_id : null, req.query.at); } catch (err) {
+        if (err.status === 400) return res.status(400).json({ error: err.message });
+        throw err;
+      }
+    }
+    const within = boundary ? [...boundary.where(), ...(boundary.reveals && boundary.reveals.teaserIds('post').length
+      ? [{ id: { [require('sequelize').Op.notIn]: boundary.reveals.teaserIds('post') } }] : [])] : [];
     const posts = await FeedPost.findAll({
-      where: { episode_id: req.params.episodeId, deleted_at: null, ...scoped },
+      where: { episode_id: req.params.episodeId, deleted_at: null, ...scoped, ...(within.length ? { [require('sequelize').Op.and]: within } : {}) },
       order: [['sort_order', 'ASC']],
     });
+
+    // Anyone but an ADMIN: the same posts in their public fields, with approved public
+    // pictures only (forReader), and the two totals. How the episode places each post and
+    // what each is for are the studio's.
+    if (!readsAsAdmin(req)) {
+      const data = await forReader(req, posts.map((p) => p.toJSON()));
+      return res.json({
+        data,
+        count: data.length,
+        stats: {
+          total_likes: data.reduce((sum, p) => sum + (p.likes || 0), 0),
+          total_comments: data.reduce((sum, p) => sum + (p.comments_count || 0), 0),
+        },
+      });
+    }
 
     // Group by timeline position
     const grouped = {
@@ -813,7 +955,8 @@ router.delete('/:postId', requireAuth, async (req, res) => {
 // ── DELETED POSTS (Lala's Feed → Deleted, Evoni, 2026-10-05) ────────────────
 // GET /api/v1/feed-posts/deleted?show_id=&limit= — the show's soft-deleted
 // posts, newest deletion first; DELETE above only sets deleted_at.
-router.get('/deleted', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/deleted', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { FeedPost } = require('../models');
     const { Op } = require('sequelize');
@@ -867,7 +1010,8 @@ router.put('/:postId/tags', requireAuth, async (req, res) => {
 // GET /api/v1/feed-posts/release-plan?show_id=&tz_offset= (Evoni, 2026-10-17,
 // "schedule all"): every draft of the show with no release time, each at the
 // time the story suggests and inside its story-order guards. Nothing saved.
-router.get('/release-plan', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/release-plan', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { planReleases, ReleaseError } = require('../services/postRelease');
     try {
@@ -885,7 +1029,8 @@ router.get('/release-plan', requireAuth, async (req, res) => {
 // GET /api/v1/feed-posts/release-calendar?show_id=&from=&to= (Evoni,
 // 2026-10-17): the show's scheduled drafts by release time, for the release
 // calendar; moving one is PUT /:postId/release-time.
-router.get('/release-calendar', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/release-calendar', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { releaseCalendar, ReleaseError } = require('../services/postRelease');
     try {
@@ -969,7 +1114,8 @@ router.put('/:postId/release-time', requireAuth, authorize(['ADMIN']), async (re
 // 2026-10-17): a release time the story suggests, from the post's story time
 // and its episode's air date, in her own hours (tz_offset: the browser's
 // getTimezoneOffset). Nothing is saved; she schedules it, or changes it.
-router.get('/:postId/release-time/suggest', requireAuth, async (req, res) => {
+// ADMIN: an operational read of the studio's (Evoni, 2026-11-15); not every signed-in account's.
+router.get('/:postId/release-time/suggest', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { suggestReleaseTime, ReleaseError } = require('../services/postRelease');
     const models = require('../models');

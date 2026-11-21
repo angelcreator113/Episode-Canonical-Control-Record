@@ -12,6 +12,7 @@
  *   GET    /mix                      mixPlan: commentary, dialogue, music and SFX events
  *   GET    /findings                 review readiness: blocking findings and warnings
  *   GET    /versions                 named versions;  GET /versions/:versionId  one, with its snapshot
+ *   GET    /versions/:versionId/manifest?purpose=preview|final&from=ms&to=ms   the render manifest of a saved version (reads only)
  *   POST   /beats/:beat/mode         { prime_mode: required | gameplay_only, note, visual_mode (C1b): gameplay | cinematic | null }
  *   POST   /beats/:beat/duration     { duration_ms (null: draft timing), dry_run } (dry_run: what would move; no write)
  *   POST   /beats/lock               { durations?: { beat: ms } } all 14 beats' lengths, in one write
@@ -38,8 +39,10 @@
  *   POST   /versions                 { name };  POST /versions/:versionId/restore
  *
  * Every write sends edit_revision (409 EDIT_CHANGED when stale) and is
- * requireAuth + authorize(['ADMIN']); reads need a sign-in. Switched off
- * unless EPISODE_EDIT=on (every route then answers 404).
+ * requireAuth + authorize(['ADMIN']). Reads are an ADMIN's too (Evoni,
+ * 2026-11-16): the edit, its mix plan, findings, sources and versions are
+ * production material, and carry voice storage keys. Switched off unless
+ * EPISODE_EDIT=on (every route then answers 404).
  */
 
 const express = require('express');
@@ -77,15 +80,18 @@ const handle = (what, fn) => async (req, res) => {
 const s = () => models.sequelize;
 const base = (req) => ({ episodeId: req.params.episodeId, editRevision: req.body?.edit_revision, userId: userOf(req), body: req.body || {} });
 
-router.get('/', requireAuth, handle('read the edit', (req) => edit.loadEdit(s(), { episodeId: req.params.episodeId })));
-router.get('/layout', requireAuth, handle('layout', (req) => edit.layoutAtTime(s(), { episodeId: req.params.episodeId, t: req.query.t })));
-router.get('/mix', requireAuth, handle('mix plan', (req) => edit.mixPlanOf(s(), { episodeId: req.params.episodeId })));
-router.get('/findings', requireAuth, handle('findings', (req) => edit.reviewReadiness(s(), { episodeId: req.params.episodeId })));
+router.get('/', ...admin, handle('read the edit', (req) => edit.loadEdit(s(), { episodeId: req.params.episodeId })));
+router.get('/layout', ...admin, handle('layout', (req) => edit.layoutAtTime(s(), { episodeId: req.params.episodeId, t: req.query.t })));
+router.get('/mix', ...admin, handle('mix plan', (req) => edit.mixPlanOf(s(), { episodeId: req.params.episodeId })));
+router.get('/findings', ...admin, handle('findings', (req) => edit.reviewReadiness(s(), { episodeId: req.params.episodeId })));
 // Prepare From Existing Work, B1 (2026-11-03): the episode's scene plan, each beat's angle and
 // whether the editor can place it. Reads only (services/editSourcesService).
-router.get('/sources', requireAuth, handle('existing work', (req) => require('../services/editSourcesService').existingWork(s(), { episodeId: req.params.episodeId })));
-router.get('/versions', requireAuth, handle('list versions', (req) => edit.listVersions(s(), { episodeId: req.params.episodeId })));
-router.get('/versions/:versionId', requireAuth, handle('read version', (req) => edit.getVersion(s(), { episodeId: req.params.episodeId, versionId: req.params.versionId })));
+router.get('/sources', ...admin, handle('existing work', (req) => require('../services/editSourcesService').existingWork(s(), { episodeId: req.params.episodeId })));
+router.get('/versions', ...admin, handle('list versions', (req) => edit.listVersions(s(), { episodeId: req.params.episodeId })));
+router.get('/versions/:versionId', ...admin, handle('read version', (req) => edit.getVersion(s(), { episodeId: req.params.episodeId, versionId: req.params.versionId })));
+
+// The render manifest (Evoni, 2026-11-16): what to draw and play for a saved version. Reads only.
+router.get('/versions/:versionId/manifest', ...admin, handle('render manifest', (req) => require('../services/renderManifestService').manifestOf(s(), { episodeId: req.params.episodeId, versionId: req.params.versionId, purpose: req.query.purpose === 'final' ? 'final' : 'preview', range: { start_ms: req.query.from, end_ms: req.query.to } })));
 
 router.post('/beats/:beat/mode', ...admin, handle('beat mode', (req) => edit.setBeatMode(s(), {
   ...base(req), beatNumber: req.params.beat, primeMode: req.body?.prime_mode, visualMode: req.body?.visual_mode, note: req.body?.note,

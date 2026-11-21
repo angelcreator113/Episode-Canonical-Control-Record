@@ -4,7 +4,7 @@ const router = express.Router();
 const { createAnthropicClient } = require('../../services/anthropicClient');
 
 // Auth middleware
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { aiFailure } = require('../../utils/aiFailure');
 
@@ -819,7 +819,9 @@ async function bookSceneSuggestions(req, res) {
   }
 }
 
-router.post('/books/:bookId/scenes', requireAuth, aiRateLimiter, bookSceneSuggestions);
-router.get('/books/:bookId/scenes', requireAuth, aiRateLimiter, bookSceneSuggestions);
+// ADMIN (Evoni, 2026-11-16): each request is a paid AI call, on either method. The GET alias answered any
+// signed-in account; the POST is the same handler, so it carries the same rule and is not a way round it.
+router.post('/books/:bookId/scenes', requireAuth, authorize(['ADMIN']), aiRateLimiter, bookSceneSuggestions);
+router.get('/books/:bookId/scenes', requireAuth, authorize(['ADMIN']), aiRateLimiter, bookSceneSuggestions);
 
 module.exports = router;

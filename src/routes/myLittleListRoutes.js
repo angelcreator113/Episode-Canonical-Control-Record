@@ -27,7 +27,7 @@
  */
 
 const express = require('express');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const list = require('../services/myLittleListService');
 
 const router = express.Router();
@@ -54,7 +54,7 @@ function answer(res, err, tag) {
   return res.status(500).json({ success: false, error: err.message });
 }
 
-router.get('/episodes/:episodeId/my-little-list', requireAuth, async (req, res) => {
+router.get('/episodes/:episodeId/my-little-list', requireAuth, authorize(['ADMIN']), async (req, res) => {
   if (!guard(req, res)) return undefined;
   try {
     const at = list.positionOf(req.query);
@@ -66,7 +66,7 @@ router.get('/episodes/:episodeId/my-little-list', requireAuth, async (req, res) 
   }
 });
 
-router.get('/episodes/:episodeId/my-little-list/review', requireAuth, async (req, res) => {
+router.get('/episodes/:episodeId/my-little-list/review', requireAuth, authorize(['ADMIN']), async (req, res) => {
   if (!guard(req, res)) return undefined;
   try {
     const at = list.positionOf(req.query);

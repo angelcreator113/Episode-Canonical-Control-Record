@@ -43,8 +43,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const reveal = (fields) => models.PulseReveal.create({ show_id: ids.show, source: 'set', mode: 'teaser', ...fields });
 
   beforeAll(async () => {
+    // These reads name story moments, later ones and none (the director's view): an ADMIN's since 2026-11-15, when the
+    // server began deciding the moment anyone else reads at (tests/integration/pulseReaderStoryMoment).
     token = TokenService.generateTokenPair({
-      id: 'test-user-reveals-applied', email: 'evoni@applied.dev', name: 'Applied Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-reveals-applied', email: 'evoni@applied.dev', name: 'Applied Test', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :slug, CAST(:meta AS jsonb), NOW(), NOW())`,
       { show: ids.show, name: `Applied ${tag}`, slug: `applied-${tag}`, meta: JSON.stringify({ pulse_cover: { url: 'https://cdn/cover.jpg', alt: 'Night' } }) });

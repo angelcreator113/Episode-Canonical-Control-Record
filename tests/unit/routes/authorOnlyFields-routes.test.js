@@ -104,16 +104,19 @@ beforeEach(() => {
 
 describe('reads — the four fields reach the admin group only', () => {
   const READS = [
-    ['get', '/api/v1/character-depth/c1', (b) => b.depth],
+    // The GET reads are an ADMIN's since 2026-11-15 (character privacy): editor and viewer are
+    // refused outright, which is stricter than hiding the four fields. The field filter stays on
+    // the router, behind the guard.
+    ['get', '/api/v1/character-depth/c1', (b) => b.depth, undefined, true],
     ['post', '/api/v1/character-depth/c1/generate', (b) => b.proposed, undefined, true],
     // A single dimension proposes only its own fields: blindspot carries three
     // of the four, narrative carries de_actual_narrative_gap.
     ['post', '/api/v1/character-depth/c1/generate/blindspot', (b) => b.proposed,
       ['de_blind_spot', 'de_blind_spot_evidence', 'de_blind_spot_crack_condition'], true],
     ['post', '/api/v1/character-depth/c1/generate/narrative', (b) => b.proposed, ['de_actual_narrative_gap'], true],
-    ['get', '/api/v1/character-registry/characters/c1', (b) => b.character, ROW],
-    ['get', '/api/v1/character-registry/registries/r1', (b) => b.registry.characters[0], ROW],
-    ['get', '/api/v1/character-registry/registries/default', (b) => b.registry.characters[0], ROW],
+    ['get', '/api/v1/character-registry/characters/c1', (b) => b.character, ROW, true],
+    ['get', '/api/v1/character-registry/registries/r1', (b) => b.registry.characters[0], ROW, true],
+    ['get', '/api/v1/character-registry/registries/default', (b) => b.registry.characters[0], ROW, true],
   ];
 
   beforeEach(() => resetRow(true));

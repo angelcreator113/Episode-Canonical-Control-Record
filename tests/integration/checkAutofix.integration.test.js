@@ -66,7 +66,11 @@ const SIGNAL = 'Three sponsors in six weeks have confirmed deals and gone silent
   });
 
   it('flags "went dark", not a mood or the sponsors going quiet', async () => {
-    const { flags } = (await as(editor, request(app).get(url('')))).body;
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    const refused = await as(editor, request(app).get(url('')));
+    expect(refused.status).toBe(403);
+    expect(refused.body.flags).toBeUndefined();
+    const { flags } = (await as(admin, request(app).get(url('')))).body;
     const status = flags.filter((f) => f.check === 'account_status');
     expect(status.map((f) => f.found)).toEqual(['went dark']);
   });
@@ -87,7 +91,7 @@ const SIGNAL = 'Three sponsors in six weeks have confirmed deals and gone silent
   });
 
   it('applying the rewrite swaps that one sentence only, and the finding is gone', async () => {
-    const { flags } = (await as(editor, request(app).get(url('')))).body;
+    const { flags } = (await as(admin, request(app).get(url('')))).body;
     const flag = flags.find((f) => f.check === 'account_status');
     const res = await as(admin, request(app).post(url('/fix'))).send({
       flag_id: flag.id, before: 'She went dark after the retakes.', after: 'She kept posting through the retakes.',

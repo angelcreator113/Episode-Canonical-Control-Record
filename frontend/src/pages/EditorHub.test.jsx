@@ -100,6 +100,43 @@ describe('EditorHub', () => {
     expect(screen.getByTestId('where').textContent).toBe('/episodes/e3/editor');
   });
 
+  test('"Last opened" marks only the remembered episode, and it is not called in production', async () => {
+    localStorage.setItem('working-episode-id', 'e2');
+    renderAt();
+    const e2 = await screen.findByTestId('ehub-ep-e2');
+    expect(within(e2).getByText('Last opened')).toBeTruthy();
+    expect(screen.getAllByText('Last opened')).toHaveLength(1);
+    expect(screen.queryByText(/in production|now producing/i)).toBeNull();
+  });
+
+  test('a remembered episode that is not in the list marks nothing', async () => {
+    localStorage.setItem('working-episode-id', 'deleted-episode');
+    renderAt();
+    await screen.findByTestId('ehub-ep-e1');
+    expect(screen.queryByText('Last opened')).toBeNull();
+  });
+
+  test('opening an episode remembers its title beside its id', async () => {
+    renderAt();
+    fireEvent.click(within(await screen.findByTestId('ehub-ep-e3')).getByRole('link', { name: /Open episode 3/ }));
+    expect(localStorage.getItem('working-episode-id')).toBe('e3');
+    expect(localStorage.getItem('working-episode-title')).toBeTruthy();
+    expect(Object.keys(localStorage).filter((k) => k.startsWith('working-episode')).sort()).toEqual(['working-episode-id', 'working-episode-title']);
+  });
+
+  test('storage that cannot be read or written: the list still shows, nothing is marked, and Open still opens', async () => {
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      renderAt();
+      const e3 = await screen.findByTestId('ehub-ep-e3');
+      expect(screen.queryByText('Last opened')).toBeNull();
+      fireEvent.click(within(e3).getByRole('link', { name: /Open episode 3/ }));
+      expect(screen.getByTestId('where').textContent).toBe('/episodes/e3/editor');
+    } finally { get.mockRestore(); set.mockRestore(); warn.mockRestore(); }
+  });
+
   test('where the episode edit is off it says so once and stops asking', async () => {
     vi.mocked(api.get).mockImplementation(() => Promise.reject(Object.assign(new Error('off'), { response: { status: 404, data: { code: 'EPISODE_EDIT_OFF' } } })));
     renderAt();

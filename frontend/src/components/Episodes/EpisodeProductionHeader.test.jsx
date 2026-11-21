@@ -16,6 +16,7 @@ vi.mock('../../lib/rawClipsApi', async () => {
 import api from '../../services/api';
 import { rawClipsApi } from '../../lib/rawClipsApi';
 import EpisodeProductionHeader from './EpisodeProductionHeader';
+import { readReturn } from '../../utils/returnPath';
 
 const SECTIONS = [
   { id: 'brief', label: 'Episode Brief', items: [{ id: 'a', required: true }] },
@@ -54,6 +55,23 @@ describe('EpisodeProductionHeader', () => {
     renderHeader();
     await waitFor(() => expect(screen.getByTestId('eph-step-stat-files').textContent).toBe('Takes: 2 of 14 beats'));
     expect(rawClipsApi.list).toHaveBeenCalledTimes(1);
+  });
+
+  test('the Thumbnail step carries the tab it is opened from, when the page says which (PR-06)', () => {
+    const href = () => within(screen.getByTestId('eph-step-thumbnail')).getByRole('link').getAttribute('href');
+    for (const [tab, label] of [['scenes', 'Scenes'], ['wardrobe', 'Wardrobe'], ['checklist', 'Checklist'], ['files', 'Files'], ['beatplan', 'Plan']]) {
+      const view = renderHeader({ returnTab: tab });
+      expect(href()).toBe(`/template-studio/youtube?episode=ep-1&from=${encodeURIComponent(`/episodes/ep-1?tab=${tab}`)}&fromLabel=${label}`);
+      const q = new URLSearchParams(href().split('?')[1]);
+      expect(readReturn(q, { episodeId: 'ep-1', fallback: { href: 'x', text: 'x' } })).toEqual({ href: `/episodes/ep-1?tab=${tab}`, text: `Back to ${label}`, origin: true });
+      view.unmount();
+    }
+    // No tab given, the Overview, or a key that is not a tab: the plain address, as before.
+    for (const returnTab of [undefined, null, 'overview', 'nope', '']) {
+      const view = renderHeader({ returnTab });
+      expect(href()).toBe('/template-studio/youtube?episode=ep-1');
+      view.unmount();
+    }
   });
 
   test('a step opens its tab, or its page', async () => {

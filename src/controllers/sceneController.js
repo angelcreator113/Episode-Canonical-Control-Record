@@ -1,6 +1,7 @@
 const { models, sequelize } = require('../models');
 const { Scene, Episode, Thumbnail, Asset, SceneAsset, AssetUsageLog } = models;
 const { QueryTypes } = require('sequelize');
+const { isDocumentPresentation, anyDocumentPresentation, assetIdsWithin, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 
 /**
  * Scene Controller
@@ -886,6 +887,9 @@ exports.updateSceneAssets = async (req, res) => {
         message: 'Cannot modify assets on locked scene',
       });
     }
+    // The ids kept in the scene's own assets object (an outfit, a guest, a
+    // background, a list of elements) are asset ids too.
+    if (await anyDocumentPresentation(assetIdsWithin(assets))) return refuseDocumentPresentation(res);
 
     await scene.updateAssets(assets, userId);
 
@@ -1030,6 +1034,8 @@ exports.addSceneAsset = async (req, res) => {
         error: 'One or more assets not found',
       });
     }
+    // One document presentation among them refuses the whole request.
+    if (assets.some(isDocumentPresentation)) return refuseDocumentPresentation(res);
 
     // Create scene asset links
     const sceneAssets = [];
@@ -1503,6 +1509,7 @@ exports.addAssetToScene = async (req, res) => {
         error: 'Asset not found',
       });
     }
+    if (isDocumentPresentation(asset)) return refuseDocumentPresentation(res);
 
     // Check if role already exists for this scene
     const existing = await SceneAsset.findOne({

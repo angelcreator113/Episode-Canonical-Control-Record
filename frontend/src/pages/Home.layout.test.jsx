@@ -204,3 +204,116 @@ describe('Home layout', () => {
     expect(screen.getByTestId('home-trending')).toBeTruthy();
   });
 });
+
+describe('Home: the episode to resume, and the one in production (Evoni, 2026-11-17)', () => {
+  // E1 is the show's official production episode; E2 and E3 are later unfinished ones.
+  const ep = (id, number, status, extra = {}) => ({ id, show_id: 'show-1', season_number: 1, episode_number: number, title: `Episode ${number}`, status, updated_at: `2026-10-${10 + number}T10:00:00Z`, ...extra });
+  const E1 = ep('e1', 1, 'in_build');
+  const E2 = ep('e2', 2, 'draft');
+  const E3 = ep('e3', 3, 'scripted');
+  const OUT = ep('out', 9, 'published', { updated_at: '2026-10-30T10:00:00Z' });
+  const OTHER = { ...ep('x2', 2, 'draft'), show_id: 'show-2' };
+  const withEpisodes = (rows) => vi.mocked(apiClient.get).mockImplementation(answerFor({ '/api/v1/episodes?': { data: rows } }));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.removeItem('primeStudios.activeShowId');
+    localStorage.removeItem('working-episode-id');
+    withEpisodes([OUT, E3, E1, E2, OTHER]);
+  });
+
+  test('continueEpisode: resume the remembered unfinished episode, else the first unfinished in story order', () => {
+    const list = [OUT, E3, E1, E2];
+    expect(continueEpisode(list).id).toBe('e1');
+    expect(continueEpisode(list, 'e2').id).toBe('e2');
+    expect(continueEpisode(list, 'out').id).toBe('e1');
+    expect(continueEpisode(list, 'deleted').id).toBe('e1');
+    // Nothing unfinished: as before, the most recently updated episode that is not archived.
+    expect(continueEpisode([ep('a', 1, 'published', { updated_at: '2026-10-01T00:00:00Z' }), ep('b', 2, 'scheduled', { updated_at: '2026-10-05T00:00:00Z' }), ep('c', 3, 'archived', { updated_at: '2026-10-09T00:00:00Z' })], 'a').id).toBe('b');
+    expect(continueEpisode([], 'e2')).toBeNull();
+  });
+
+  test('nothing remembered: Continue is the official production episode, with no "In production" line', async () => {
+    renderHome();
+    await screen.findByTestId('home-continue-top');
+    expect(href('home-continue-top')).toBe('/episodes/e1');
+    expect(within(screen.getByTestId('home-continue')).getByText('Episode 1')).toBeTruthy();
+    expect(screen.queryByTestId('home-in-production')).toBeNull();
+  });
+
+  test('E1 in production, E2 opened last: Continue resumes E2 and the card names E1 as in production', async () => {
+    localStorage.setItem('working-episode-id', 'e2');
+    renderHome();
+    await screen.findByTestId('home-continue-top');
+    expect(href('home-continue-top')).toBe('/episodes/e2');
+    expect(screen.getByTestId('home-continue-top').textContent).toContain('Continue S1 E2');
+    const card = screen.getByTestId('home-continue');
+    expect(within(card).getByText('Episode 2')).toBeTruthy();
+    const line = within(card).getByTestId('home-in-production');
+    expect(line.textContent).toBe('In production: S1 E1');
+    expect(within(line).getByRole('link').getAttribute('href')).toBe('/episodes/e1');
+    // The resumed episode is called "Continue", never "in production".
+    expect(screen.getByTestId('home-continue-top').textContent).not.toMatch(/in production/i);
+    expect(within(card).getByRole('heading', { level: 2 }).textContent).toBe('Continue Episode');
+  });
+
+  test('the production episode itself was opened last: no extra line', async () => {
+    localStorage.setItem('working-episode-id', 'e1');
+    renderHome();
+    await screen.findByTestId('home-continue-top');
+    expect(href('home-continue-top')).toBe('/episodes/e1');
+    expect(screen.queryByTestId('home-in-production')).toBeNull();
+  });
+
+  test('a remembered episode that is released, deleted, another show\'s, or not real is passed over', async () => {
+    for (const id of ['out', 'deleted-episode', 'x2', 'not-an-id', '']) {
+      localStorage.setItem('working-episode-id', id);
+      const { unmount } = renderHome();
+      await screen.findByTestId('home-continue-top');
+      expect(href('home-continue-top')).toBe('/episodes/e1');
+      expect(screen.queryByTestId('home-in-production')).toBeNull();
+      unmount();
+    }
+  });
+
+  test('nothing unfinished: Continue keeps opening the most recently updated episode, with no "In production" line', async () => {
+    withEpisodes([ep('a', 1, 'published', { updated_at: '2026-10-01T00:00:00Z' }), OUT]);
+    localStorage.setItem('working-episode-id', 'a');
+    renderHome();
+    await screen.findByTestId('home-continue-top');
+    expect(href('home-continue-top')).toBe('/episodes/out');
+    expect(screen.queryByTestId('home-in-production')).toBeNull();
+  });
+
+  test('no episodes: no Continue, the card says so, and nothing is "in production"', async () => {
+    withEpisodes([]);
+    localStorage.setItem('working-episode-id', 'e2');
+    renderHome();
+    expect(await screen.findByText(/No episode yet\./)).toBeTruthy();
+    expect(screen.queryByTestId('home-continue-top')).toBeNull();
+    expect(screen.queryByTestId('home-in-production')).toBeNull();
+  });
+
+  test('storage that cannot be read: Continue is the production episode and the page still loads', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderHome();
+      await screen.findByTestId('home-continue-top');
+      expect(href('home-continue-top')).toBe('/episodes/e1');
+      expect(screen.queryByTestId('home-in-production')).toBeNull();
+    } finally { spy.mockRestore(); warn.mockRestore(); error.mockRestore(); }
+  });
+
+  test('opening Home remembers nothing: it only reads', async () => {
+    localStorage.setItem('working-episode-id', 'e2');
+    const set = vi.spyOn(Storage.prototype, 'setItem');
+    try {
+      renderHome();
+      await screen.findByTestId('home-in-production');
+      expect(set.mock.calls.filter(([k]) => String(k).startsWith('working-episode'))).toEqual([]);
+    } finally { set.mockRestore(); }
+    expect(localStorage.getItem('working-episode-id')).toBe('e2');
+  });
+});

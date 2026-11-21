@@ -36,6 +36,10 @@ const SOCIAL_TASKS = [{ slot: 'grwm', label: 'GRWM', task_source: 'goal', requir
 (shouldSkip ? describe.skip : describe)('wardrobe completion comes from the outfit (T7)', () => {
   // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; an editor is refused them (a test below).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-wardrobeCompletionDerived', email: 'admin@wardrobeCompletionDerived.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const readOnly = readOnlyTokens('t7');
   const shows = [];
 
@@ -80,7 +84,7 @@ const SOCIAL_TASKS = [{ slot: 'grwm', label: 'GRWM', task_source: 'goal', requir
 
   it('completion is the outfit: a chosen piece fills its slot; a rejected one or a stale toggle does not', async () => {
     const ids = await seed();
-    const res = await request(app).get(`/api/v1/episodes/${ids.ep}/todo`).set(auth());
+    const res = await request(app).get(`/api/v1/episodes/${ids.ep}/todo`).set({ Authorization: `Bearer ${adminToken}` });
     expect(res.status).toBe(200);
     const bySlot = Object.fromEntries(res.body.data.tasks.map((t) => [t.slot, t.completed]));
     expect(bySlot).toEqual({ dress: true, shoes: false, jewelry: false });
@@ -106,6 +110,10 @@ const SOCIAL_TASKS = [{ slot: 'grwm', label: 'GRWM', task_source: 'goal', requir
     const ids = await seed();
     const res = await request(app).post(`/api/v1/episodes/${ids.ep}/todo/complete/nope`).set(auth()).send({ completed: true });
     expect(res.status).toBe(404);
+  });
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/todo`).set('Authorization', `Bearer ${readOnly.editor}`);
+    expect(res.status).toBe(403);
   });
 
   guardIt('signed out, a viewer and an editor cannot complete a slot, social or wardrobe: the list is as it was', async () => {

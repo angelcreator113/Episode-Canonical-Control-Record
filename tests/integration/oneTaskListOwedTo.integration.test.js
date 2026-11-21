@@ -32,6 +32,10 @@ const guardIt = enforcing() ? it : it.skip;
 (shouldSkip ? describe.skip : describe)('one task list: owed_to and the four sources (T2)', () => {
   // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; an editor is refused them (a test below).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-oneTaskListOwedTo', email: 'admin@oneTaskListOwedTo.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const readOnly = readOnlyTokens('one-task-list');
   const shows = [];
 
@@ -142,9 +146,13 @@ const guardIt = enforcing() ? it : it.skip;
     expect(tasks.filter((t) => t.required).map((t) => t.deliverable_id).sort()).toEqual([hostRow, brandRow].sort());
 
     // The Run Sheet and the Career Checklist both read this saved list.
-    const res = await request(app).get(`/api/v1/episodes/${result.episode.id}/todo/social`).set({ Authorization: `Bearer ${token}` });
+    const res = await request(app).get(`/api/v1/episodes/${result.episode.id}/todo/social`).set({ Authorization: `Bearer ${adminToken}` });
     expect(res.status).toBe(200);
     expect(res.body.social_tasks).toEqual(tasks);
+  });
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/todo/social`).set('Authorization', `Bearer ${readOnly.editor}`);
+    expect(res.status).toBe(403);
   });
 
   guardIt('signed out, a viewer and an editor cannot add a deliverable or change who it is owed to: the rows are as they were', async () => {

@@ -29,6 +29,10 @@ const guardIt = enforcing() ? it : it.skip;
 (shouldSkip ? describe.skip : describe)('re-locking an outfit replaces it', () => {
   // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; an editor is refused them (a test below).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-wardrobeOutfitRelock', email: 'admin@wardrobeOutfitRelock.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const readOnly = readOnlyTokens('relock');
   const shows = [];
 
@@ -63,7 +67,7 @@ const guardIt = enforcing() ? it : it.skip;
     .send({ episode_id: ids.ep, show_id: ids.show, wardrobe_ids });
   const outfit = async (ids) => (await request(app)
     .get(`/api/v1/wardrobe/outfit/${ids.ep}`)
-    .set('Authorization', `Bearer ${token}`)).body.items.map((i) => i.name).sort();
+    .set('Authorization', `Bearer ${adminToken}`)).body.items.map((i) => i.name).sort();
 
   afterAll(async () => {
     for (const show of shows) {
@@ -106,6 +110,10 @@ const guardIt = enforcing() ? it : it.skip;
     const refused = await lock(other, [other.dressA, other.generated]);
     expect(refused.status).toBe(400);
     expect(refused.body.error).toMatch(/Not within reach: Generated Bag/);
+  });
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/wardrobe/outfit/00000000-0000-4000-8000-000000000000`).set('Authorization', `Bearer ${readOnly.editor}`);
+    expect(res.status).toBe(403);
   });
 
   guardIt('signed out, a viewer and an editor cannot re-lock: the locked outfit stays, nothing is charged', async () => {

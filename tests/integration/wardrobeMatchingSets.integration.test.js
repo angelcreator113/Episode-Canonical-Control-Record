@@ -30,6 +30,10 @@ const guardIt = enforcing() ? it : it.skip;
 (shouldSkip ? describe.skip : describe)('Wardrobe matching sets (W1)', () => {
   // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; an editor is refused them (a test below).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-wardrobeMatchingSets', email: 'admin@wardrobeMatchingSets.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const readOnly = readOnlyTokens('w1');
   const shows = [];
 
@@ -73,7 +77,7 @@ const guardIt = enforcing() ? it : it.skip;
     expect(res.body.data.pieces.map((p) => p.name)).toEqual(['Floral Corset', 'Floral Earrings', 'Floral Skirt']);
     const setId = res.body.data.id;
 
-    const list = await auth(request(app).get(`/api/v1/wardrobe?show_id=${show}&limit=50`));
+    const list = await asAdmin(request(app).get(`/api/v1/wardrobe?show_id=${show}&limit=50`));
     const linked = list.body.data.filter((w) => w.outfit_set_id === setId);
     expect(linked).toHaveLength(3);
     expect(linked.every((w) => w.outfit_set_name === 'Floral Corset Set')).toBe(true);
@@ -122,6 +126,10 @@ const guardIt = enforcing() ? it : it.skip;
     expect((await post({ show_id: show, name: 'X', wardrobe_ids: [pieces.top, other.pieces.top] })).status).toBe(400);
     expect((await stamps([pieces.top]))[0].outfit_set_id).toBeNull();
     expect((await request(app).post('/api/v1/wardrobe/matching-sets').send({})).status).toBe(401);
+  });
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/wardrobe`).set('Authorization', `Bearer ${readOnly.editor}`);
+    expect(res.status).toBe(403);
   });
 
   guardIt('signed out, a viewer and an editor cannot link, change or delete a set: the pieces keep their links', async () => {

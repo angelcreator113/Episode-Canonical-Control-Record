@@ -450,7 +450,10 @@ export default function BrandProfilePage() {
   if (error && !data) return <div className="bp"><p className="bp-error" role="alert">{error}</p><Link className="bp-link" to="/universe?tab=brands">← LalaVerse › Brands</Link></div>;
   if (!data) return <div className="bp"><p className="bp-muted">Loading…</p></div>;
 
-  const { company, sections } = data;
+  const { company } = data;
+  // Pictures reads the studio's picture library, which is an ADMIN's to read (Evoni, 2026-11-20): anyone else has no
+  // Pictures tab, so nothing asks for it, and an address that names it opens the first tab they do have.
+  const sections = admin ? data.sections : data.sections.filter((s) => s.key !== 'pictures');
   const tab = sections.some((s) => s.key === params.get('tab')) ? params.get('tab') : sections[0].key;
   const open = (key) => setParams((p) => { const next = new URLSearchParams(p); next.set('tab', key); return next; }, { replace: true });
 
@@ -479,7 +482,7 @@ export default function BrandProfilePage() {
         {tab === 'people' && data.people && <People people={data.people} />}
         {tab === 'pulse' && data.pulse && <Pulse data={data} admin={admin} onChanged={load} />}
         {tab === 'business' && data.business && <Business deals={data.business} />}
-        {tab === 'pictures' && <Pictures company={company} admin={admin} />}
+        {tab === 'pictures' && admin && <Pictures company={company} admin={admin} />}
         {tab === 'wardrobe' && data.wardrobe && <Wardrobe pieces={data.wardrobe} />}
         {tab === 'press' && data.press && <Press press={data.press} kind={company.kind} />}
         {tab === 'relationships' && data.relationships && <Relationships list={data.relationships} />}

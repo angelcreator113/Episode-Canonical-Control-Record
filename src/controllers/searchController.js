@@ -8,6 +8,7 @@ const ActivityIndexService = require('../services/ActivityIndexService');
 const logger = require('../services/Logger');
 const { userInGroup } = require('../middleware/auth');
 const { getPool } = require('../config/database');
+const { NOT_DOCUMENT_PRESENTATION_SQL } = require('../utils/documentPresentationAssets');
 
 const db = getPool();
 
@@ -73,6 +74,7 @@ exports.globalSearch = async (req, res) => {
         FROM assets
         WHERE (name ILIKE $1 OR asset_type ILIKE $1)
           AND deleted_at IS NULL
+          AND ${NOT_DOCUMENT_PRESENTATION_SQL}
         LIMIT $2
       `;
       const assetResult = await db.query(assetQuery, [searchQuery, searchLimit]);

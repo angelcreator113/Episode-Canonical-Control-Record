@@ -43,11 +43,13 @@ describe('Step 3 CP8 — feedRelationshipRoutes.js router.use migration', () => 
     });
   });
 
-  describe('Non-AI handlers (6) inherit auth, no inline aiRateLimiter', () => {
+  // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+  describe('Non-AI handlers (6) inherit auth, no inline aiRateLimiter; the reads are ADMIN', () => {
     [['get', '/'], ['post', '/'], ['put', '/:id'], ['delete', '/:id'], ['get', '/canvas'], ['get', '/profiles']].forEach(([verb, route]) => {
       test(`${verb.toUpperCase()} ${route} has no inline aiRateLimiter`, () => {
         const escaped = route.replace(/\//g, '\\/');
-        const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*async`);
+        const admin = verb === 'get' ? "\\s*authorize\\(\\['ADMIN'\\]\\)," : '';
+        const re = new RegExp(`router\\.${verb}\\('${escaped}',${admin}\\s*async`);
         expect(SRC).toMatch(re);
       });
     });

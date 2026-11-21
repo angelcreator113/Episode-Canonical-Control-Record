@@ -82,7 +82,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect((await put({ item_type: 'post', item_id: ids.post, event_id: ids.ev2, moment: 'during' }, editor)).status).toBe(403);
     expect((await request(app).put('/api/v1/pulse-reveals').send({})).status).toBe(401);
     expect((await request(app).get(`/api/v1/pulse-reveals?show_id=${ids.show}`)).status).toBe(401);
-    expect((await as(editor, request(app).get(`/api/v1/pulse-reveals?show_id=${ids.show}`))).status).toBe(200);
+    // The reveal plan is an ADMIN's to read (Evoni, 2026-11-15): an editor is refused it.
+    expect((await as(editor, request(app).get(`/api/v1/pulse-reveals?show_id=${ids.show}`))).status).toBe(403);
+    expect((await as(admin, request(app).get(`/api/v1/pulse-reveals?show_id=${ids.show}`))).status).toBe(200);
   });
 
   it('upserts one reveal per item, resolving its story order from its event and moment', async () => {

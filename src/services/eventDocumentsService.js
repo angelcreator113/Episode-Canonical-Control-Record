@@ -169,8 +169,9 @@ async function writeDocument(sequelize, eventId, type, doc, { transaction } = {}
  * A read-modify-write of one document, in one transaction with the event
  * row locked (audit Low, 2026-10-23), so a draft, an edit and an approval
  * cannot overwrite one another: each reads the version the one before it
- * wrote. `change(prev, event)` returns the document to write, or null to
- * write nothing; it may throw an EventDocumentError. Returns
+ * wrote. `change(prev, event, transaction)` returns the document to write,
+ * or null to write nothing; it may throw an EventDocumentError, and may
+ * write within the transaction (the approval's audit entry). Returns
  * { event, doc, written }.
  *
  * expectedVersion (optional): the version the client last read. When sent
@@ -184,7 +185,7 @@ async function changeDocument(sequelize, { showId, eventId, type, expectedVersio
     if (expectedVersion != null && Number(prev?.version || 0) !== Number(expectedVersion)) {
       throw new EventDocumentError(409, `The ${DOC_TYPES[type].label.toLowerCase()} changed since you opened it (now version ${prev?.version || 0}). Reload it and try again.`);
     }
-    const doc = await change(prev, event);
+    const doc = await change(prev, event, transaction);
     if (!doc) return { event, doc: prev, written: false };
     await writeDocument(sequelize, eventId, type, doc, { transaction });
     return { event, doc, written: true };
@@ -350,15 +351,27 @@ async function getDocuments(models, { showId, eventId }) {
   const docs = readDocuments(event);
   const lookKey = look ? lookKeyOf(look.pieces) : '';
   const list = docs.shopping_list;
+  // Whether each document's presentations can be used: its own record and
+  // one read of which of their panels are live rows. No file is read here.
+  const live = await livePresentationIds(models.sequelize, Object.values(docs));
+  const offer = await offerState(models.sequelize, event, docs.offer_letter);
+  // And whether the overlay each stands beside is out of date, by the one
+  // calculation that says so (currentOverlayState), with what was read above.
+  const canonical = {
+    shopping_list: await currentOverlayState(models, event, 'shopping_list', docs.shopping_list, { look }),
+    offer_letter: await currentOverlayState(models, event, 'offer_letter', docs.offer_letter, { terms: offer.offer_eligible ? offer.offer_terms : null }),
+  };
+  const presentation_readiness = Object.fromEntries(Object.entries(docs).map(([type, doc]) => [type, presentationReadiness(doc, live, Date.now(), canonical[type])]));
   return {
     ...docs,
+    presentation_readiness,
     look: look ? { state: look.state, pieces: look.pieces, total: look.total } : null,
     balance,
     // Saved with the list's version, so every device sees the same answer
     // (it was kept per browser tab before).
     look_changed: Boolean(list && typeof list.look_key === 'string' && list.look_key !== lookKey),
     closet: list ? await closetSuggestions(models.sequelize, event, list, look) : {},
-    ...(await offerState(models.sequelize, event, docs.offer_letter)),
+    ...offer,
   };
 }
 
@@ -555,23 +568,66 @@ async function keepListForLook(models, { showId, eventId, version }) {
   return doc;
 }
 
+// ─── Approving the words, and drawing them: two things ─────────────────────
+//
+// Evoni, 2026-11-19 (V2-1). Approval is a decision about the document's
+// content: its status, who approved it and when, with one audit entry
+// written in the same transaction. Drawing the approved document as its
+// overlay is a separate step that can fail without undoing the approval;
+// how it went is kept on the document as
+//   overlay_render { status: 'rendering' | 'ok' | 'failed', version,
+//                    started_at | at, error? }
+// so a failure is said and can be tried again, and is never read as an
+// overlay that is ready. Neither is carried to a later version.
+
+/** How long a drawing in progress keeps others from starting the same one. */
+const RENDER_CLAIM_MS = 2 * 60 * 1000;
+const RENDER_ERROR_MAX = 200;
+const AUDIT_APPROVED = 'event_document_approved';
+const AUDIT_RESOURCE = 'world_event';
+
+const approverId = (actor) => (actor?.id === undefined || actor?.id === null ? null : String(actor.id));
+
+/** True while a drawing of this version was started recently enough to still be running. */
+function renderInProgress(doc, now = Date.now()) {
+  const r = doc?.overlay_render;
+  if (!r || r.status !== 'rendering' || r.version !== doc.version) return false;
+  const started = Date.parse(r.started_at);
+  return Number.isFinite(started) && now - started < RENDER_CLAIM_MS;
+}
+
 /**
  * The approved document drawn as its overlay (Evoni, 2026-10-07: "i want
  * both the shopping list and career list and invitations as overlays"),
  * recorded on the document as overlay { asset_id, url, version, made_at }.
  * Not placed on a beat ("none of the overlays should be beats for now").
- * A drawing failure leaves the approval as it is.
+ *
+ * One drawing at a time per version: it is claimed under the event's row
+ * lock first, and a second caller finds the claim and draws nothing. What
+ * was drawn, or why it was not, is written only to the version it was
+ * drawn from: a newer edit that landed meanwhile is left as it is. A
+ * failure leaves the approval as it is and is recorded.
  */
 async function withOverlay(models, event, type, doc) {
   const { makeDocumentOverlay } = require('./eventDocumentOverlayService');
+  const at = { showId: event.show_id, eventId: event.id, type };
+  const sameVersion = (current) => current && current.version === doc.version && current.status === 'approved';
+  let claimed = false;
+  const { doc: stored } = await changeDocument(models.sequelize, at, (current) => {
+    if (!sameVersion(current) || renderInProgress(current)) return null;
+    claimed = true;
+    return { ...current, overlay_render: { status: 'rendering', version: current.version, started_at: new Date().toISOString() } };
+  });
+  // Edited since, or another request is drawing it now: nothing to draw here.
+  if (!claimed) return stored || doc;
   try {
     const terms = type === 'offer_letter' ? await offerTermsOf(models.sequelize, event) : null;
     const overlay = await makeDocumentOverlay(models, { event, type, doc, terms });
-    if (!overlay) return doc;
-    // Recorded only on the version it was drawn from: a newer edit that
-    // landed while it was drawn is left as it is.
-    const { doc: saved } = await changeDocument(models.sequelize, { showId: event.show_id, eventId: event.id, type }, (current) => (
-      current && current.version === doc.version ? { ...current, overlay } : null
+    if (!overlay) throw new Error('Drawing is not available on this server.');
+    const { doc: saved } = await changeDocument(models.sequelize, at, (current) => (
+      current && current.version === doc.version
+        ? { ...current, overlay, overlay_render: { status: 'ok', version: doc.version, at: new Date().toISOString() } }
+        : null
     ));
     if (type === 'offer_letter' && event.used_in_episode_id) {
       await syncOfferLetterPlacement(models, { event: { ...event, canon_consequences: null }, episodeId: event.used_in_episode_id, overlay });
@@ -579,40 +635,482 @@ async function withOverlay(models, event, type, doc) {
     return saved && saved.version === doc.version ? saved : doc;
   } catch (err) {
     console.error(`[EventDocuments] ${type} overlay failed (the approval stands):`, err.message);
+    try {
+      const { doc: failed } = await changeDocument(models.sequelize, at, (current) => (
+        current && current.version === doc.version
+          ? { ...current, overlay_render: { status: 'failed', version: doc.version, at: new Date().toISOString(), error: String(err.message || 'It could not be drawn.').slice(0, RENDER_ERROR_MAX) } }
+          : null
+      ));
+      return failed || stored;
+    } catch (writeErr) {
+      console.error(`[EventDocuments] ${type} overlay failure could not be recorded:`, writeErr.message);
+      return stored;
+    }
+  }
+}
+
+
+// ─── The approved document, presented for video (V2-2a-2) ───────────────────
+//
+// Evoni, 2026-11-20. Beside its canonical overlay, an approved document is
+// kept as panels a video can show: `floating` (the whole page) and
+// `reading` (panels large enough to read), drawn by
+// eventDocumentOverlayService.presentDocument and kept as assets of type
+// DOCUMENT_PRESENTATION. Making them is a third thing, after approving the
+// words and drawing the overlay, and it changes neither:
+//
+//   presentation_render  how the last making went, and the claim while one
+//                        is under way:
+//                        { status: 'rendering' | 'done' | 'failed' |
+//                                  'mismatch' | 'unavailable',
+//                          version, token?, started_at | at, code?, message? }
+//   presentations        what was published, per presentation:
+//                        { version, render_key, revision, canonical_asset_id,
+//                          canonical_sha256, at,
+//                          floating: { status: 'ok', set_id, panel_count,
+//                                      asset_ids, readable, … }
+//                                  | { status: 'failed', code, message },
+//                          reading:  the same }
+//
+// Nothing is drawn or stored inside a transaction. A making is claimed
+// under the event's row lock with a token; only the holder of that token
+// publishes, and it publishes a presentation's rows and its entry here in
+// one transaction, or none of them.
+
+/** How long a making in progress keeps others from starting the same one. */
+const PRESENT_CLAIM_MS = 2 * 60 * 1000;
+const PRESENTATION_NAMES = Object.freeze({ floating: 'Floating', reading: 'Reading' });
+const PRESENTATION_ASSET_TYPE = require('../utils/documentPresentationAssets').DOCUMENT_PRESENTATION;
+const AUDIT_CANONICAL_REDRAWN = 'event_document_canonical_redrawn';
+
+/** True while a making of this version was claimed recently enough to still be running. */
+function presentationInProgress(doc, now = Date.now()) {
+  const r = doc?.presentation_render;
+  if (!r || r.status !== 'rendering' || r.version !== doc.version) return false;
+  const started = Date.parse(r.started_at);
+  return Number.isFinite(started) && now - started < PRESENT_CLAIM_MS;
+}
+
+/** What the page is drawn from now, and the two things its overlay was recorded with. */
+async function currentDrawInputs(models, event, type, doc) {
+  const overlays = require('./eventDocumentOverlayService');
+  const terms = type === 'offer_letter' ? await offerTermsOf(models.sequelize, event) : null;
+  const { data, pieces } = await overlays.documentDrawData(models.sequelize, { event, type, doc, terms });
+  return {
+    data,
+    lookTotal: type === 'shopping_list' ? overlays.shoppingLines(doc, pieces || event?.outfit_pieces).total : null,
+    termsKey: type === 'offer_letter' ? require('./offerLetterService').termsKey(terms || []) : null,
+  };
+}
+
+/**
+ * Is the canonical overlay the page as it would be drawn now? The
+ * document's version, the look's total or the terms it was drawn with, and
+ * its very bytes against a fresh drawing: the same bytes alone would not
+ * say which version they were drawn for, so each is compared. An overlay
+ * made before its hash was kept is read from storage and hashed. Returns
+ * { ok: true, data, lookTotal, termsKey, canonicalSha256 } or
+ * { ok: false, status: 'mismatch' | 'unavailable', code, message }.
+ */
+async function checkCanonical(models, event, type, doc) {
+  const overlays = require('./eventDocumentOverlayService');
+  const overlay = doc.overlay;
+  if (!overlay?.url || !overlay.asset_id || overlay.version !== doc.version) {
+    return { ok: false, status: 'mismatch', code: 'CANONICAL_NOT_DRAWN', message: 'The overlay of this version has not been drawn. Draw it first.' };
+  }
+  const inputs = await currentDrawInputs(models, event, type, doc);
+  const fresh = overlays.renderDocument(type, inputs.data);
+  if (!fresh) return { ok: false, status: 'unavailable', code: 'DRAWING_UNAVAILABLE', message: 'Drawing is not available on this server.' };
+  let canonicalSha256 = typeof overlay.content_sha256 === 'string' ? overlay.content_sha256 : null;
+  const historical = !canonicalSha256;
+  if (historical) {
+    const stored = await overlays.readStoredImage(overlay.url);
+    if (!stored) return { ok: false, status: 'mismatch', code: 'CANONICAL_UNREADABLE', message: 'The stored overlay could not be read, so it cannot be checked against the document. Redraw the overlay to go on.' };
+    canonicalSha256 = overlays.sha256(stored);
+  }
+  const changed = [];
+  if (overlay.look_total != null && inputs.lookTotal != null && Number(overlay.look_total) !== Number(inputs.lookTotal)) changed.push("the look's total");
+  if (overlay.terms_key != null && inputs.termsKey != null && overlay.terms_key !== inputs.termsKey) changed.push("the deal's terms");
+  if (changed.length) {
+    return { ok: false, status: 'mismatch', code: 'CANONICAL_INPUTS_CHANGED', message: `${changed.join(' and ')} changed since the overlay was drawn. Redraw the overlay to go on.` };
+  }
+  if (overlays.sha256(fresh) !== canonicalSha256) {
+    return historical
+      ? { ok: false, status: 'mismatch', code: 'CANONICAL_NOT_REPRODUCIBLE', message: 'The stored overlay is not what the document draws as now (it was made before its drawing was recorded). Redraw the overlay to go on.' }
+      : { ok: false, status: 'mismatch', code: 'CANONICAL_INPUTS_CHANGED', message: 'What the page is drawn from changed since the overlay was drawn. Redraw the overlay to go on.' };
+  }
+  return { ok: true, ...inputs, canonicalSha256 };
+}
+
+/** One presentation's rows and marks, in the publishing transaction. Returns its entry for the document. */
+async function publishPresentationSet(sequelize, transaction, { event, type, doc, set }) {
+  const eventId = String(event.id);
+  const ids = set.panels.map((p) => p.id);
+  const [existing] = await sequelize.query(
+    `SELECT id, deleted_at, metadata->'document_presentation'->>'content_sha256' AS sha FROM assets WHERE id IN (:ids)`,
+    { replacements: { ids }, transaction });
+  const known = new Map(existing.map((r) => [r.id, r]));
+  // The same panel, by its id, with other bytes: nothing of this set is
+  // written, so no half of it is ever in the registry.
+  if (set.panels.some((p) => known.has(p.id) && known.get(p.id).sha !== p.sha256)) {
+    return { status: 'failed', code: 'PANEL_CONFLICT', message: 'A panel of this set is already kept with different contents. It was not replaced.' };
+  }
+  for (const panel of set.panels) {
+    if (known.has(panel.id)) continue;
+    const metadata = {
+      source: 'event_document_presentation',
+      document_presentation: {
+        event_id: eventId, document_type: type, document_version: doc.version, presentation: set.presentation,
+        panel_index: panel.index, panel_count: panel.count, set_id: set.id, render_key: set.renderKey,
+        revision: set.revision, canonical_asset_id: doc.overlay.asset_id, content_sha256: panel.sha256,
+        readable: set.readable, body_px_on_screen: set.bodyPx, rect: panel.rect, source: panel.source, storage_key: panel.key,
+      },
+    };
+    await sequelize.query(
+      `INSERT INTO assets (id, name, asset_type, asset_role, asset_group, asset_scope, purpose, category, entity_type,
+         s3_url_raw, s3_url_processed, show_id, episode_id, approval_status, width, height, metadata, created_at, updated_at)
+       VALUES (:id, :name, :assetType, :role, 'EPISODE', 'SHOW', 'MAIN', 'overlay', 'prop',
+         :url, :url, :showId, NULL, 'approved', :width, :height, CAST(:metadata AS jsonb), NOW(), NOW())
+       ON CONFLICT (id) DO NOTHING`,
+      { replacements: {
+        id: panel.id,
+        name: `${event.name || 'Event'} · ${DOC_TYPES[type].label} · ${PRESENTATION_NAMES[set.presentation]} ${panel.index} of ${panel.count} · v${doc.version}`,
+        assetType: PRESENTATION_ASSET_TYPE, role: `DOCUMENT.PRESENTATION.${type.toUpperCase()}`, url: panel.url,
+        showId: event.show_id, width: 1920, height: 1080, metadata: JSON.stringify(metadata),
+      }, transaction });
+  }
+  // A panel removed some other way comes back as itself; the set is the current one again.
+  await sequelize.query(
+    `UPDATE assets
+        SET deleted_at = NULL,
+            metadata = metadata #- '{document_presentation,superseded_at}' #- '{document_presentation,superseded_by_set}',
+            updated_at = NOW()
+      WHERE asset_type = :assetType AND id IN (:ids)
+        AND (deleted_at IS NOT NULL OR metadata->'document_presentation' ? 'superseded_at')`,
+    { replacements: { ids, assetType: PRESENTATION_ASSET_TYPE }, transaction });
+  // Earlier sets of this presentation are kept, marked as replaced.
+  await sequelize.query(
+    `UPDATE assets
+        SET metadata = jsonb_set(jsonb_set(metadata, '{document_presentation,superseded_at}', to_jsonb(CAST(:at AS text))),
+                                 '{document_presentation,superseded_by_set}', to_jsonb(CAST(:setId AS text))),
+            updated_at = NOW()
+      WHERE asset_type = :assetType
+        AND metadata->'document_presentation'->>'event_id' = :eventId
+        AND metadata->'document_presentation'->>'document_type' = :type
+        AND metadata->'document_presentation'->>'presentation' = :presentation
+        AND metadata->'document_presentation'->>'set_id' <> :setId
+        AND NOT (metadata->'document_presentation' ? 'superseded_at')`,
+    { replacements: { at: new Date().toISOString(), setId: set.id, assetType: PRESENTATION_ASSET_TYPE, eventId, type, presentation: set.presentation }, transaction });
+  return {
+    status: 'ok', set_id: set.id, panel_count: set.panels.length, asset_ids: ids,
+    readable: set.readable, body_px_on_screen: set.bodyPx,
+    ...(set.readable ? {} : { warning: 'TEXT_SMALL', warning_message: 'The whole page fits, but its text is smaller than reads comfortably on screen.' }),
+  };
+}
+
+/**
+ * Make an approved document's presentations and publish them. Never
+ * throws for a making that fails: how it went is written to
+ * presentation_render, and the document is returned as stored. The
+ * approval and the canonical overlay are not touched, whatever happens.
+ */
+async function withPresentations(models, event, type, doc) {
+  const overlays = require('./eventDocumentOverlayService');
+  const { sequelize } = models;
+  const at = { showId: event.show_id, eventId: event.id, type };
+  const canonicalId = doc?.overlay?.asset_id || null;
+  const same = (current) => current && current.status === 'approved' && current.version === doc.version
+    && (current.overlay?.asset_id || null) === canonicalId;
+  const token = require('crypto').randomUUID();
+  let claimed = false;
+  const { doc: stored } = await changeDocument(sequelize, at, (current) => {
+    if (!same(current) || presentationInProgress(current)) return null;
+    claimed = true;
+    return { ...current, presentation_render: { status: 'rendering', version: current.version, token, started_at: new Date().toISOString() } };
+  });
+  // Edited since, the overlay replaced, or another request is making them now.
+  if (!claimed) return stored || doc;
+  const mine = (current) => same(current) && current.presentation_render?.status === 'rendering' && current.presentation_render.token === token;
+  const settle = async (render, change = () => ({})) => {
+    const { doc: written } = await changeDocument(sequelize, at, async (current, row, transaction) => {
+      if (!mine(current)) return null;
+      return { ...current, ...(await change(transaction)), presentation_render: { ...render, version: doc.version, at: new Date().toISOString() } };
+    });
+    return written;
+  };
+  const clip = (text) => String(text || '').slice(0, RENDER_ERROR_MAX);
+  try {
+    const check = await checkCanonical(models, event, type, stored);
+    if (!check.ok) return await settle({ status: check.status, code: check.code, message: check.message });
+    if (!overlays.presentationStorageAvailable()) {
+      return await settle({ status: 'unavailable', code: 'STORAGE_NOT_CONFIGURED', message: 'No storage is configured for presentation panels on this server.' });
+    }
+    const drawn = overlays.drawPresentations(type, check.data);
+    if (!drawn) return await settle({ status: 'unavailable', code: 'DRAWING_UNAVAILABLE', message: 'Drawing is not available on this server.' });
+    const renderKey = overlays.presentationRenderKey({
+      version: doc.version, lookTotal: check.lookTotal, termsKey: check.termsKey, canonicalSha256: check.canonicalSha256,
+    });
+    // Each presentation on its own: one that cannot be drawn or stored does not hold the other back.
+    const sets = [];
+    for (const one of drawn) {
+      if (!one.ok) { sets.push({ presentation: one.presentation, failed: { status: 'failed', code: one.code, message: clip(one.message) } }); continue; }
+      const id = overlays.presentationSetId({ eventId: String(event.id), type, version: doc.version, renderKey, presentation: one.presentation });
+      try {
+        const panels = [];
+        for (const panel of one.panels) {
+          const kept = await overlays.storePresentationPanel(panel.buffer, {
+            eventId: String(event.id), type, version: doc.version, presentation: one.presentation, index: panel.index, count: panel.count,
+          });
+          panels.push({ id: overlays.presentationPanelId(id, panel.index, panel.count), index: panel.index, count: panel.count, sha256: panel.sha256, url: kept.url, key: kept.key, rect: panel.rect, source: panel.source });
+        }
+        sets.push({ presentation: one.presentation, id, renderKey, revision: overlays.PRESENTATION_REVISION, readable: one.readable, bodyPx: one.body_px_on_screen, panels });
+      } catch (err) {
+        if (!(err instanceof overlays.PresentationStorageError)) throw err;
+        sets.push({ presentation: one.presentation, failed: { status: 'failed', code: err.code, message: clip(err.message) } });
+      }
+    }
+    // Published under the event's row lock, by the holder of the claim only:
+    // every row of a set and its entry on the document, or none.
+    return await settle({ status: 'done' }, async (transaction) => {
+      const published = {};
+      for (const set of sets) {
+        published[set.presentation] = set.failed || await publishPresentationSet(sequelize, transaction, { event, type, doc: stored, set });
+      }
+      return {
+        presentations: {
+          version: doc.version, render_key: renderKey, revision: overlays.PRESENTATION_REVISION,
+          canonical_asset_id: canonicalId, canonical_sha256: check.canonicalSha256, at: new Date().toISOString(), ...published,
+        },
+      };
+    }) || (await currentDocument(sequelize, at)) || stored;
+  } catch (err) {
+    console.error(`[EventDocuments] ${type} presentations failed (the approval and the overlay stand):`, err.message);
+    try {
+      return (await settle({ status: 'failed', code: 'PRESENTATION_FAILED', message: clip(err.message) })) || (await currentDocument(sequelize, at)) || stored;
+    } catch (writeErr) {
+      console.error(`[EventDocuments] ${type} presentation failure could not be recorded:`, writeErr.message);
+      return stored;
+    }
+  }
+}
+
+/** The document as stored now (a read under the same lock as every write). */
+async function currentDocument(sequelize, at) {
+  const { doc } = await changeDocument(sequelize, at, () => null);
+  return doc;
+}
+
+/** After the canonical overlay was drawn: the presentations, without ever failing the caller. */
+async function thenPresentations(models, event, type, doc) {
+  if (!doc || doc.status !== 'approved' || doc.overlay?.version !== doc.version || doc.overlay_render?.status !== 'ok') return doc;
+  try {
+    return (await withPresentations(models, event, type, doc)) || doc;
+  } catch (err) {
+    console.error(`[EventDocuments] ${type} presentations could not be started (the approval and the overlay stand):`, err.message);
     return doc;
   }
 }
 
 /**
+ * Whether each presentation can be used, from the document and the ids of
+ * its panels that are live rows now (`liveIds`): no file is read. Pure.
+ *   { floating: { ready, state, reason?, code?, message?, warning?, panel_count?, missing? }, reading: … }
+ * state: 'ready' | 'making' | 'not_made' | 'stale' | 'incomplete' |
+ *        'failed' | 'mismatch' | 'unavailable' | 'not_approved' |
+ *        'canonical_outdated'.
+ * Each presentation is judged alone: floating's warning or failure says
+ * nothing about reading. `canonical` is the overlay's own state
+ * (currentOverlayState): when it is 'outdated' neither is ready, and
+ * `panels` still says what is kept ({ kept, panel_count, missing, complete }).
+ */
+function presentationReadiness(doc, liveIds = new Set(), now = Date.now(), canonical = null) {
+  const { PRESENTATION_REVISION } = require('./eventDocumentOverlayService');
+  const out = {};
+  for (const presentation of Object.keys(PRESENTATION_NAMES)) {
+    const not = (state, more = {}) => ({ ready: false, state, ...more });
+    if (!doc || doc.status !== 'approved') { out[presentation] = not('not_approved'); continue; }
+    if (presentationInProgress(doc, now)) { out[presentation] = not('making'); continue; }
+    // The overlay they stand beside is out of date (currentOverlayState):
+    // they are not to be used until it is current again, however whole
+    // they are. What is kept is said all the same, and nothing is removed.
+    if (canonical === 'outdated') {
+      const entry = doc.presentations?.[presentation];
+      const ids = entry && Array.isArray(entry.asset_ids) ? entry.asset_ids : [];
+      const missing = ids.filter((id) => !liveIds.has(id)).length;
+      out[presentation] = not('canonical_outdated', {
+        code: 'CANONICAL_OUTDATED',
+        message: 'The overlay is out of date, so the presentations made beside it are not used. Draw the overlay again.',
+        panels: { kept: entry?.status === 'ok', panel_count: entry?.panel_count ?? 0, missing, complete: entry?.status === 'ok' && ids.length === entry.panel_count && missing === 0 },
+      });
+      continue;
+    }
+    const kept = doc.presentations;
+    const current = kept && kept.version === doc.version && kept.revision === PRESENTATION_REVISION
+      && kept.canonical_asset_id === (doc.overlay?.asset_id || null) && doc.overlay?.version === doc.version;
+    const last = doc.presentation_render && doc.presentation_render.version === doc.version ? doc.presentation_render : null;
+    if (!current) {
+      // Nothing published for the document as it stands: say why the last making stopped, if it did.
+      if (last && ['mismatch', 'unavailable', 'failed'].includes(last.status)) out[presentation] = not(last.status, { code: last.code, message: last.message });
+      else out[presentation] = not(kept ? 'stale' : 'not_made');
+      continue;
+    }
+    const entry = kept[presentation];
+    if (!entry) { out[presentation] = not('not_made'); continue; }
+    if (entry.status !== 'ok') { out[presentation] = not('failed', { code: entry.code, message: entry.message }); continue; }
+    const ids = Array.isArray(entry.asset_ids) ? entry.asset_ids : [];
+    const missing = ids.filter((id) => !liveIds.has(id)).length;
+    if (!ids.length || ids.length !== entry.panel_count || missing) {
+      out[presentation] = not('incomplete', { panel_count: entry.panel_count, missing: missing || Math.max(0, (entry.panel_count || 0) - ids.length) });
+      continue;
+    }
+    // A reading set is kept only when it reads; a floating page may be small.
+    if (presentation === 'reading' && entry.readable === false) { out[presentation] = not('failed', { code: 'READING_NOT_READABLE' }); continue; }
+    out[presentation] = { ready: true, state: 'ready', panel_count: entry.panel_count, ...(entry.warning ? { warning: entry.warning, message: entry.warning_message } : {}) };
+  }
+  return out;
+}
+
+/** The ids, among these documents' published panels, that are live rows now. One read. */
+async function livePresentationIds(sequelize, docs) {
+  const ids = [];
+  for (const doc of docs) {
+    for (const entry of Object.values(doc?.presentations || {})) {
+      if (entry && Array.isArray(entry.asset_ids)) ids.push(...entry.asset_ids);
+    }
+  }
+  if (!ids.length) return new Set();
+  const [rows] = await sequelize.query(
+    'SELECT id FROM assets WHERE id IN (:ids) AND asset_type = :assetType AND deleted_at IS NULL',
+    { replacements: { ids, assetType: PRESENTATION_ASSET_TYPE } });
+  return new Set(rows.map((r) => r.id));
+}
+
+/**
  * Approve: the current version, as it is, and draw its overlay. Approving
  * an approved document whose overlay is missing or out of date draws it again.
+ *
+ * `actor` is the admin approving (the route's req.user): an approval is not
+ * written without one. `intent` says which of the two the caller means:
+ *   'approve'  approve the content; a document that is already approved is
+ *              refused (409), so of two approvals sent at once one succeeds;
+ *   'render'   only draw an approved document's overlay (409 when it is
+ *              not approved);
+ *   absent     whichever applies, as before.
  */
-async function approveDocument(models, { showId, eventId, type, version }) {
+async function approveDocument(models, { showId, eventId, type, version, actor = null, intent = null, confirm = false, expectedCanonicalAssetId }) {
   assertType(type);
   const expectedVersion = readExpectedVersion(version);
-  const { overlayState } = require('./eventDocumentOverlayService');
+  if (intent != null && !APPROVE_INTENTS.includes(intent)) throw new EventDocumentError(400, `intent must be one of: ${APPROVE_INTENTS.join(', ')}`);
+  const label = DOC_TYPES[type].label.toLowerCase();
+  if (intent === 'present') return presentDocumentNow(models, { showId, eventId, type, expectedVersion, actor, label });
+  if (intent === 'redraw_canonical') {
+    return redrawCanonical(models, { showId, eventId, type, expectedVersion, actor, label, confirm, expectedCanonicalAssetId });
+  }
   // The approval is read and written under the event row lock, so it
   // approves the version stored at that moment and never writes an older
   // copy over a newer edit (audit Low, 2026-10-23).
-  const { event, doc: prev, written } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, (current) => {
-    if (!current) throw new EventDocumentError(404, `No ${DOC_TYPES[type].label.toLowerCase()} yet. Draft it first.`);
-    if (current.status === 'approved') return null;
+  const { event, doc: prev, written } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, async (current, row, transaction) => {
+    if (!current) throw new EventDocumentError(404, `No ${label} yet. Draft it first.`);
+    if (current.status === 'approved') {
+      if (intent === 'approve') throw new EventDocumentError(409, `The ${label} is already approved (version ${current.version}). Nothing was changed.`);
+      return null;
+    }
+    if (intent === 'render') throw new EventDocumentError(409, `Approve the ${label} before drawing its overlay.`);
+    const by = approverId(actor);
+    if (!by) throw new EventDocumentError(403, 'An approval needs the admin who is approving.');
     const now = new Date().toISOString();
-    return { ...current, status: 'approved', approved_at: now, updated_at: now };
+    // The entry commits or rolls back with the approval it records.
+    await require('../middleware/auditLog').logger.logActionInTransaction(transaction, by, AUDIT_APPROVED, AUDIT_RESOURCE, eventId, {
+      document_type: type,
+      document_version: current.version,
+      show_id: showId,
+      episode_id: row.used_in_episode_id || null,
+    });
+    return { ...current, status: 'approved', approved_at: now, approved_by: { id: by }, updated_at: now };
   });
-  if (written) return withOverlay(models, event, type, prev);
+  if (written) return thenPresentations(models, event, type, await withOverlay(models, event, type, prev));
   // Already approved: draw its overlay again when missing or out of date
   // (a shopping list's look total, or an offer letter's terms, changed).
+  if ((await currentOverlayState(models, event, type, prev)) === 'current') return prev;
+  return thenPresentations(models, event, type, await withOverlay(models, event, type, prev));
+}
+
+/**
+ * Whether a document's canonical overlay is 'current', 'outdated' or
+ * 'not_made', as it stands now: overlayState (eventDocumentOverlayService)
+ * given the look's total for a shopping list, the deal's terms for an offer
+ * letter. The one calculation, for drawing the overlay again and for
+ * whether the presentations beside it can be used. `known` carries a look
+ * or terms the caller has already read ({ look } or { terms }).
+ */
+async function currentOverlayState(models, event, type, doc, known = {}) {
+  const overlays = require('./eventDocumentOverlayService');
   let lookTotal = null;
   let currentTermsKey = null;
   if (type === 'shopping_list') {
-    const { shoppingListContext, shoppingLines } = require('./eventDocumentOverlayService');
-    const { look } = await shoppingListContext(models.sequelize, event);
-    if (look) lookTotal = shoppingLines(prev, look.pieces).total;
+    const look = 'look' in known ? known.look : (await overlays.shoppingListContext(models.sequelize, event)).look;
+    if (look && doc) lookTotal = overlays.shoppingLines(doc, look.pieces).total;
   } else if (type === 'offer_letter') {
-    currentTermsKey = require('./offerLetterService').termsKey(await offerTermsOf(models.sequelize, event));
+    const terms = 'terms' in known ? known.terms : await offerTermsOf(models.sequelize, event);
+    if (terms) currentTermsKey = require('./offerLetterService').termsKey(terms);
   }
-  return overlayState(prev, lookTotal, currentTermsKey) === 'current' ? prev : withOverlay(models, event, type, prev);
+  return overlays.overlayState(doc, lookTotal, currentTermsKey);
+}
+
+const APPROVE_INTENTS = Object.freeze(['approve', 'render', 'present', 'redraw_canonical']);
+
+/**
+ * intent 'present': make an approved document's presentations, or make
+ * them again (a retry, or a check of what is kept). It never draws,
+ * replaces or touches the canonical overlay: when the overlay is not the
+ * page as it draws now, the answer says so (presentation_render.status
+ * 'mismatch') and nothing is made.
+ */
+async function presentDocumentNow(models, { showId, eventId, type, expectedVersion, actor, label }) {
+  if (!approverId(actor)) throw new EventDocumentError(403, 'Making the presentations needs the admin who asks for them.');
+  const { event, doc } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, (current) => {
+    if (!current) throw new EventDocumentError(404, `No ${label} yet. Draft it first.`);
+    if (current.status !== 'approved') throw new EventDocumentError(409, `Approve the ${label} before making its presentations.`);
+    return null;
+  });
+  return withPresentations(models, event, type, doc);
+}
+
+/**
+ * intent 'redraw_canonical': the recovery for an overlay that cannot be
+ * read or is not what the document draws as now. It replaces the canonical
+ * overlay, so it is asked for on purpose: `confirm: true`, the document's
+ * version, and the overlay it means to replace (expectedCanonicalAssetId,
+ * null when there is none). Recorded in the audit log in the transaction
+ * that checks them. The earlier overlay's row and file are kept, as with
+ * every redraw. The presentations are then made beside the new overlay.
+ */
+async function redrawCanonical(models, { showId, eventId, type, expectedVersion, actor, label, confirm, expectedCanonicalAssetId }) {
+  const by = approverId(actor);
+  if (!by) throw new EventDocumentError(403, 'Redrawing the overlay needs the admin who asks for it.');
+  if (confirm !== true) throw new EventDocumentError(400, 'Redrawing replaces the overlay. Send confirm: true to go on.');
+  if (expectedVersion == null) throw new EventDocumentError(400, 'Redrawing needs the version of the document it is for.');
+  if (expectedCanonicalAssetId === undefined || (expectedCanonicalAssetId !== null && typeof expectedCanonicalAssetId !== 'string')) {
+    throw new EventDocumentError(400, 'Redrawing needs expected_canonical_asset_id: the overlay it replaces, or null when there is none.');
+  }
+  const { event, doc } = await changeDocument(models.sequelize, { showId, eventId, type, expectedVersion }, async (current, row, transaction) => {
+    if (!current) throw new EventDocumentError(404, `No ${label} yet. Draft it first.`);
+    if (current.status !== 'approved') throw new EventDocumentError(409, `Approve the ${label} before redrawing its overlay.`);
+    const now = current.overlay?.asset_id || null;
+    if (now !== expectedCanonicalAssetId) {
+      throw new EventDocumentError(409, `The ${label}'s overlay is not the one you meant to replace. Reload it and try again.`);
+    }
+    if (renderInProgress(current)) throw new EventDocumentError(409, `The ${label}'s overlay is being drawn now. Try again in a moment.`);
+    await require('../middleware/auditLog').logger.logActionInTransaction(transaction, by, AUDIT_CANONICAL_REDRAWN, AUDIT_RESOURCE, eventId, {
+      document_type: type,
+      document_version: current.version,
+      replaced_canonical_asset_id: now,
+      show_id: showId,
+      episode_id: row.used_in_episode_id || null,
+    });
+    return null;
+  });
+  return thenPresentations(models, event, type, await withOverlay(models, event, type, doc));
 }
 
 // ─── The offer letter on beat 5, directly after the invitation ──────────────
@@ -822,4 +1320,6 @@ module.exports = {
   syncOfferLetterPlacement,
   OFFER_LETTER_BEAT_NUMBER,
   offerState,
+  presentationReadiness,
+  PRESENT_CLAIM_MS,
 };

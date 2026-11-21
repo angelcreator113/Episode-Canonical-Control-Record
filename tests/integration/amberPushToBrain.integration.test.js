@@ -30,7 +30,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const reply = (obj) => ({ content: [{ text: JSON.stringify(obj) }], usage: { input_tokens: 1, output_tokens: 1 } });
 
 (shouldSkip ? describe.skip : describe)('Amber push_page_to_brain saves its entries', () => {
+  // World Studio and Show Bible reads are an ADMIN's (Evoni, 2026-11-16): the reads below are made as an ADMIN.
+  // The editor token is kept for what this suite writes, and for the refusal check.
   let token;
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-world-reads', email: 'admin@world-reads.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   const KEY = 'AMBER_PUSH_TEST';
 
   beforeAll(async () => {
@@ -74,7 +77,8 @@ const reply = (obj) => ({ content: [{ text: JSON.stringify(obj) }], usage: { inp
       expect(r.review_note).toBe('Amber: pushed from influencer_systems');
     }
 
-    const activity = await request(app).get('/api/v1/franchise-brain/amber-activity').set('Authorization', `Bearer ${token}`);
+    expect((await request(app).get('/api/v1/franchise-brain/amber-activity').set('Authorization', `Bearer ${token}`)).status).toBe(403);
+    const activity = await request(app).get('/api/v1/franchise-brain/amber-activity').set('Authorization', `Bearer ${adminToken}`);
     expect(activity.status).toBe(200);
     const titles = activity.body.amber.recent_entries.map((e) => e.title);
     expect(titles).toEqual(expect.arrayContaining(['Amber push test: The Peer', 'Amber push test: Odd one']));

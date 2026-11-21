@@ -33,6 +33,10 @@ const guardIt = enforcing() ? it : it.skip;
 (shouldSkip ? describe.skip : describe)('My Little List ♡ (Phase 1)', () => {
   // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; an editor is refused them (a test below).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-myLittleList', email: 'admin@myLittleList.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const readOnly = readOnlyTokens('mll');
   const shows = [];
 
@@ -84,7 +88,7 @@ const guardIt = enforcing() ? it : it.skip;
   }
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
-  const listAt = (ids, beat, line = 0) => auth(request(app).get(`/api/v1/episodes/${ids.ep}/my-little-list?beat=${beat}&line=${line}`));
+  const listAt = (ids, beat, line = 0) => asAdmin(request(app).get(`/api/v1/episodes/${ids.ep}/my-little-list?beat=${beat}&line=${line}`));
 
   it('the migration added personal_list, NOT NULL with {} for existing rows', async () => {
     const [col] = await q(`SELECT is_nullable, column_default FROM information_schema.columns
@@ -137,6 +141,10 @@ const guardIt = enforcing() ? it : it.skip;
     expect(asJson(row.personal_list).reminders).toEqual([]);
     const [{ status }] = await q('SELECT status FROM event_deliverables WHERE id = :reel', ids);
     expect(status).toBe('pending');
+  });
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/my-little-list`).set('Authorization', `Bearer ${readOnly.editor}`);
+    expect(res.status).toBe(403);
   });
 
   guardIt('signed out, a viewer and an editor cannot add, tick, edit or remove a reminder: the list is as it was', async () => {

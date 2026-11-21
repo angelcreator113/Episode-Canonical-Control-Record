@@ -47,6 +47,7 @@ import {
 import ThumbnailCanvas from '../components/Thumbnails/ThumbnailCanvas';
 import ThumbnailSeason from '../components/Thumbnails/ThumbnailSeason';
 import { usePreview } from '../lib/picturePreview';
+import { readReturn } from '../utils/returnPath';
 import './YouTubeThumbnailStudio.css';
 
 const DRAFT_DELAY_MS = 1200;
@@ -2108,6 +2109,12 @@ export default function YouTubeThumbnailStudio() {
   const sheet = phone && picked && picked.kind !== 'shade';
   // The header shrinks to one line once an episode is open, with the one before and after it.
   const compact = Boolean(episodeId);
+  // The way back (PR-06): where the address says the editor was opened from,
+  // when that can be followed for this episode. Saving keeps the address, so
+  // it lasts until she follows it; picking another episode rebuilds the
+  // address without it, so the links are that episode's own again.
+  const origin = episodeId ? readReturn(params, { episodeId, fallback: { href: `/episodes/${episodeId}`, text: null } }) : null;
+  const cameFrom = origin?.origin ? origin : null;
   const at = episodes.findIndex((e) => e.id === episodeId);
   const prevEpisode = at > 0 ? episodes[at - 1] : null;
   const nextEpisode = at >= 0 && at < episodes.length - 1 ? episodes[at + 1] : null;
@@ -2171,9 +2178,9 @@ export default function YouTubeThumbnailStudio() {
         {compact ? (
           <div className="yts-head-left">
             {/* The way back to the episode the editor came from (Evoni, 2026-10-23: "I have no way of going back to the episode"). */}
-            <Link className="yts-back" to={`/episodes/${episodeId}`} data-testid="yts-back-episode"
-              title={`Back to ${episodes[at]?.title || 'the episode'}`}>
-              <ChevronLeft size={16} aria-hidden /> <span className="yts-back-text">{episodes[at]?.title || 'Episode'}</span>
+            <Link className="yts-back" to={cameFrom ? cameFrom.href : `/episodes/${episodeId}`} data-testid="yts-back-episode"
+              title={cameFrom ? cameFrom.text : `Back to ${episodes[at]?.title || 'the episode'}`}>
+              <ChevronLeft size={16} aria-hidden /> <span className="yts-back-text">{cameFrom ? cameFrom.text : (episodes[at]?.title || 'Episode')}</span>
             </Link>
             <p className="yts-kicker"><Link to="/template-studio">Templates</Link> · <Youtube size={14} aria-hidden /> YouTube</p>
           </div>
@@ -2329,7 +2336,7 @@ export default function YouTubeThumbnailStudio() {
                 </p>
               </div>
               {saved && (
-                <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={`/episodes/${episodeId}?tab=scenes`} data-testid="yts-back-scenes">Back to Scenes</Link></p>
+                <p className="yts-saved"><Check size={16} aria-hidden /> Saved. <Link to={cameFrom ? cameFrom.href : `/episodes/${episodeId}?tab=scenes`} data-testid="yts-back-scenes">{cameFrom ? cameFrom.text : 'Back to Scenes'}</Link></p>
               )}
             </section>
 

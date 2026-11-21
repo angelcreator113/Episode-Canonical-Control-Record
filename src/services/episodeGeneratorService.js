@@ -1228,14 +1228,17 @@ Return ONLY JSON.` }],
     const { Asset } = models;
     if (Asset) {
       const eventId = typeof event.id === 'string' ? event.id : String(event.id);
+      // A document's presentation panels are not the episode's assets: they
+      // reach an episode only through the document's own pinning (V2-2a).
+      const { NOT_DOCUMENT_PRESENTATION_SQL, exceptDocumentPresentations } = require('../utils/documentPresentationAssets');
       // Find all assets referencing this event via metadata.event_id
       const eventAssets = await Asset.findAll({
-        where: {
+        where: exceptDocumentPresentations({
           [models.Sequelize.Op.or]: [
             { '$metadata.event_id$': eventId },
             models.sequelize.literal(`metadata->>'event_id' = '${eventId.replace(/'/g, "''")}'`),
           ],
-        },
+        }),
       }).catch((findErr) => {
         console.warn('[EpisodeGenerator] Event asset lookup failed, trying raw SQL (non-blocking):', findErr.message);
         return [];
@@ -1246,7 +1249,7 @@ Return ONLY JSON.` }],
       if (!assets || assets.length === 0) {
         try {
           const [rows] = await models.sequelize.query(
-            `SELECT id FROM assets WHERE metadata->>'event_id' = :eventId AND deleted_at IS NULL`,
+            `SELECT id FROM assets WHERE metadata->>'event_id' = :eventId AND deleted_at IS NULL AND ${NOT_DOCUMENT_PRESENTATION_SQL}`,
             { replacements: { eventId } }
           );
           assets = rows || [];
@@ -1260,7 +1263,7 @@ Return ONLY JSON.` }],
         const assetId = a.id;
         try {
           await models.sequelize.query(
-            `UPDATE assets SET episode_id = :episodeId WHERE id = :assetId`,
+            `UPDATE assets SET episode_id = :episodeId WHERE id = :assetId AND ${NOT_DOCUMENT_PRESENTATION_SQL}`,
             { replacements: { episodeId: episode.id, assetId } }
           );
           linked++;

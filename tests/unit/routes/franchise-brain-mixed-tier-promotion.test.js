@@ -3,7 +3,8 @@
 // ============================================================================
 // 15 handlers in src/routes/franchiseBrainRoutes.js:
 //   - 10 writes (POST/PATCH/DELETE) → Tier 1 (requireAuth)
-//   - 5 GETs                         → Tier 4 PUBLIC (plain optionalAuth, no req.user gate)
+//   - 5 GETs                         → ADMIN since 2026-11-16 (Evoni: the show bible and the writing plan are
+//                                      production material); they were Tier 4 PUBLIC (plain optionalAuth)
 //   - 1 AI POST (/ingest-document) additionally gets aiRateLimiter
 //   - Legacy authenticateToken at L560 (push-from-page) converted to requireAuth (D3);
 //     push-from-page itself retired 2026-10-03 (Brain Update; docs/BRAIN_OWNERSHIP.md):
@@ -19,16 +20,17 @@ const path = require('path');
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'franchiseBrainRoutes.js'), 'utf8');
 
 describe('Step 3 CP7 — franchiseBrainRoutes.js Q13 mixed Tier 1+4', () => {
-  test('imports optionalAuth + requireAuth + aiRateLimiter', () => {
-    expect(SRC).toMatch(/const\s*\{\s*optionalAuth,\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+  test('imports requireAuth + authorize + aiRateLimiter, and no longer optionalAuth', () => {
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    expect(SRC).not.toMatch(/\boptionalAuth\b/);
     expect(SRC).toMatch(/const\s*\{\s*aiRateLimiter\s*\}\s*=\s*require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/);
   });
 
-  describe('Tier 4 PUBLIC GETs (5 catalog reads — D2 lock)', () => {
+  describe('the 5 reads are an ADMIN\'s (Evoni, 2026-11-16; were Tier 4 PUBLIC under the D2 lock)', () => {
     ['/franchise-brain/entries', '/franchise-brain/amber-activity',
      '/franchise-brain/documents', '/franchise-brain/documents/:id', '/multi-product/all'].forEach((route) => {
-      test(`GET ${route} uses optionalAuth (Tier 4 PUBLIC)`, () => {
-        const re = new RegExp(`router\\.get\\('${route.replace(/\//g, '\\/')}',\\s*optionalAuth,\\s*async`);
+      test(`GET ${route} uses requireAuth + authorize(['ADMIN'])`, () => {
+        const re = new RegExp(`router\\.get\\('${route.replace(/\//g, '\\/')}',\\s*requireAuth,\\s*authorize\\(\\['ADMIN'\\]\\),\\s*async`);
         expect(SRC).toMatch(re);
       });
     });

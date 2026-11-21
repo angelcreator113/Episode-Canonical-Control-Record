@@ -32,7 +32,8 @@ const router  = express.Router();
 const { v4: uuidv4 } = require('uuid');
 
 // ── Auth ───────────────────────────────────────────────────────────────────
-const { optionalAuth, requireAuth, authorize } = require('../middleware/auth');
+// Every read here is production material (world characters, scenes, state, the map): an ADMIN's (Evoni, 2026-11-16).
+const { requireAuth, authorize } = require('../middleware/auth');
 const { canAccessAuthorFields, stripAuthorOnlyFields } = require('../middleware/authorOnlyFields');
 
 // ── DB ─────────────────────────────────────────────────────────────────────
@@ -1157,8 +1158,8 @@ Return JSON only:
 });
 
 // GET /world/characters
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/characters', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/characters', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { character_type, status, intimate_eligible, world_tag } = req.query;
     let where = 'WHERE 1=1';
@@ -1214,8 +1215,8 @@ router.get('/world/characters', optionalAuth, async (req, res) => {
 });
 
 // GET /world/characters/:id
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/characters/:id', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/characters/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const [char] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
     if (!char) return res.status(404).json({ error: 'Character not found' });
@@ -1824,8 +1825,8 @@ router.post('/world/seed-relationships', requireAuth, async (req, res) => {
 });
 
 // GET /world/batches
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/batches', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/batches', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const batches = await Q(req, 'SELECT * FROM world_character_batches ORDER BY created_at DESC');
     res.json({ batches });
@@ -1837,8 +1838,8 @@ router.get('/world/batches', optionalAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // GET /world/tension-check — scan all active world character relationships for scene triggers
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/tension-check', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/tension-check', requireAuth, authorize(['ADMIN']), async (req, res) => {
   // ?show_id= keeps the show's, by the scanner's rule (inShow): a
   // relationship whose two characters are in the show's registries or in
   // one with no show yet, and a one-night candidate unless its registry
@@ -2095,8 +2096,8 @@ Return JSON only:
 });
 
 // GET /world/scenes
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/scenes', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/scenes', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { character_id, status, scene_type } = req.query;
     let where = 'WHERE 1=1';
@@ -2116,8 +2117,8 @@ router.get('/world/scenes', optionalAuth, async (req, res) => {
 });
 
 // GET /world/scenes/:sceneId
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/scenes/:sceneId', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/scenes/:sceneId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const [scene] = await Q(req, 'SELECT * FROM intimate_scenes WHERE id = :id', { replacements: { id: req.params.sceneId } });
     if (!scene) return res.status(404).json({ error: 'Scene not found' });
@@ -2330,8 +2331,8 @@ router.delete('/world/scenes/:sceneId', requireAuth, async (req, res) => {
 });
 
 // GET /world/scenes/:sceneId/continuations
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/scenes/:sceneId/continuations', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/scenes/:sceneId/continuations', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const continuations = await Q(req,
       'SELECT * FROM scene_continuations WHERE scene_id = :id ORDER BY created_at ASC',
@@ -2381,8 +2382,8 @@ router.post('/world/continuations/:contId/approve', requireAuth, async (req, res
  * GET /world/preview/:previewId
  * Restore a server-side preview — checks in-memory cache first, then DB.
  */
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/preview/:previewId', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/preview/:previewId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   // Try in-memory cache first (fast path)
   const cached = getPreview(req.params.previewId);
   if (cached) return res.json({ preview_id: req.params.previewId, ...cached });
@@ -2405,8 +2406,8 @@ router.get('/world/preview/:previewId', optionalAuth, async (req, res) => {
  * GET /world/previews
  * List all saved (pending) ecosystem previews — survives page navigation.
  */
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/previews', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/previews', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const rows = await Q(req,
       `SELECT preview_id, world_tag, generation_notes, status, created_at,
@@ -2863,8 +2864,8 @@ router.post('/world/characters/seed-cross-batch', requireAuth, async (req, res) 
 // ══════════════════════════════════════════════════════════════════════════════
 
 // GET /world/characters/:id/export — export full character dossier as JSON
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/characters/:id/export', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/characters/:id/export', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const [char] = await Q(req,
       'SELECT * FROM world_characters WHERE id = :id',
@@ -3025,8 +3026,8 @@ const columnValue = (field, value) => {
 };
 
 // GET /world/characters/:id/relationships — { relationships, legacy, in_registry }
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/characters/:id/relationships', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/characters/:id/relationships', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const char = await withRegistryTwin(req, req.params.id);
     if (!char) return res.status(404).json({ error: 'Not found' });
@@ -3146,8 +3147,8 @@ router.delete('/world/characters/:id/relationships/:relId', requireAuth, async (
    ═══════════════════════════════════════════════════════════ */
 
 // GET /world/locations — list all locations
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/locations', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/locations', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const WorldLocation = models.WorldLocation;
     if (!WorldLocation) {
@@ -3419,8 +3420,8 @@ router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res
    ═══════════════════════════════════════════════════════════ */
 
 // GET /world/state/snapshots
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/state/snapshots', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/state/snapshots', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const WSS = models.WorldStateSnapshot;
     if (!WSS) return res.json({ snapshots: [] });
@@ -3488,8 +3489,8 @@ router.delete('/world/state/snapshots/:id', requireAuth, async (req, res) => {
 });
 
 // GET /world/state/timeline — timeline events
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/state/timeline', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/state/timeline', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const WTE = models.WorldTimelineEvent;
     if (!WTE) return res.json({ events: [] });
@@ -3574,8 +3575,8 @@ router.delete('/world/state/timeline/:id', requireAuth, async (req, res) => {
 // ?show_id= keeps the show's pairs: both characters in the show's
 // registries, or in one with no show yet (inShow; Evoni's ruling,
 // 2026-10-08). The State tab and the hub's Overview send the active show.
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/tension-scanner', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/tension-scanner', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const { showId, error } = showIdOf(req);
   if (error) return res.status(400).json({ error });
   try {
@@ -3669,8 +3670,8 @@ router.post('/world/create-tension-proposal', requireAuth, async (req, res) => {
 });
 
 // GET /world/context-summary — auto-enrich world context for story generation
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/context-summary', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/context-summary', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const WSS = models.WorldStateSnapshot;
     const WL = models.WorldLocation;
@@ -3802,8 +3803,8 @@ router.post('/world/dream-cities/:key/image', requireAuth, (req, res, next) => c
 });
 
 // GET /world/map — get current map image URL
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/map', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/map', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const PageContent = models.PageContent;
     if (!PageContent) return res.json({ url: null });
@@ -3816,8 +3817,8 @@ router.get('/world/map', optionalAuth, async (req, res) => {
 });
 
 // GET /world/map/positions — get saved city positions
-// PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock
-router.get('/world/map/positions', optionalAuth, async (req, res) => {
+// ADMIN: production material (Evoni, 2026-11-16). It was an open read (Tier 4) until then.
+router.get('/world/map/positions', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const PageContent = models.PageContent;
     if (!PageContent) return res.json({ positions: {} });
