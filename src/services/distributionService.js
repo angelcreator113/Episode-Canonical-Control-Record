@@ -275,6 +275,28 @@ Return JSON:
 Return ONLY the JSON. Every description must reference SPECIFIC data from above (outfit pieces, brands, event name, host, venue), and none may reveal the outcome.`;
 }
 
+// What generating writes on a platform that already has an entry (Evoni, 2026-11-16): the drafted words and the
+// show's account, nothing else. Its status, schedule, link, thumbnail, switch, caption and anything else stay.
+const GENERATED_COPY_FIELDS = Object.freeze(['title', 'description', 'hashtags', 'tags', 'generated_at', 'account_name', 'account_url']);
+
+const isPlainObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * The stored distribution record with freshly drafted copy merged in. Every stored key is kept: platforms that
+ * were not asked for, and anything that is not a platform. A platform asked for keeps its own entry and takes
+ * only GENERATED_COPY_FIELDS from the draft; one with no entry yet is created as the draft gives it.
+ */
+function mergeGeneratedCopy(stored, drafted) {
+  const next = { ...(isPlainObject(stored) ? stored : {}) };
+  for (const [platform, fresh] of Object.entries(drafted)) {
+    if (!isPlainObject(next[platform])) { next[platform] = fresh; continue; }
+    const copy = {};
+    for (const field of GENERATED_COPY_FIELDS) copy[field] = fresh[field];
+    next[platform] = { ...next[platform], ...copy };
+  }
+  return next;
+}
+
 // ─── GENERATE PLATFORM DESCRIPTIONS ──────────────────────────────────────────
 
 async function generateDistribution(episodeId, showId, sequelize, options = {}) {
@@ -326,21 +348,29 @@ async function generateDistribution(episodeId, showId, sequelize, options = {}) 
     };
   }
 
-  // Save to episode
+  // Save to episode. Generating replaces the drafted words only (mergeGeneratedCopy): the record is read here,
+  // after the AI has answered and just before the write, so a save made while it was drafting is kept. If the
+  // record cannot be read it is not written, since writing without it would wipe what is stored.
+  let platformsOut = metadata;
   try {
-    // Generating replaces the platform copy; the style sheet entry (Task #2878) stays.
-    const { keepStyleSheet } = require('./styleSheetDistributionService');
-    const toSave = await keepStyleSheet(sequelize, episodeId, metadata);
+    const { keepStyleSheet, parseMetadata } = require('./styleSheetDistributionService');
+    const [[row]] = await sequelize.query(
+      'SELECT distribution_metadata FROM episodes WHERE id = :episodeId', { replacements: { episodeId } });
+    const merged = mergeGeneratedCopy(row ? parseMetadata(row.distribution_metadata) : {}, metadata);
+    // The style sheet entry (Task #2878) is written only by its own routes; it is carried over as stored.
+    const toSave = await keepStyleSheet(sequelize, episodeId, merged);
     await sequelize.query(
       `UPDATE episodes SET distribution_metadata = :metadata, updated_at = NOW() WHERE id = :episodeId`,
       { replacements: { metadata: JSON.stringify(toSave), episodeId } }
     );
+    platformsOut = Object.fromEntries(platforms.map((p) => [p, merged[p]]));
   } catch (err) {
     console.warn('[Distribution] Save failed (non-blocking):', err.message);
   }
 
   return {
-    platforms: metadata,
+    // Each platform asked for, as it is stored now: the new words on its kept status, schedule, link and the rest.
+    platforms: platformsOut,
     context_used: {
       event: ctx.event?.name || null,
       outfit_pieces: (ctx.outfitPieces || []).length,
@@ -377,5 +407,7 @@ module.exports = {
   buildContextBlock,
   buildDistributionPrompt,
   generateDistribution,
+  GENERATED_COPY_FIELDS,
+  mergeGeneratedCopy,
   saveShowDefaults,
 };

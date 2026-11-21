@@ -10,7 +10,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { aiFailure } = require('../utils/aiFailure');
 // Game responses never carry a piece's real-world source (Task #3020).
@@ -43,7 +43,7 @@ const TIER_BUDGET = {
 // ── FILTER WARDROBE FOR EVENT ────────────────────────────────────────────────
 // GET /api/v1/wardrobe-events/:showId/filter
 // Query: event_id, dress_code, budget, prestige, character
-router.get('/:showId/filter', requireAuth, async (req, res) => {
+router.get('/:showId/filter', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId } = req.params;
     const { event_id, dress_code, budget, prestige, character } = req.query;

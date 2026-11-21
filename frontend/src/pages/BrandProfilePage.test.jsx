@@ -15,7 +15,7 @@ const auth = { user: { groups: ['admin'] } };
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => auth }));
 
 import api from '../services/api';
-import BrandProfilePage from './BrandProfilePage';
+import BrandProfilePage, { dealShows } from './BrandProfilePage';
 
 const velour = () => ({
   success: true,
@@ -94,6 +94,52 @@ describe('BrandProfilePage', () => {
     expect(people.textContent).toMatch(/Finalizes\s*No/);
   });
 
+  // "Open Opportunities" went to /admin?tab=opportunities, a tab that moved
+  // to each show's Season page (Evoni, 2026-11-15, Producer Mode navigation).
+  describe('Business: Open Opportunities', () => {
+    const deal = (over) => ({ ...velour().business[0], ...over });
+    const withDeals = (business) => vi.mocked(api.get).mockImplementation(async (url) => (
+      url.startsWith('/api/v1/companies/') ? { data: { ...velour(), business } } : { data: {} }));
+
+    test('opens the Season page\'s Opportunities tab of the show its deals are in', async () => {
+      withDeals([deal({ id: 'o-1', show_id: 'show-1' }), deal({ id: 'o-2', show_id: 'show-1', name: 'Velour stories' })]);
+      renderAt('/brands/velour_atelier?tab=business');
+      const business = await screen.findByTestId('bp-business');
+      const links = within(business).getAllByRole('link', { name: /Open Opportunities/ });
+      expect(links).toHaveLength(1);
+      expect(links[0].textContent).toBe('Open Opportunities');
+      expect(links[0].getAttribute('href')).toBe('/shows/show-1/season?tab=opportunities');
+      expect(business.innerHTML).not.toContain('/admin?tab=opportunities');
+    });
+
+    test('deals in two shows: one link each, named', async () => {
+      withDeals([deal({ id: 'o-1', show_id: 'show-1', show: 'Styling Adventures' }), deal({ id: 'o-2', show_id: 'show-2', show: 'Before Lala' })]);
+      renderAt('/brands/velour_atelier?tab=business');
+      const business = await screen.findByTestId('bp-business');
+      expect(within(business).getByTestId('bp-opportunities-show-1').getAttribute('href')).toBe('/shows/show-1/season?tab=opportunities');
+      expect(within(business).getByTestId('bp-opportunities-show-1').textContent).toBe('Open Opportunities · Styling Adventures');
+      expect(within(business).getByTestId('bp-opportunities-show-2').getAttribute('href')).toBe('/shows/show-2/season?tab=opportunities');
+    });
+
+    test('no deals, or deals that name no show: no link, and no dead one', async () => {
+      withDeals([]);
+      const first = renderAt('/brands/velour_atelier?tab=business');
+      expect((await screen.findByTestId('bp-business')).textContent).toContain('No deals yet.');
+      expect(within(screen.getByTestId('bp-business')).queryByRole('link', { name: /Open Opportunities/ })).toBeNull();
+      first.unmount();
+      withDeals([deal({ id: 'o-1', show_id: null })]);
+      renderAt('/brands/velour_atelier?tab=business');
+      const business = await screen.findByTestId('bp-business');
+      expect(business.textContent).toContain('Velour cover');
+      expect(within(business).queryByRole('link', { name: /Open Opportunities/ })).toBeNull();
+    });
+
+    test('dealShows: each show once, in the order met', () => {
+      expect(dealShows([{ show_id: 'b', show: 'B' }, { show_id: 'a', show: 'A' }, { show_id: 'b', show: 'B' }, { show_id: null }, null])).toEqual([{ id: 'b', name: 'B' }, { id: 'a', name: 'A' }]);
+      expect(dealShows()).toEqual([]);
+    });
+  });
+
   test('business, wardrobe, press and relationships each read from the profile', async () => {
     renderAt('/brands/velour_atelier?tab=business');
     expect((await screen.findByTestId('bp-business')).textContent).toContain('Velour cover');
@@ -149,6 +195,52 @@ describe('BrandProfilePage', () => {
     vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/media' ? { data: { success: true, items: [] } } : { data: withPictures() }));
     renderAt('/brands/velour_atelier?tab=pictures');
     expect((await screen.findByTestId('bp-pictures')).textContent).toContain('No library pictures are tagged with Velour Atelier yet.');
+  });
+
+  // Evoni, 2026-11-20: the picture library is an ADMIN's to read, so only an ADMIN has the Pictures tab.
+  test('someone who is not ADMIN has no Pictures tab, and nothing asks the library for pictures', async () => {
+    auth.user = { groups: ['viewer'] };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/media') throw Object.assign(new Error('forbidden'), { response: { status: 403 } });
+      return { data: withPictures() };
+    });
+    renderAt();
+    await screen.findByTestId('bp-identity');
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent.trim());
+    expect(tabs).not.toContain('Pictures');
+    // Every other tab the profile has is still there, in order.
+    expect(tabs).toEqual(withPictures().sections.filter((x) => x.key !== 'pictures').map((x) => x.label));
+    expect(screen.queryByTestId('bp-pictures')).toBeNull();
+    expect(vi.mocked(api.get).mock.calls.some(([url]) => String(url).startsWith('/api/v1/media'))).toBe(false);
+  });
+
+  test('an address that names Pictures opens their first tab instead: no error, no request for pictures', async () => {
+    auth.user = { groups: ['viewer'] };
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/media') throw Object.assign(new Error('forbidden'), { response: { status: 403 } });
+      return { data: withPictures() };
+    });
+    renderAt('/brands/velour_atelier?tab=pictures');
+    await screen.findByTestId('bp-identity');
+    expect(screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true').textContent.trim()).toBe(withPictures().sections[0].label);
+    expect(screen.queryByTestId('bp-pictures')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(vi.mocked(api.get).mock.calls.some(([url]) => String(url).startsWith('/api/v1/media'))).toBe(false);
+  });
+
+  test('a signed-out reader (no user) is treated the same: no Pictures tab', async () => {
+    auth.user = null;
+    vi.mocked(api.get).mockImplementation(async () => ({ data: withPictures() }));
+    renderAt('/brands/velour_atelier?tab=pictures');
+    await screen.findByTestId('bp-identity');
+    expect(screen.getAllByRole('tab').map((t) => t.textContent.trim())).not.toContain('Pictures');
+  });
+
+  test('an ADMIN still has the Pictures tab, in its place', async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/media' ? { data: { success: true, items: [] } } : { data: withPictures() }));
+    renderAt();
+    await screen.findByTestId('bp-identity');
+    expect(screen.getAllByRole('tab').map((t) => t.textContent.trim())).toEqual(withPictures().sections.map((x) => x.label));
   });
 
   test('Business: a deal with an event shows its deliverables\' progress; one without shows none', async () => {

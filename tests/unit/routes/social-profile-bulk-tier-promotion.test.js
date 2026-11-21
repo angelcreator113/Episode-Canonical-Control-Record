@@ -30,19 +30,20 @@ describe('Step 3 CP8 — socialProfileBulkRoutes.js PROMOTE shape', () => {
     });
   });
 
-  describe('Non-AI handlers (4 — requireAuth only)', () => {
+  // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+  describe('Non-AI handlers (4 — requireAuth + ADMIN)', () => {
     [['get', '/jobs'], ['get', '/jobs/:id'], ['get', '/jobs/:id/stream'], ['post', '/jobs/:id/cancel']].forEach(([verb, route]) => {
-      test(`${verb.toUpperCase()} ${route} → requireAuth (no aiRateLimiter)`, () => {
+      test(`${verb.toUpperCase()} ${route} → requireAuth + ADMIN (no aiRateLimiter)`, () => {
         const escaped = route.replace(/\//g, '\\/');
-        const admin = verb === 'get' ? '' : "\\s*authorize\\(\\['ADMIN'\\]\\),";
+        const admin = "\\s*authorize\\(\\['ADMIN'\\]\\),";
         const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*requireAuth,${admin}\\s*(?:async|\\(req)`);
         expect(SRC).toMatch(re);
       });
     });
-    test('every POST is ADMIN only, and no GET is', () => {
+    test('every POST is ADMIN only, and so is every GET', () => {
       const handlers = SRC.match(/^router\.(get|post|put|patch|delete)\([^\n]+/gm) || [];
       handlers.filter((l) => !/^router\.get\(/.test(l)).forEach((l) => expect(l).toMatch(/requireAuth,\s*authorize\(\['ADMIN'\]\)/));
-      handlers.filter((l) => /^router\.get\(/.test(l)).forEach((l) => expect(l).not.toMatch(/authorize\(/));
+      handlers.filter((l) => /^router\.get\(/.test(l)).forEach((l) => expect(l).toMatch(/requireAuth,\s*authorize\(\['ADMIN'\]\)/));
     });
   });
 

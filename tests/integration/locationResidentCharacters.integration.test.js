@@ -51,7 +51,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   it('each resident has their character id, or null', async () => {
-    const res = await request(app).get('/api/v1/world/locations');
+    // World locations are an ADMIN's to read (Evoni, 2026-11-16): with no token the read is refused.
+    expect((await request(app).get('/api/v1/world/locations')).status).toBe(401);
+    const adminToken = require('../../src/services/tokenService').generateTokenPair({ id: 'test-admin-residents', email: 'admin@residents.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+    const res = await request(app).get('/api/v1/world/locations').set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     const studio = res.body.locations.find((l) => l.id === loc);
     const byId = new Map(studio.residents.map((r) => [Number(r.id), r.character_id]));

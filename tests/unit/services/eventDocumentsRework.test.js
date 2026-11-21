@@ -11,6 +11,7 @@
  */
 const mockLook = { current: null };
 const mockOverlay = { current: null };
+jest.mock('../../../src/middleware/auditLog', () => ({ logger: { logActionInTransaction: jest.fn(async () => ({})) } }));
 jest.mock('../../../src/services/eventDocumentOverlayService', () => ({
   shoppingListContext: jest.fn(async () => ({ look: mockLook.current, balance: 300 })),
   overlayState: jest.fn(() => 'current'),
@@ -227,7 +228,7 @@ describe('the offer letter (Evoni, 2026-10-24)', () => {
     mockOverlay.current = { asset_id: 'ov-1', url: 'https://x/offer.png', version: 1, terms_key: 'k' };
     const { models } = fakeModels({ ...DEAL, used_in_episode_id: 'ep-1' });
     await svc.draftDocument(models, { ...ids, type: 'offer_letter' });
-    const approved = await svc.approveDocument(models, { ...ids, type: 'offer_letter' });
+    const approved = await svc.approveDocument(models, { ...ids, type: 'offer_letter', actor: { id: 'admin-1' } });
     expect(approved.overlay.asset_id).toBe('ov-1');
     expect(beats.placeOverlayOnBeat).toHaveBeenCalledWith(models, expect.objectContaining({
       episodeId: 'ep-1', assetId: 'ov-1', label: 'Offer letter', canonicalBeat: expect.objectContaining({ number: 5 }), offsetSeconds: 5,
@@ -238,7 +239,7 @@ describe('the offer letter (Evoni, 2026-10-24)', () => {
     mockOverlay.current = { asset_id: 'ov-1', url: 'https://x/offer.png', version: 1 };
     const { models } = fakeModels(DEAL);
     await svc.draftDocument(models, { ...ids, type: 'offer_letter' });
-    await svc.approveDocument(models, { ...ids, type: 'offer_letter' });
+    await svc.approveDocument(models, { ...ids, type: 'offer_letter', actor: { id: 'admin-1' } });
     expect(beats.placeOverlayOnBeat).not.toHaveBeenCalled();
   });
 });

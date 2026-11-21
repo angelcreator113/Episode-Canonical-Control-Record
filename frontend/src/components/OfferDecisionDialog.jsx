@@ -40,6 +40,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Handshake, X } from 'lucide-react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { REASON_MAX, REASON_REQUIRED_DECISIONS, cleanReason } from '../lib/transitionReason';
 import useDialogFocus from '../hooks/useDialogFocus';
 import './OfferDecisionDialog.css';
@@ -64,6 +65,7 @@ const CHANGED_TEXT = 'The offer information has changed since this opened. Nothi
 
 export default function OfferDecisionDialog({ pending, busy = false, onChoose, onCancel }) {
   const open = !!pending;
+  const inRouter = useInRouterContext();
   const reasonRef = useRef(null);
   const [reason, setReason] = useState('');
   const [missing, setMissing] = useState(null);
@@ -180,7 +182,11 @@ export default function OfferDecisionDialog({ pending, busy = false, onChoose, o
             {hasEpisode && (
               <div className="odd-refusal" role="alert" data-testid="offer-decision-has-episode">
                 <p>This event already has an episode: {episodeName}. Nothing new was started, and no decision was sent again.</p>
-                {episode.id && <a className="odd-cancel odd-link" href={`/episodes/${episode.id}`} data-testid="offer-decision-open-episode">Open the episode</a>}
+                {/* In the app, to the episode's Overview; the dialog closes, since
+                    it can be open on that same page (the What's next overlay). */}
+                {episode.id && (inRouter
+                  ? <Link className="odd-cancel odd-link" to={`/episodes/${episode.id}`} onClick={() => onCancel?.()} data-testid="offer-decision-open-episode">Open the episode</Link>
+                  : <a className="odd-cancel odd-link" href={`/episodes/${episode.id}`} data-testid="offer-decision-open-episode">Open the episode</a>)}
               </div>
             )}
             {refusal?.kind === 'not_started' && (

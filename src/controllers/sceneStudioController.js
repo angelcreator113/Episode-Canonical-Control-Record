@@ -10,6 +10,7 @@ const { Scene, SceneSet, SceneAngle, SceneAsset, Asset, SceneObjectVariant, sequ
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const { v4: uuidv4, validate: uuidValidate } = require('uuid');
+const { isDocumentPresentation, anyDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 const objectGenerationService = require('../services/objectGenerationService');
 const depthEstimationService = require('../services/depthEstimationService');
 const imageRestyleService = require('../services/imageRestyleService');
@@ -185,6 +186,11 @@ exports.saveCanvas = async (req, res) => {
     if (!scene) {
       await transaction.rollback();
       return res.status(404).json({ success: false, error: 'Scene not found' });
+    }
+    // Before anything is written: no object may carry a document presentation.
+    if (Array.isArray(objects) && await anyDocumentPresentation(objects.map((o) => o && o.asset_id), { transaction })) {
+      await transaction.rollback();
+      return refuseDocumentPresentation(res);
     }
 
     // Persist background_url when the frontend sends it.  This acts as a
@@ -399,6 +405,7 @@ exports.addObject = async (req, res) => {
       if (!asset) {
         return res.status(404).json({ success: false, error: 'Asset not found' });
       }
+      if (isDocumentPresentation(asset)) return refuseDocumentPresentation(res);
     }
 
     // Get highest layer_order for this scene
@@ -576,6 +583,11 @@ exports.createVariant = async (req, res) => {
     if (!sourceObj) {
       await transaction.rollback();
       return res.status(404).json({ success: false, error: 'Source object not found' });
+    }
+    // Before the variant group or the variant is written.
+    if (await anyDocumentPresentation(new_asset_id, { transaction })) {
+      await transaction.rollback();
+      return refuseDocumentPresentation(res);
     }
 
     // Create or get variant group
@@ -891,6 +903,11 @@ exports.saveSceneSetCanvas = async (req, res) => {
       await transaction.rollback();
       return res.status(404).json({ success: false, error: 'Scene set not found' });
     }
+    // Before anything is written: no object may carry a document presentation.
+    if (Array.isArray(objects) && await anyDocumentPresentation(objects.map((o) => o && o.asset_id), { transaction })) {
+      await transaction.rollback();
+      return refuseDocumentPresentation(res);
+    }
 
     // Merge canvas settings (preserve server-set fields like depth_map_url)
     if (canvas_settings !== undefined) {
@@ -1047,6 +1064,7 @@ exports.addSceneSetObject = async (req, res) => {
         && await SceneAngle.findOne({ where: { id: scene_angle_id, scene_set_id: id }, attributes: ['id'] });
       if (!own) return res.status(400).json({ success: false, error: 'scene_angle_id must be an angle of this scene set' });
     }
+    if (await anyDocumentPresentation(asset_id)) return refuseDocumentPresentation(res);
 
     const maxLayer = await SceneAsset.max('layer_order', { where: { scene_set_id: id } });
 

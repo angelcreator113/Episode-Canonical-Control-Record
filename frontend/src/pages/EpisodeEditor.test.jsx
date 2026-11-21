@@ -87,7 +87,9 @@ describe('EpisodeEditor: reading the edit (P1) and the working preview (P2)', ()
     answer({ [`/api/v1/episodes/${EP}/edit`]: () => fail(404, { success: false, code: 'EPISODE_EDIT_OFF' }) });
     renderAt();
     expect((await screen.findByRole('alert')).textContent).toContain('The episode edit is switched off');
-    expect(screen.getByRole('link', { name: '← Back to the episode' }).getAttribute('href')).toBe(`/episodes/${EP}?tab=edit`);
+    // It names the tool it returns to (Evoni, 2026-11-15): Production › Edit, not the episode's Overview.
+    expect(screen.queryByRole('link', { name: '← Back to the episode' })).toBeNull();
+    expect(screen.getByRole('link', { name: '← Back to the episode’s Edit' }).getAttribute('href')).toBe(`/episodes/${EP}?tab=edit`);
     expect(screen.queryByRole('link', { name: /Timeline Editor/ })).toBeNull();
     noWrites();
   });
@@ -105,7 +107,8 @@ describe('EpisodeEditor: reading the edit (P1) and the working preview (P2)', ()
     expect(await screen.findByText('Episode 3: A New Alliance')).toBeTruthy();
     expect(screen.getByText('Edit revision 7')).toBeTruthy();
     // The back arrow returns to the episode's Edit pill (Evoni, 2026-11-03).
-    expect(screen.getByRole('link', { name: 'Back to the episode' }).getAttribute('href')).toMatch(/\/episodes\/[^/?]+\?tab=edit$/);
+    expect(screen.queryByRole('link', { name: 'Back to the episode' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Back to the episode’s Edit' }).getAttribute('href')).toMatch(/\/episodes\/[^/?]+\?tab=edit$/);
     await waitFor(() => expect(screen.getByText('2 blocking · 0 warnings')).toBeTruthy());
     const rail = screen.getByTestId('beat-rail');
     expect(within(rail).getAllByRole('button', { pressed: false }).length).toBe(14);

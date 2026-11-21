@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const { sequelize } = models;
 
@@ -22,14 +23,22 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('re-locking an outfit replaces it', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; an editor is refused them (a test below).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-wardrobeOutfitRelock', email: 'admin@wardrobeOutfitRelock.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
+  const readOnly = readOnlyTokens('relock');
   const shows = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-relock', email: 'test@relock.dev', name: 'Relock Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-relock', email: 'admin@relock.dev', name: 'Relock Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
@@ -58,7 +67,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     .send({ episode_id: ids.ep, show_id: ids.show, wardrobe_ids });
   const outfit = async (ids) => (await request(app)
     .get(`/api/v1/wardrobe/outfit/${ids.ep}`)
-    .set('Authorization', `Bearer ${token}`)).body.items.map((i) => i.name).sort();
+    .set('Authorization', `Bearer ${adminToken}`)).body.items.map((i) => i.name).sort();
 
   afterAll(async () => {
     for (const show of shows) {
@@ -101,5 +110,25 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const refused = await lock(other, [other.dressA, other.generated]);
     expect(refused.status).toBe(400);
     expect(refused.body.error).toMatch(/Not within reach: Generated Bag/);
+  });
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/wardrobe/outfit/00000000-0000-4000-8000-000000000000`).set('Authorization', `Bearer ${readOnly.editor}`);
+    expect(res.status).toBe(403);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot re-lock: the locked outfit stays, nothing is charged', async () => {
+    const ids = await seed();
+    expect((await lock(ids, [ids.dressA, ids.shoes])).status).toBe(200);
+    const state = async () => JSON.stringify({
+      outfit: await q('SELECT * FROM episode_wardrobe WHERE episode_id = :ep ORDER BY id', ids),
+      ledger: await q('SELECT id FROM financial_transactions WHERE show_id = :show ORDER BY id', ids),
+      lala: await q('SELECT coins, updated_at FROM character_state WHERE show_id = :show', ids),
+      closet: await q('SELECT id, is_owned, updated_at FROM wardrobe WHERE show_id = :show ORDER BY id', ids),
+    });
+    const before = await state();
+    await expectWriteRefused(() => request(app).post('/api/v1/wardrobe/lock-outfit-atomic')
+      .send({ episode_id: ids.ep, show_id: ids.show, wardrobe_ids: [ids.dressB, ids.shoes] }), readOnly);
+    expect(await state()).toBe(before);
+    expect(await outfit(ids)).toEqual(['Dress A', 'Shoes']);
   });
 });

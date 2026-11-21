@@ -228,7 +228,7 @@ async function cascadeRows(sequelize, characterId) {
   return found;
 }
 
-router.get('/consistency', requireAuth, async (req, res) => {
+router.get('/consistency', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const ids = String(req.query.registry_id || '').split(',').map((s) => s.trim()).filter(Boolean);
     if (!ids.length || ids.length > 20 || !ids.every((id) => UUID_RE.test(id))) {
@@ -244,7 +244,7 @@ router.get('/consistency', requireAuth, async (req, res) => {
 
 // GET /api/v1/cast/cross-check?registry_id= (the spec's #2; Evoni, 2026-10-17):
 // contradictions between characters, flag-only (services/castCrossCheck).
-router.get('/cross-check', requireAuth, async (req, res) => {
+router.get('/cross-check', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const ids = String(req.query.registry_id || '').split(',').map((s) => s.trim()).filter(Boolean);
     if (!ids.length || ids.length > 20 || !ids.every((id) => UUID_RE.test(id))) {
@@ -261,7 +261,7 @@ router.get('/cross-check', requireAuth, async (req, res) => {
 // GET /api/v1/cast/flag-log?registry_id= (the spec's #4; Evoni, 2026-10-17):
 // every flag the check has raised, resolved ones too, counted by check, by
 // field and by character: where the generators break most (services/flagLog).
-router.get('/flag-log', requireAuth, async (req, res) => {
+router.get('/flag-log', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const ids = String(req.query.registry_id || '').split(',').map((s) => s.trim()).filter(Boolean);
     if (!ids.length || ids.length > 20 || !ids.every((id) => UUID_RE.test(id))) {
@@ -275,7 +275,7 @@ router.get('/flag-log', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/review', requireAuth, async (req, res) => {
+router.get('/review', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const registryId = String(req.query.registry_id || '');
     if (!UUID_RE.test(registryId)) return res.status(400).json({ success: false, error: 'registry_id must be a registry id (UUID)' });
@@ -398,7 +398,7 @@ router.delete('/characters/:id/permanent', requireAuth, authorize(['ADMIN']), as
  * Their story trail (services/characterStoryTrail; Evoni, 2026-10-16): their
  * latest Pulse posts, and the short stories and book chapters they are in.
  */
-router.get('/characters/:id/story-trail', requireAuth, async (req, res) => {
+router.get('/characters/:id/story-trail', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const { RegistryCharacter, sequelize } = getModels();
@@ -426,7 +426,7 @@ async function characterWithFeed(db, id) {
  * Their facts (Character Consistency Engine step 2; services/characterFacts):
  * the hard, checkable values, each from the one place it lives.
  */
-router.get('/characters/:id/facts', requireAuth, async (req, res) => {
+router.get('/characters/:id/facts', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const db = getModels();
@@ -468,7 +468,7 @@ router.put('/characters/:id/facts', requireAuth, authorize(['ADMIN']), async (re
 // GET /api/v1/cast/characters/:id/facts/history (the spec's #1; Evoni,
 // 2026-10-17): when and why each fact changed, with the follower ledger,
 // newest first (services/factHistory).
-router.get('/characters/:id/facts/history', requireAuth, async (req, res) => {
+router.get('/characters/:id/facts/history', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const db = getModels();
@@ -527,7 +527,7 @@ router.post('/characters/:id/facts/suggest', requireAuth, authorize(['ADMIN']), 
  * the narrator's text disagrees with their facts. Flag-only; it never edits.
  * What they post (the mask) and author-only notes are not checked.
  */
-router.get('/characters/:id/check', requireAuth, async (req, res) => {
+router.get('/characters/:id/check', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const db = getModels();
@@ -648,7 +648,7 @@ const appearanceError = (res, err, what) => {
 };
 
 // GET their appearance: how they look and the portraits made from it.
-router.get('/characters/:id/appearance', requireAuth, async (req, res) => {
+router.get('/characters/:id/appearance', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const character = await getModels().RegistryCharacter.findByPk(req.params.id);
@@ -746,7 +746,7 @@ router.post('/characters/:id/appearance/portrait/remove', requireAuth, authorize
   }
 });
 
-router.get('/characters/:id/typology', requireAuth, async (req, res) => {
+router.get('/characters/:id/typology', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const character = await getModels().RegistryCharacter.findByPk(req.params.id);
@@ -813,7 +813,7 @@ const contentTypeError = (res, err) => {
   return false;
 };
 
-router.get('/characters/:id/content-type', requireAuth, async (req, res) => {
+router.get('/characters/:id/content-type', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const db = getModels();
@@ -894,7 +894,7 @@ const pillarsError = (res, err) => {
   return false;
 };
 
-router.get('/content-pillars', requireAuth, async (req, res) => {
+router.get('/content-pillars', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     return res.json({ success: true, types: await require('../services/contentPillars').listPillars(getModels()) });
   } catch (err) {
@@ -952,7 +952,7 @@ router.post('/content-types/apply', requireAuth, authorize(['ADMIN']), async (re
  * posts from their voice, mask, facts and events. Every draft waits in
  * Review; nothing is released here.
  */
-router.get('/characters/:id/posts/ideas', requireAuth, async (req, res) => {
+router.get('/characters/:id/posts/ideas', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const { postIdeas, PostsError } = require('../services/characterPosts');
@@ -996,7 +996,7 @@ router.post('/characters/:id/posts/generate', requireAuth, authorize(['ADMIN']),
  * its home place, and its posts. A character with no feed profile shows up
  * nowhere yet.
  */
-router.get('/characters/:id/appearances', requireAuth, async (req, res) => {
+router.get('/characters/:id/appearances', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const { RegistryCharacter, sequelize } = getModels();
@@ -1058,7 +1058,7 @@ router.get('/characters/:id/appearances', requireAuth, async (req, res) => {
 
 // The Gallery tab (Evoni, 2026-10-18): every picture already linked to them,
 // grouped; reads only (services/characterGallery).
-router.get('/characters/:id/gallery', requireAuth, async (req, res) => {
+router.get('/characters/:id/gallery', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const { galleryFor } = require('../services/characterGallery');
@@ -1082,7 +1082,7 @@ function placeError(res, err, label) {
   return res.status(500).json({ success: false, error: err.message });
 }
 
-router.get('/characters/:id/places', requireAuth, async (req, res) => {
+router.get('/characters/:id/places', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const { placesForCharacter } = require('../services/characterPlaceShare');
@@ -1163,7 +1163,7 @@ const audienceError = (res, err) => {
   return false;
 };
 
-router.get('/audience-map', requireAuth, async (req, res) => {
+router.get('/audience-map', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     return res.json({ success: true, types: await require('../services/audienceMap').listAudience(getModels()) });
   } catch (err) {
@@ -1214,7 +1214,7 @@ const secretError = (res, err, label) => {
 };
 const byOf = (req) => String(req.user?.email || req.user?.id || 'admin').slice(0, 255);
 
-router.get('/characters/:id/secrets', requireAuth, async (req, res) => {
+router.get('/characters/:id/secrets', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { listSecrets } = require('../services/characterSecrets');
     return res.json({ success: true, ...(await listSecrets(getModels().sequelize, req.params.id)) });

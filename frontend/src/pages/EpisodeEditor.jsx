@@ -103,7 +103,7 @@ function FullPage({ title, children, episodeId }) {
         <h1>{title}</h1>
         {children}
         <p className="tle-full-links">
-          {episodeId && <Link to={`/episodes/${episodeId}?tab=edit`}>← Back to the episode</Link>}
+          {episodeId && <Link to={`/episodes/${episodeId}?tab=edit`}>← Back to the episode’s Edit</Link>}
         </p>
       </div>
     </div>
@@ -632,7 +632,7 @@ export default function EpisodeEditor() {
       }}>
       <header className="tle-top">
         <nav className="tle-crumbs" aria-label="Breadcrumb">
-          <Link to={`/episodes/${episodeId}?tab=edit`} className="tle-icon-btn" aria-label="Back to the episode" title="Back to the episode's Edit pill"><ArrowLeft size={18} /></Link>
+          <Link to={`/episodes/${episodeId}?tab=edit`} className="tle-icon-btn" aria-label="Back to the episode’s Edit" title="Back to the episode’s Edit (Production › Edit)"><ArrowLeft size={18} /></Link>
           <Link to={ep?.show_id ? `/shows/${ep.show_id}` : '/shows'}>Episodes</Link>
           <ChevronRight size={14} aria-hidden="true" />
           <Link to={`/episodes/${episodeId}`}>{ep?.episode_number ? `Episode ${ep.episode_number}` : 'Episode'}</Link>

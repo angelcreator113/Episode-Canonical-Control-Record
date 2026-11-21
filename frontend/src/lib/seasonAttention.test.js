@@ -86,7 +86,8 @@ describe('attentionItems', () => {
     expect(items[0].title).toMatch(/^Episode 1 was due Sun, Nov 1 · 10:00 AM and is not released yet\./);
     expect(items[1].title).toBe('Episode 2 releases in 3 days.');
     expect(items.find((i) => i.key === 'slots-1')).toMatchObject({ title: 'Phase 1 · Foundation: 1 slot with no event yet.', link: { tab: 'roadmap', extra: { slot: 3 } } });
-    expect(items.find((i) => i.key === 'event-ev-2').link).toEqual({ href: '/shows/show-1/events/ev-2' });
+    // Back from the package returns to the event's slot on the Roadmap, in this season (2026-11-15).
+    expect(items.find((i) => i.key === 'event-ev-2').link).toEqual({ href: '/shows/show-1/events/ev-2?from=roadmap:2@2' });
     expect(items.find((i) => i.key === 'gap-2').title).toBe('Phase 2 · Ascension: nothing moves Save coins, Earn trust.');
     expect(items.find((i) => i.key === 'held-o2').link).toEqual({ tab: 'opportunities' });
   });

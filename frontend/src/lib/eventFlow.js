@@ -182,56 +182,92 @@ export const actionLabel = (it) => ITEM_ACTION[`${it.section}.${it.key}`] || `Se
 
 // ── Where she came from ───────────────────────────────────────────────
 
+// A season number as the Season page's `?season=` reads it (1 to 999), else null.
+const seasonOf = (value) => (/^[1-9]\d{0,2}$/.test(String(value ?? '')) ? Number(value) : null);
+const EPISODE_ORIGIN_TABS = ['overview', 'results'];
+
 /**
  * The page's `?from=`: where the Event Package was opened from, so "back"
  * returns there with its filter. roadmap:<slot>, events:<show filter>,
- * events (the Events tab, no filter), producer (Producer Mode). Anything
- * else is no origin.
+ * events (the Events tab, no filter), producer (Producer Mode); and since
+ * 2026-11-15 (Evoni, Producer Mode navigation): episodes (the Season page's
+ * Episodes tab), overview (its Overview), episode:<id> and
+ * episode:<id>:results (that episode, or its Results). A Season page origin
+ * may end "@<season>" (roadmap:5@2), so the way back opens the season it
+ * was opened from and not the one in progress. Anything else is no origin.
  */
 export function parseFrom(value) {
-  const v = String(value || '');
-  let m = /^roadmap:(\d{1,3})$/.exec(v);
-  if (m) return { kind: 'roadmap', slot: Number(m[1]) };
-  if (v === 'roadmap') return { kind: 'roadmap', slot: null };
+  const raw = String(value || '');
+  let m = /^episode:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::([a-z]+))?$/i.exec(raw);
+  if (m) return { kind: 'episode', id: m[1], tab: EPISODE_ORIGIN_TABS.includes(m[2]) ? m[2] : null };
+  if (raw === 'producer') return { kind: 'producer' };
+  const at = /^(.*)@([1-9]\d{0,2})$/.exec(raw);
+  const v = at ? at[1] : raw;
+  const season = at ? Number(at[2]) : null;
+  const withSeason = (origin) => (season ? { ...origin, season } : origin);
+  m = /^roadmap:(\d{1,3})$/.exec(v);
+  if (m) return withSeason({ kind: 'roadmap', slot: Number(m[1]) });
+  if (v === 'roadmap') return withSeason({ kind: 'roadmap', slot: null });
   m = /^events(?::([a-z-]+))?$/.exec(v);
-  if (m) return { kind: 'events', show: EVENT_SHOWS.some((s) => s.key === m[1]) ? m[1] : null };
-  if (v === 'producer') return { kind: 'producer' };
+  if (m) return withSeason({ kind: 'events', show: EVENT_SHOWS.some((s) => s.key === m[1]) ? m[1] : null });
+  if (v === 'episodes') return withSeason({ kind: 'episodes' });
+  if (v === 'overview') return withSeason({ kind: 'overview' });
   return null;
 }
 
 /** The `?from=` value for an origin (the inverse of parseFrom), or null. */
 export function fromParam(origin) {
   if (!origin) return null;
-  if (origin.kind === 'roadmap') return origin.slot ? `roadmap:${origin.slot}` : 'roadmap';
-  if (origin.kind === 'events') return origin.show ? `events:${origin.show}` : 'events';
+  const season = seasonOf(origin.season);
+  const at = (value) => (season ? `${value}@${season}` : value);
+  if (origin.kind === 'roadmap') return at(origin.slot ? `roadmap:${origin.slot}` : 'roadmap');
+  if (origin.kind === 'events') return at(origin.show ? `events:${origin.show}` : 'events');
+  if (origin.kind === 'episodes') return at('episodes');
+  if (origin.kind === 'overview') return at('overview');
   if (origin.kind === 'producer') return 'producer';
+  if (origin.kind === 'episode') {
+    const parsed = parseFrom(`episode:${origin.id}${EPISODE_ORIGIN_TABS.includes(origin.tab) ? `:${origin.tab}` : ''}`);
+    return parsed ? `episode:${parsed.id}${parsed.tab ? `:${parsed.tab}` : ''}` : null;
+  }
   return null;
 }
 
 /** The Event Package's address, carrying where it was opened from. */
 export function packageHref(showId, eventId, from = null) {
   const base = `/shows/${encodeURIComponent(showId)}/events/${encodeURIComponent(eventId)}`;
-  // Only a value parseFrom reads (roadmap:5, events:unplaced, producer), so it needs no escaping.
+  // Only a value parseFrom reads (roadmap:5, events:unplaced, episode:<uuid>, producer …), so it needs no escaping.
   const value = fromParam(typeof from === 'string' ? parseFrom(from) : from);
   return value ? `${base}?from=${value}` : base;
 }
 
 /**
  * The header's way back: { href, label, done }. To the Roadmap with that
- * slot open, the Events tab under the filter it had, or Producer Mode; with
- * no origin, the Events tab (as before). `done` (nothing left to set up)
+ * slot open, the Events tab under the filter it had, the Season page's
+ * Episodes tab or Overview, the episode (or its Results), or Producer Mode;
+ * with no origin, the Events tab (as before). A Season page origin that
+ * names its season returns to that season. `done` (nothing left to set up)
  * reads "Done · back to …".
  */
 export function returnLink(origin, { showId, done = false } = {}) {
   let href = seasonPageHref(showId, 'events');
   let where = 'Events';
+  const season = seasonOf(origin?.season);
   if (origin?.kind === 'roadmap') {
-    href = seasonPageHref(showId, 'roadmap', origin.slot ? { slot: origin.slot } : null);
+    href = seasonPageHref(showId, 'roadmap', { season, slot: origin.slot || null });
     where = origin.slot ? `E${origin.slot} on the Roadmap` : 'the Roadmap';
   } else if (origin?.kind === 'events') {
-    href = seasonPageHref(showId, 'events', origin.show ? { show: origin.show } : null);
+    href = seasonPageHref(showId, 'events', { season, show: origin.show || null });
     const label = EVENT_SHOWS.find((s) => s.key === origin.show)?.label;
     where = origin.show === 'all' ? 'All events' : label || 'Events';
+  } else if (origin?.kind === 'episodes') {
+    href = seasonPageHref(showId, 'episodes', { season });
+    where = 'Episodes';
+  } else if (origin?.kind === 'overview') {
+    href = seasonPageHref(showId, 'overview', { season });
+    where = 'the Season Overview';
+  } else if (origin?.kind === 'episode') {
+    href = `/episodes/${encodeURIComponent(origin.id)}${origin.tab ? `?tab=${origin.tab}` : ''}`;
+    where = origin.tab === 'results' ? 'the episode\u2019s Results' : 'the episode';
   } else if (origin?.kind === 'producer') {
     href = `/shows/${encodeURIComponent(showId)}/world?tab=overview`;
     where = 'Producer Mode';

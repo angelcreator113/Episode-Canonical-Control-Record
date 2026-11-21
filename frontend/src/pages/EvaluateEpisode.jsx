@@ -24,10 +24,11 @@
  */
 
 import React, { useState, useEffect, useCallback, useContext } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import AuthContext from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
+import { readReturn } from '../utils/returnPath';
 import { completeEpisode } from '../lib/episodeCompletion';
 
 // ─── TIER CONFIG ───
@@ -46,6 +47,9 @@ const STAT_ICONS = {
 function EvaluateEpisode() {
   const { id: episodeId } = useParams();
   const navigate = useNavigate();
+  // The way back: the tab this page was opened from, when the address says (PR-05); else the episode, as before.
+  const [searchParams] = useSearchParams();
+  const back = readReturn(searchParams, { episodeId, fallback: { href: `/episodes/${episodeId}`, text: 'Back to Episode' } });
 
   const [episode, setEpisode] = useState(null);
   const [charState, setCharState] = useState(null);
@@ -176,7 +180,7 @@ function EvaluateEpisode() {
       {/* Header */}
       <div style={S.header}>
         <div>
-          <Link to={`/episodes/${episodeId}`} style={S.backLink}>← Back to Episode</Link>
+          <Link to={back.href} style={S.backLink} data-testid="evaluate-back">← {back.text}</Link>
           <h1 style={S.title}>{episode.title || 'Untitled Episode'}</h1>
           <div style={S.headerMeta}>
             <span style={S.statusPill(isAccepted ? '#22c55e' : isComputed ? '#6366f1' : '#94a3b8')}>

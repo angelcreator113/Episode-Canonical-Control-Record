@@ -70,6 +70,13 @@ describe('the public Shop the Look page', () => {
     const firstLink = screen.getAllByTestId('site-shop-link')[0];
     expect(disclosure.compareDocumentPosition(firstLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(article.textContent).toContain('Every look tells a story.');
+    // The story's words and the real products are each labelled, the story first.
+    const story = screen.getByTestId('site-shop-story');
+    expect(story.textContent).toBe('From the storyEvery look tells a story.');
+    const real = screen.getByTestId('site-shop-real');
+    expect(real.textContent).toBe('Real pieces you can shop');
+    expect(story.compareDocumentPosition(real) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(real.compareDocumentPosition(firstLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const anchors = screen.getAllByTestId('site-shop-link').map((li) => li.querySelector('a'));
     expect(anchors.map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('rel'), a.getAttribute('target')])).toEqual([
       ['Maison Rouge Satin Ballet Pump', 'https://shop.example/pump', 'noopener', '_blank'],
@@ -134,12 +141,48 @@ describe('the public Shop the Look page', () => {
     expect([img.getAttribute('src'), img.getAttribute('alt')]).toEqual([image.url, image.alt]);
     const look = screen.getByTestId('site-shop-look');
     const order = [...look.children].map((el) => el.className || el.tagName);
-    expect(order.indexOf('site-shop__image')).toBeLessThan(order.indexOf('site-shop__caption'));
+    // The caption now sits in its labelled story block: the image is above that block, and so above the caption.
+    expect(order.indexOf('site-shop__story')).toBeGreaterThan(-1);
+    expect(order.indexOf('site-shop__image')).toBeLessThan(order.indexOf('site-shop__story'));
+    expect(img.compareDocumentPosition(look.querySelector('.site-shop__caption')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     one.unmount();
 
     fetchMock.mockImplementation(() => reply(200, { look: { ...LOOK.look, image: null } }));
     renderAt('/shop-the-look/Ab3_k9-Zq1Lm');
     await screen.findByTestId('site-shop-look');
     expect(screen.queryByTestId('site-shop-image')).toBeNull();
+  });
+  test('a similar piece is labelled; a piece that can no longer be bought is shown with no link; an archive says so (Evoni, 2026-11-15)', async () => {
+    const links = [
+      { label: 'Sam Edelman Felicia Flat', retailer: 'Zappos', url: 'https://zappos.example/felicia', affiliate: true, match: 'similar', available: true },
+      { label: 'Maison Rouge Satin Ballet Pump', retailer: null, url: null, affiliate: false, match: 'exact', available: false },
+      // Whatever is sent, only an https address becomes a link.
+      { label: 'Bad address', retailer: 'Nowhere', url: 'javascript:alert(1)', affiliate: false, match: 'exact', available: true },
+    ];
+    fetchMock.mockImplementation(() => reply(200, { look: { ...LOOK.look, links, archive: false } }));
+    const { unmount } = renderAt('/shop-the-look/Ab3_k9-Zq1Lm');
+    await screen.findByRole('heading', { level: 1, name: 'Episode 2: The Gala' });
+    const items = screen.getAllByTestId('site-shop-link');
+    expect(items).toHaveLength(3);
+    expect(items[0].querySelector('a').getAttribute('href')).toBe('https://zappos.example/felicia');
+    expect(items[0].textContent).toContain('Similar piece');
+    expect(items[0].textContent).toContain('Affiliate link');
+    expect(items[1].querySelector('a')).toBeNull();
+    expect(items[1].textContent).toBe('Maison Rouge Satin Ballet PumpNo longer available');
+    expect(items[2].querySelector('a')).toBeNull();
+    expect(screen.queryByTestId('site-shop-archive')).toBeNull();
+    unmount();
+    // A piece that never had a product is not said to have had one.
+    fetchMock.mockImplementation(() => reply(200, { look: { ...LOOK.look, links: [links[0], { label: 'Accessory', retailer: null, url: null, affiliate: false, match: null, available: false }], archive: false } }));
+    const second = renderAt('/shop-the-look/Ab3_k9-Zq1Lm');
+    await screen.findByRole('heading', { level: 1, name: 'Episode 2: The Gala' });
+    expect(screen.getAllByTestId('site-shop-link')[1].textContent).toBe('AccessoryNot available to shop');
+    second.unmount();
+
+    fetchMock.mockImplementation(() => reply(200, { look: { ...LOOK.look, disclosure: null, links: [links[1]], archive: true } }));
+    renderAt('/shop-the-look/Ab3_k9-Zq1Lm');
+    expect((await screen.findByTestId('site-shop-archive')).textContent).toBe('These pieces are no longer available to buy.');
+    expect(screen.getByTestId('site-shop-look').querySelector('.site-shop__links a')).toBeNull();
+    expect(screen.queryByTestId('site-shop-disclosure')).toBeNull();
   });
 });

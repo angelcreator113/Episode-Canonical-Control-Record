@@ -8,6 +8,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, Check, CircleDashed, Pencil, Lock } from 'lucide-react';
 import { briefState } from '../../lib/episodeOverview';
+import { packageHref } from '../../lib/eventFlow';
 import './EpisodeOverviewSummary.css';
 
 /**
@@ -26,9 +27,12 @@ export function NextStepBanner({ step, onOpenTab, meta = null, extra = null }) {
         {meta && <p className="eos-next-meta" data-testid="overview-next-step-meta">{meta}</p>}
       </div>
       <div className="eos-next-actions">
-        <button type="button" className="eos-next-btn" onClick={() => onOpenTab?.(step.tab)} data-testid="overview-next-step-go">
-          {step.action} <ArrowRight size={15} aria-hidden="true" />
-        </button>
+        {/* No button until it is known where the step leads. */}
+        {step.action && (
+          <button type="button" className="eos-next-btn" onClick={() => onOpenTab?.(step.tab)} data-testid="overview-next-step-go">
+            {step.action} <ArrowRight size={15} aria-hidden="true" />
+          </button>
+        )}
         {extra}
       </div>
     </section>
@@ -59,7 +63,9 @@ const PACKAGE_SECTION = { cast: 'epp-sec-people', location: 'epp-sec-place' };
 
 export function StoryBriefCard({
   brief, draft, setDraft, saveBriefField, saving, locked, synopsis, onEdit, archetypes, intents, outcomes = null,
+  status = null,
 }) {
+  // `status`: 'loading' or 'failed' while there is no brief to show; null otherwise.
   // The synopsis is the episode's own; the four creative fields wait for the brief.
   const state = brief ? briefState({ ...brief, ...draft }) : null;
   return (
@@ -81,6 +87,12 @@ export function StoryBriefCard({
           ? <p className="eos-prose">{synopsis}</p>
           : <p className="eos-prose is-empty">No synopsis yet. Edit adds one.</p>}
       </div>
+      {!brief && status === 'loading' && (
+        <p className="eos-prose is-empty" data-testid="overview-brief-loading">Loading the brief…</p>
+      )}
+      {!brief && status === 'failed' && (
+        <p className="eos-prose is-empty" data-testid="overview-brief-failed">The brief couldn't be loaded. Retry above.</p>
+      )}
       {brief && (
       <>
       <div className="eos-brief-row">
@@ -139,8 +151,10 @@ export function StoryBriefCard({
   );
 }
 
-export function FromEventCard({ from, showId, eventId, onOpenTab }) {
+export function FromEventCard({ from, showId, eventId, episodeId = null, onOpenTab }) {
   if (!from) return null;
+  // The Event Package, carrying this episode as where it was opened from (PR-05), so its "back" returns here.
+  const pkg = packageHref(showId, eventId, episodeId ? { kind: 'episode', id: episodeId } : null);
   return (
     <section className="eos-card eos-from" data-testid="episode-planning">
       <div className="eos-card-head">
@@ -155,7 +169,7 @@ export function FromEventCard({ from, showId, eventId, onOpenTab }) {
               <strong>{it.label}</strong>
               <span>{it.detail}</span>
               {it.fix === 'package' && (
-                <Link className="eos-link" to={`/shows/${showId}/events/${eventId}${PACKAGE_SECTION[it.key] ? `#${PACKAGE_SECTION[it.key]}` : ''}`} data-testid={`episode-planning-fix-${it.key}`}>{it.fixLabel}</Link>
+                <Link className="eos-link" to={`${pkg}${PACKAGE_SECTION[it.key] ? `#${PACKAGE_SECTION[it.key]}` : ''}`} data-testid={`episode-planning-fix-${it.key}`}>{it.fixLabel}</Link>
               )}
               {it.fix === 'wardrobe' && (
                 <button type="button" className="eos-link" onClick={() => onOpenTab?.('wardrobe')} data-testid={`episode-planning-fix-${it.key}`}>{it.fixLabel}</button>
@@ -164,7 +178,7 @@ export function FromEventCard({ from, showId, eventId, onOpenTab }) {
           </li>
         ))}
       </ul>
-      <Link className="eos-link eos-from-open" to={`/shows/${showId}/events/${eventId}`} data-testid="episode-planning-package">
+      <Link className="eos-link eos-from-open" to={pkg} data-testid="episode-planning-package">
         Open the event package <ArrowRight size={13} aria-hidden="true" />
       </Link>
     </section>

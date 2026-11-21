@@ -57,14 +57,15 @@ router.get('/', requireAuth, async (req, res) => {
     if (isLala && profileId == null) return res.json({ success: true, at: null, profile_id: null, threads: [] });
     if (Number.isNaN(profileId)) return res.status(400).json({ success: false, error: 'profile_id must be a whole number.' });
     let at = null;
-    if (req.query.at !== undefined && req.query.at !== '') {
-      try {
-        at = await require('../services/storyClock').resolveAt(getModels(), showId, String(req.query.at));
-      } catch (atErr) {
-        if (atErr.status === 400) return res.status(400).json({ success: false, error: atErr.message });
-        throw atErr;
-      }
-      if (!Number.isInteger(at)) at = 0;   // no published episode yet: the very start
+    const named = req.query.at !== undefined && req.query.at !== '';
+    try {
+      const moment = await require('../services/readerMoment').momentFor(req, getModels(), showId, req.query.at);
+      // An ADMIN who names no moment reads every message, as before; anyone else always has one.
+      if (moment !== undefined) at = moment;
+      else if (named) at = 0;   // no published episode yet: the very start
+    } catch (atErr) {
+      if (atErr.status === 400) return res.status(400).json({ success: false, error: atErr.message });
+      throw atErr;
     }
     const threads = await require('../services/pulseDms').threadsOf(getModels(), showId, { at, profileId });
     return res.json({ success: true, at, profile_id: profileId, threads });

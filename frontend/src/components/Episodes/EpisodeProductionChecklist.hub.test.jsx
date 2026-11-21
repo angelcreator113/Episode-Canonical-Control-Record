@@ -140,4 +140,14 @@ describe('Checklist hub', () => {
     const card = await screen.findByTestId('checklist-section-lookbook');
     await within(card).findByText('Complete');
   });
+
+  test('the Run Sheet and Evaluate carry the Checklist as where they were opened from (PR-05)', async () => {
+    renderHub();
+    await screen.findByTestId('checklist-summary');
+    const origin = `from=${encodeURIComponent('/episodes/ep-1?tab=checklist')}&fromLabel=Checklist`;
+    expect(screen.getByRole('link', { name: 'Episode Run Sheet' }).getAttribute('href')).toBe(`/episodes/ep-1/todo?${origin}`);
+    expect(screen.getByRole('link', { name: 'Evaluate Episode' }).getAttribute('href')).toBe(`/episodes/ep-1/evaluate?${origin}`);
+    // The Scene Plan button and the editor link are as they were.
+    expect(screen.getByTestId('episode-timeline-open').getAttribute('href')).toBe('/episodes/ep-1/editor');
+  });
 });

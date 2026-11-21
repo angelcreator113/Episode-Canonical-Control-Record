@@ -20,8 +20,15 @@ export const draftEventDocumentApi = async (showId, eventId, type, { budget = fa
 // note: undefined leaves the document's note as it is.
 export const editEventDocumentApi = async (showId, eventId, type, items, note) =>
   (await api.put(`${base(showId, eventId)}/${type}`, note === undefined ? { items } : { items, note })).data?.data;
-export const approveEventDocumentApi = async (showId, eventId, type) =>
-  (await api.post(`${base(showId, eventId)}/${type}/approve`)).data?.data;
+// `version` is the version on screen, so a document edited elsewhere since
+// is not approved unseen (409). `intent` says which the button means:
+// 'approve' the content (refused when it is already approved), or 'render'
+// an approved document's overlay again. An admin's (V2-1, 2026-11-19).
+export const approveEventDocumentApi = async (showId, eventId, type, { version, intent } = {}) =>
+  (await api.post(`${base(showId, eventId)}/${type}/approve`, {
+    ...(version != null ? { version } : {}),
+    ...(intent ? { intent } : {}),
+  })).data?.data;
 // An earlier version from history, as a new draft version (2026-10-24).
 export const restoreEventDocumentApi = async (showId, eventId, type, fromVersion) =>
   (await api.post(`${base(showId, eventId)}/${type}/restore`, { fromVersion })).data?.data;
@@ -42,14 +49,26 @@ export function docState(doc) {
   return { key: 'draft', label: 'Draft' };
 }
 
+/** As the server's: how long a drawing in progress is taken to be still running. */
+const RENDER_CLAIM_MS = 2 * 60 * 1000;
+
 /**
  * The document's overlay (Evoni, 2026-10-07: the documents as overlays),
  * drawn on approval (eventDocumentOverlayService): current when drawn from
  * the approved version as it stands, outdated once edited or redrafted.
  */
-export function docOverlay(doc, lookTotal = null, termsChanged = false) {
+export function docOverlay(doc, lookTotal = null, termsChanged = false, now = Date.now()) {
   if (!doc) return null;
   const url = doc.overlay?.url || null;
+  // How the last drawing of this version went (overlay_render, V2-1). A
+  // failed one is said, never shown as ready; the approval stands.
+  const render = doc.status === 'approved' && doc.overlay_render?.version === doc.version ? doc.overlay_render : null;
+  if (render?.status === 'failed') {
+    return { key: 'failed', url, label: `The overlay could not be drawn${render.error ? `: ${render.error}` : '.'} The approval stands; try again.` };
+  }
+  if (render?.status === 'rendering' && now - Date.parse(render.started_at) < RENDER_CLAIM_MS) {
+    return { key: 'rendering', url, label: 'Drawing the overlay…' };
+  }
   if (url && doc.status === 'approved' && doc.overlay.version === doc.version) {
     // An offer letter drawn before the deal's terms changed.
     if (termsChanged) return { key: 'outdated', url, label: 'Overlay out of date: the terms changed' };

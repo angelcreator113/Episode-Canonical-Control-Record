@@ -213,7 +213,9 @@ router.get('/', requireAuth, async (req, res) => {
 /**
  * GET /api/v1/shows/:id
  * Get a single show by ID
- * Falls back to auto-creating a minimal show record if episodes exist for this show_id
+ * Falls back to auto-creating a minimal show record if episodes exist for this show_id,
+ * on an ADMIN's read only (Evoni, 2026-11-16: a read must not write for a reader who may not
+ * write). Anyone else gets 404 for a show that has no record, and nothing is created.
  * Includes raw SQL fallback if Sequelize model query fails
  */
 router.get('/:id', requireAuth, async (req, res) => {
@@ -246,8 +248,9 @@ router.get('/:id', requireAuth, async (req, res) => {
       }
     }
 
-    // If no show record but episodes reference this show_id, auto-create a minimal record
-    if (!show) {
+    // If no show record but episodes reference this show_id, auto-create a minimal record. That is a write,
+    // so only an ADMIN's read does it; for anyone else the show is not found.
+    if (!show && require('../services/publicSocialProfile').readsAsAdmin(req)) {
       try {
         const { Episode, sequelize } = require('../models');
         const episodeCount = await Episode.count({ where: { show_id: id, deleted_at: null } });
@@ -472,7 +475,7 @@ router.put('/:id/financial-config', requireAuth, authorize(['ADMIN']), async (re
  * designs, each on or off for the show. Stored on Show.metadata.style_designs;
  * the Style Page, its downloads and Send to Distribution use the ones on.
  */
-router.get('/:id/style-designs', requireAuth, async (req, res) => {
+router.get('/:id/style-designs', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const Show = getShow();
     const show = await Show.findByPk(req.params.id);
@@ -663,13 +666,15 @@ router.get('/:id/pulse-cover', requireAuth, async (req, res) => {
     let cover = readPulseCover(show.metadata);
     // ?at= (Task #2939): the cover's reveal at that story moment; hidden leaves it out; a first look sends
     // its teaser image in place of the cover, never the full one (Task #3034).
-    if (cover && req.query.at !== undefined) {
-      const models = require('../models');
-      let at;
-      try { at = await require('../services/storyClock').resolveAt(models, show.id, req.query.at); } catch (err) {
-        if (err.status === 400) return res.status(400).json({ error: err.message });
-        throw err;
-      }
+    // The moment is the server's to decide (services/readerMoment): anyone but an ADMIN reads at the
+    // present at the latest, whether or not a moment was sent.
+    const models = require('../models');
+    let at;
+    try { at = await require('../services/readerMoment').momentFor(req, models, show.id, req.query.at); } catch (err) {
+      if (err.status === 400) return res.status(400).json({ error: err.message });
+      throw err;
+    }
+    if (cover && at !== undefined) {
       const view = await require('../services/pulseReveals').revealsAt(models, show.id, at);
       const state = view.stateOf('image', show.id, 'cover');
       if (state === 'hidden') cover = null;
@@ -995,7 +1000,7 @@ router.get('/:id/lala-stats', requireAuth, async (req, res) => {
     const show = await Show.findByPk(req.params.id);
     if (!show) return res.status(404).json({ success: false, error: 'Show not found' });
     const models = require('../models');
-    const at = await require('../services/storyClock').resolveAt(models, show.id, req.query.at);
+    const at = await require('../services/readerMoment').momentFor(req, models, show.id, req.query.at);
     const data = await require('../services/lalaStats').statsAt(models, show.id, at);
     return res.json({ success: true, data });
   } catch (err) {
@@ -1896,7 +1901,7 @@ router.get('/:id/template', requireAuth, async (req, res) => {
  * GET /api/v1/shows/:id/wardrobe
  * Get all wardrobe items belonging to a show
  */
-router.get('/:id/wardrobe', requireAuth, async (req, res) => {
+router.get('/:id/wardrobe', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
     const { character, category } = req.query;

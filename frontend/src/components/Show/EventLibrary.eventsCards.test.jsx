@@ -103,6 +103,36 @@ describe('EventLibrary queue — cards and the deal-type filter (Task #2361)', (
     expect(within(card).queryByTestId('event-card-view-package-ev-brand')).toBeNull();
   });
 
+  // Evoni, 2026-11-15 (Producer Mode navigation, D2): a Ready event's button
+  // opens the package, where Start Episode is reviewed and pressed. It read
+  // "Start Episode". This renders the Ready card itself, from an event with
+  // every gate item set, and presses the button.
+  test('a Ready event: the button reads "Open package to start", and opens the package without starting anything', async () => {
+    const READY_EVENT = {
+      id: 'ev-ready', show_id: 'show-1', name: 'Gala Ready', status: 'draft', prestige: 6,
+      host_brand: 'Maison Belle', category: 'fashion', format: 'gala', event_date: '2026-10-12', event_time: '19:00',
+      venue_location_id: 'loc-1', venue_name: 'The Glass Room', invitation_asset_id: 'asset-1',
+      canon_consequences: { automation: {} },
+    };
+    // The card is Ready by the page's own rules, not by a status this test sets.
+    expect(computeEventPackageReadiness(READY_EVENT).gatesMet).toBe(true);
+    vi.mocked(api.get).mockImplementation(async (url) => (
+      /\/world\/show-1\/events(\?|$)/.test(url) ? { data: { success: true, events: [READY_EVENT, BARE_EVENT] } } : { data: {} }));
+    renderQueue('?tab=events');
+    const card = await screen.findByTestId('event-card-ev-ready');
+    const button = within(card).getByTestId('event-card-primary-ev-ready');
+    expect(button.textContent).toContain('Open package to start');
+    expect(button.textContent).not.toContain('Start Episode');
+    expect(button.className).toContain('filled');
+    expect(card.textContent).toContain('Ready');
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByTestId('loc').textContent).toMatch(/^\/shows\/show-1\/events\/ev-ready/));
+    // Opening the package starts nothing: no request that writes was made.
+    for (const verb of ['post', 'put', 'patch', 'delete']) {
+      expect(vi.mocked(api[verb]).mock.calls.filter(([url]) => /generate-episode|\/events\//.test(String(url)))).toEqual([]);
+    }
+  });
+
   test('a card with no organizer, place or deal type says so', async () => {
     renderQueue();
     const card = await screen.findByTestId('event-card-ev-bare');

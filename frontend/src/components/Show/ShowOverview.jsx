@@ -34,13 +34,24 @@ import api from '../../services/api';
 import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
 import { currentThumbnail } from '../../lib/youtubeThumbnailsApi';
 import { episodeCode, episodeName } from '../../lib/episodePipeline';
-import { nextStep } from '../../lib/episodeOverview';
 import { computeEventPackageReadiness, computeEventState, describeMissing } from '../../utils/eventReadinessSections';
-import { CHECKLIST_SECTIONS, computeSectionState, checklistFixTarget, loadProductionChecks } from '../Episodes/EpisodeProductionChecklist';
+import { checklistFixTarget, loadProductionChecks } from '../Episodes/EpisodeProductionChecklist';
+import { checklistSummary, primaryAction } from '../../lib/episodeNextAction';
+import useNextSlot from '../../hooks/useNextSlot';
+import { IN_PRODUCTION, episodesInProduction, resumeEpisode, rememberedEpisodeId } from '../../utils/activeEpisode';
 import './ShowOverview.css';
 import { packageHref } from '../../lib/eventFlow';
 
-export const IN_PRODUCTION = ['draft', 'scripted', 'in_build', 'in_review'];
+// The checklist at a glance and the card's next action live in
+// lib/episodeNextAction, and the season's next slot in hooks/useNextSlot, so
+// other pages can use them without importing this one. They are exported
+// from here as before.
+export { checklistSummary, primaryAction };
+// The working statuses and the episodes in production live in
+// utils/activeEpisode (the official production episode and the episode to
+// resume are worked out there). They are exported from here as before.
+export { IN_PRODUCTION, episodesInProduction };
+
 const STATUS_LABEL = { draft: 'Draft', scripted: 'Scripted', in_build: 'In build', in_review: 'In review', scheduled: 'Scheduled', published: 'Published', archived: 'Archived' };
 const STAT_LABEL = { coins: 'Coins', reputation: 'Reputation', brand_trust: 'Brand Trust', influence: 'Influence', stress: 'Stress' };
 const STAT_ORDER = ['coins', 'reputation', 'brand_trust', 'influence', 'stress'];
@@ -48,13 +59,6 @@ const STAT_ICON = { coins: Coins, reputation: Star, brand_trust: Heart, influenc
 const SECTION_ICON = { brief: ClipboardList, world: MapPin, scene: Clapperboard, wardrobe: Shirt, lookbook: Sparkles, overlays: Smartphone, onscreen: Layers, social: Hash, intelligence: Brain };
 
 const time = (d) => (d ? new Date(d).getTime() || 0 : 0);
-
-/** The episodes in production, in episode order. */
-export function episodesInProduction(episodes) {
-  return (episodes || [])
-    .filter((e) => IN_PRODUCTION.includes(e.status) && e.evaluation_status !== 'accepted')
-    .sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
-}
 
 /** Events whose setup is incomplete, with what each is missing. */
 export function eventsNeedingAttention(events) {
@@ -75,31 +79,6 @@ export function nextReadyEvent(events) {
     const db = b.event_date ? time(b.event_date) : Infinity;
     return da - db;
   })[0] || null;
-}
-
-/** The checklist's sections that report a state (a section may still set unavailableReason). */
-const LIVE_SECTIONS = CHECKLIST_SECTIONS.filter((sec) => !sec.unavailableReason);
-
-/**
- * The checklist at a glance: items done of all items, and each section's
- * state with a short label: "Complete", "Not started" when nothing in it is
- * done, else its required items done ("0 of 1" while only optional items
- * are), or all its items for a section with none required. first_missing is
- * the first required item still open (for the card's fix link).
- */
-export function checklistSummary(checks) {
-  const items = LIVE_SECTIONS.flatMap((sec) => sec.items);
-  const done = items.filter((item) => checks[item.id]).length;
-  const sections = LIVE_SECTIONS.map((sec) => {
-    const { state } = computeSectionState(sec, checks);
-    const required = sec.items.filter((item) => item.required);
-    const counted = required.length ? required : sec.items;
-    const n = counted.filter((item) => checks[item.id]).length;
-    const label = state === 'complete' ? 'Complete' : state === 'needs_setup' ? 'Not started' : `${n} of ${counted.length}`;
-    const firstMissing = (required.length ? required : sec.items).find((item) => !checks[item.id]) || null;
-    return { id: sec.id, title: sec.label, state, label, first_missing: firstMissing?.id || null };
-  });
-  return { done, total: items.length, sections };
 }
 
 /** The seasons the show's episodes are in (1 when none says), ascending. */
@@ -124,32 +103,6 @@ export function episodeIdentity(ep) {
   if (!ep) return '';
   const title = typeof ep.title === 'string' ? ep.title.trim() : '';
   return [episodeCode(ep), title].filter(Boolean).join(' · ');
-}
-
-/**
- * The card's primary action, from what is already known: the next step the
- * Episode Overview would name (lib/episodeOverview nextStep) and, while
- * production is under way, the first checklist section still open. An
- * episode that is not in production, or whose checks have not answered,
- * gets the plain "Open Episode".
- * { label, href, why }.
- */
-export function primaryAction({ episode, showId, summary = null, producing = true }) {
-  const base = `/episodes/${episode.id}`;
-  const open = { key: 'open', label: 'Open Episode', href: `${base}?tab=overview`, why: null };
-  if (!producing) return open;
-  const hasScript = Boolean(typeof episode.script_content === 'string' && episode.script_content.trim());
-  if (!hasScript) {
-    const step = nextStep({ hasScript: false });
-    return { key: step.key, label: step.action, href: `${base}?tab=${step.tab}`, why: 'This episode has no script yet.' };
-  }
-  if (!summary) return open;
-  const step = nextStep({ hasScript: true, checks: { done: summary.done, total: summary.total } });
-  if (step.key === 'results') return { key: step.key, label: step.action, href: `${base}?tab=${step.tab}`, why: step.why };
-  const sec = summary.sections.find((x) => x.state !== 'complete') || null;
-  if (!sec) return { key: step.key, label: 'Open Checklist', href: `${base}?tab=checklist`, why: step.why };
-  const target = sec.first_missing ? checklistFixTarget(sec.first_missing, { episode, showId }) : null;
-  return { key: step.key, section: sec.id, label: `Continue: ${sec.title}`, href: target?.href || `${base}?tab=checklist`, why: step.why };
 }
 
 /**
@@ -202,25 +155,6 @@ export function assetTabs({ clips = [], sceneSets = [], images = [], cues = [], 
     { key: 'phone', label: 'Phone Screens', items: phone.filter((p) => p.generated !== false && (p.url || p.image_url)).map((p) => ({ id: p.id || p.name, title: p.name || p.overlay_type || 'Screen', image: imgOf(p.url, p.image_url), tags: [] })) },
     { key: 'overlays', label: 'Overlays', items: placements.map((p) => ({ id: p.id, title: p.asset?.name || p.label || p.placement_type || 'Overlay', image: imgOf(p.asset?.s3_url_processed, p.asset?.s3_url_raw), tags: [p.placement_type].filter(Boolean) })) },
   ];
-}
-
-function useNextSlot(showId) {
-  const [state, setState] = useState({ loading: true, slot: null, failed: false });
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, failed: false }));
-    try {
-      const r = await api.get(`/api/v1/world/${showId}/season/roadmap`);
-      const roadmap = r.data?.roadmap || null;
-      const slots = (roadmap?.phases || []).flatMap((p) => p.slots || []);
-      const slot = roadmap?.next_slot_number ? slots.find((s) => s.slot_number === roadmap.next_slot_number) || null : null;
-      setState({ loading: false, slot, failed: false, hasSeason: Boolean(roadmap) });
-    } catch (err) {
-      console.error('[ShowOverview] season roadmap load failed:', err);
-      setState({ loading: false, slot: null, failed: true });
-    }
-  }, [showId]);
-  useEffect(() => { load(); }, [load]);
-  return { ...state, reload: load };
 }
 
 function useProductionChecks(episode, showId) {
@@ -330,7 +264,7 @@ const fmtLength = (s) => {
   return Number.isFinite(n) && n > 0 ? `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}` : null;
 };
 
-function NowProducing({ showId, episodes, episode, onPick, checksState, producingId = null }) {
+function NowProducing({ showId, episodes, episode, onPick, checksState, producingId = null, resume = null }) {
   const [menu, setMenu] = useState(false);
   const thumb = useThumbnail(episode);
   const seasons = seasonsOf(episodes);
@@ -364,6 +298,10 @@ function NowProducing({ showId, episodes, episode, onPick, checksState, producin
           <span className="pov-chip is-status">{STATUS_LABEL[status] || status}</span>
           {!producing && producingId && (
             <button type="button" className="pov-link" onClick={() => onPick(null)} data-testid="sov-back-to-producing">Back to the episode in production</button>
+          )}
+          {/* The episode last opened, when it is a later unfinished one: a way back to it, never "Now producing". */}
+          {resume && (
+            <Link className="pov-link" to={`/episodes/${resume.id}`} data-testid="sov-resume">Resume {episodeCode(resume)} (last opened)</Link>
           )}
         </div>
         <div className="pov-switch">
@@ -550,6 +488,11 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
   const episode = useMemo(() => episodes.find((e) => e.id === pickedId) || defaultEpisode(episodes), [episodes, pickedId]);
   // The show's episode in production: the same rule the header chip uses.
   const producingId = useMemo(() => episodesInProduction(episodes)[0]?.id || null, [episodes]);
+  // The episode to resume, offered on the card only when it is not the one in production.
+  const resume = useMemo(() => {
+    const ep = resumeEpisode(episodes, rememberedEpisodeId());
+    return ep && producingId && ep.id !== producingId ? ep : null;
+  }, [episodes, producingId]);
   const checksState = useProductionChecks(episode, showId);
   const attentionRows = useMemo(() => orderAttention(attention, checksState.linkedEvent?.id), [attention, checksState.linkedEvent?.id]);
   const state = charState?.state || {};
@@ -570,7 +513,7 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
 
       <div className="pov-layout">
         <div className="pov-col">
-          <NowProducing showId={showId} episodes={episodes} episode={episode} onPick={setPickedId} checksState={checksState} producingId={producingId} />
+          <NowProducing showId={showId} episodes={episodes} episode={episode} onPick={setPickedId} checksState={checksState} producingId={producingId} resume={resume} />
 
           <section className="pov-card" data-testid="sov-attention">
             <div className="pov-card-head">

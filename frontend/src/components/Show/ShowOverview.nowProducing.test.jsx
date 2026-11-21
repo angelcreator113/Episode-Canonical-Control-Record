@@ -249,3 +249,111 @@ describe('at a phone width (the stylesheets\' rules)', () => {
     expect(wa).not.toMatch(/\.wa-chip-season:hover/);
   });
 });
+
+describe('Now producing and the episode last opened are two things (Evoni, 2026-11-17)', () => {
+  // EP1 is the show's official production episode (the first unfinished in
+  // story order); EP2 is a later unfinished one; EP0 is released.
+  beforeEach(() => { localStorage.removeItem('working-episode-id'); });
+
+  const card = () => screen.getByTestId('sov-producing');
+  const title = () => within(card()).getByTestId('sov-episode-title').textContent;
+  const chip = () => within(card()).getByTestId('sov-producing-chip').textContent;
+
+  test('nothing remembered: the card is the production episode, with no Resume link', async () => {
+    renderIt();
+    expect(title()).toBe('Wearable Experiments');
+    expect(chip()).toBe('Now producing');
+    expect(screen.queryByTestId('sov-resume')).toBeNull();
+  });
+
+  test('EP1 in production, EP2 opened last: the card still opens on EP1 as "Now producing", and offers Resume for EP2', async () => {
+    localStorage.setItem('working-episode-id', 'ep-2');
+    renderIt();
+    expect(title()).toBe('Wearable Experiments');
+    expect(chip()).toBe('Now producing');
+    const resume = within(card()).getByTestId('sov-resume');
+    expect(resume.textContent).toBe('Resume S1 E2 (last opened)');
+    expect(resume.getAttribute('href')).toBe('/episodes/ep-2');
+    // The card's own button still belongs to the production episode.
+    await waitFor(() => expect(within(card()).getByTestId('sov-primary').getAttribute('href')).not.toMatch(/ep-2/));
+    expect(within(card()).getByTestId('sov-episode-code').textContent).toBe('S1 · E1');
+    // Nothing calls the remembered episode "Now producing" or "in production".
+    expect(resume.textContent).not.toMatch(/producing|in production/i);
+  });
+
+  test('the production episode itself was opened last: no Resume link', () => {
+    localStorage.setItem('working-episode-id', 'ep-1');
+    renderIt();
+    expect(chip()).toBe('Now producing');
+    expect(screen.queryByTestId('sov-resume')).toBeNull();
+  });
+
+  test('a remembered episode that is released, deleted, another show\'s, or not real: no Resume link, and the card is unchanged', () => {
+    for (const id of ['ep-0', 'deleted-episode', 'other-show-ep', 'x', '']) {
+      localStorage.setItem('working-episode-id', id);
+      const { unmount } = render(<MemoryRouter><ShowOverview showId="show-1" episodes={[EP1, EP2, EP0]} events={[]} goTo={() => {}} /></MemoryRouter>);
+      expect(title()).toBe('Wearable Experiments');
+      expect(chip()).toBe('Now producing');
+      expect(screen.queryByTestId('sov-resume')).toBeNull();
+      unmount();
+    }
+  });
+
+  test('the dropdown is a temporary viewing pick: it remembers nothing, and Back returns to the production episode even with EP2 remembered', async () => {
+    localStorage.setItem('working-episode-id', 'ep-2');
+    const set = vi.spyOn(Storage.prototype, 'setItem');
+    try {
+      renderIt();
+      fireEvent.change(within(card()).getByLabelText('Episode'), { target: { value: 'ep-0' } });
+      await waitFor(() => expect(title()).toBe('Old One'));
+      expect(chip()).toBe('Viewing');
+      fireEvent.change(within(card()).getByLabelText('Episode'), { target: { value: 'ep-2' } });
+      await waitFor(() => expect(title()).toBe('Second Look'));
+      // A later unfinished episode that is picked, and remembered, is still only viewed.
+      expect(chip()).toBe('Viewing');
+      fireEvent.click(within(card()).getByTestId('sov-back-to-producing'));
+      await waitFor(() => expect(title()).toBe('Wearable Experiments'));
+      expect(chip()).toBe('Now producing');
+      expect(set.mock.calls.filter(([k]) => String(k).startsWith('working-episode'))).toEqual([]);
+    } finally { set.mockRestore(); }
+    expect(localStorage.getItem('working-episode-id')).toBe('ep-2');
+  });
+
+  test('nothing unfinished: the card opens on the newest episode as "Viewing", as before, with no Resume link', () => {
+    localStorage.setItem('working-episode-id', 'ep-0');
+    renderIt({ episodes: [EP0, { ...EP0, id: 'ep-00', episode_number: 4, title: 'Older One' }] });
+    expect(title()).toBe('Old One');
+    expect(chip()).toBe('Viewing');
+    expect(screen.queryByTestId('sov-resume')).toBeNull();
+    expect(screen.queryByTestId('sov-back-to-producing')).toBeNull();
+  });
+
+  test('no episodes: "Nothing in production", and no Resume link', () => {
+    localStorage.setItem('working-episode-id', 'ep-2');
+    renderIt({ episodes: [] });
+    expect(card().textContent).toContain('Nothing in production.');
+    expect(screen.queryByTestId('sov-resume')).toBeNull();
+  });
+
+  test('several seasons: the production episode is the first unfinished by number, and a later season\'s episode opened last is only offered as Resume', () => {
+    const S1 = { ...EP1, id: 's1e3', episode_number: 3, season_number: 1, title: 'Season one, three', season_context: null };
+    const S2 = { ...EP2, id: 's2e25', episode_number: 25, season_number: 2, title: 'Season two, first', script_content: 'x' };
+    localStorage.setItem('working-episode-id', 's2e25');
+    renderIt({ episodes: [S2, S1, EP0] });
+    expect(title()).toBe('Season one, three');
+    expect(chip()).toBe('Now producing');
+    expect(within(card()).getByTestId('sov-resume').getAttribute('href')).toBe('/episodes/s2e25');
+    expect(within(card()).getByLabelText('Season').value).toBe('1');
+  });
+
+  test('storage that cannot be read: the card is the production episode and the page still renders', () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      renderIt();
+      expect(title()).toBe('Wearable Experiments');
+      expect(chip()).toBe('Now producing');
+      expect(screen.queryByTestId('sov-resume')).toBeNull();
+    } finally { spy.mockRestore(); warn.mockRestore(); }
+  });
+});

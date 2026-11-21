@@ -3,6 +3,12 @@
 .ers-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 6px 0 14px; }
 .ers .ers-title { margin: 0; font-family: var(--font-prose); font-size: 26px !important; font-weight: 600; color: var(--lala-ink); }
 .ers-sub { font-size: 14px; color: var(--lala-ink-muted); }
+/* Where the results came from: the event and the Roadmap slot (2026-11-15). */
+.ers-context { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: -6px 0 14px; font-size: 14px; color: var(--lala-ink-muted); }
+.ers-context-part { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ers-context-label { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-lavender-text); }
+.ers-context .ers-link { min-height: 24px; overflow-wrap: anywhere; }
+.ers-context-none { color: var(--lala-ink-muted); }
 .ers-btn { margin-left: auto; padding: 7px 14px; border: 1px solid var(--accent-light); border-radius: 999px; background: var(--surface-card); color: var(--accent-dark); font-size: 13px; font-weight: 600; cursor: pointer; }
 .ers-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
 .ers-card { min-width: 0; padding: 18px 22px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }

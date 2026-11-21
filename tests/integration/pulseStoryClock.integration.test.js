@@ -38,8 +38,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const get = (url) => request(app).get(url).set('Authorization', `Bearer ${token}`);
 
   beforeAll(async () => {
+    // These reads name story moments, later ones and none (the director's view): an ADMIN's since 2026-11-15, when the
+    // server began deciding the moment anyone else reads at (tests/integration/pulseReaderStoryMoment).
     token = TokenService.generateTokenPair({
-      id: 'test-user-pulse-clock', email: 'evoni@clock.dev', name: 'Clock Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-pulse-clock', email: 'evoni@clock.dev', name: 'Clock Test', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
       { show: ids.show, name: `Clock ${tag}`, slug: `clock-${tag}` });

@@ -41,7 +41,7 @@ function sendKnown(res, err) {
   return false;
 }
 
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return badShow(res);

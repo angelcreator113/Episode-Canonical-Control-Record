@@ -12,6 +12,7 @@ const Sequelize = require('sequelize');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const { generateEpisodeFromEvent } = require('../../src/services/episodeGeneratorService');
 const migration = require('../../src/migrations/20260929190000-add-event-deliverables-owed-to');
 
@@ -25,18 +26,26 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('one task list: owed_to and the four sources (T2)', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; an editor is refused them (a test below).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-oneTaskListOwedTo', email: 'admin@oneTaskListOwedTo.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
+  const readOnly = readOnlyTokens('one-task-list');
   const shows = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-one-task-list',
-      email: 'test@one-task-list.dev',
-      name: 'One Task List Test',
-      groups: ['USER', 'EDITOR'],
-      role: 'USER',
+      id: 'test-admin-one-task-list',
+      email: 'admin@one-task-list.dev',
+      name: 'One Task List Admin',
+      groups: ['ADMIN'],
+      role: 'ADMIN',
     }).accessToken;
   });
 
@@ -137,8 +146,26 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(tasks.filter((t) => t.required).map((t) => t.deliverable_id).sort()).toEqual([hostRow, brandRow].sort());
 
     // The Run Sheet and the Career Checklist both read this saved list.
-    const res = await request(app).get(`/api/v1/episodes/${result.episode.id}/todo/social`).set({ Authorization: `Bearer ${token}` });
+    const res = await request(app).get(`/api/v1/episodes/${result.episode.id}/todo/social`).set({ Authorization: `Bearer ${adminToken}` });
     expect(res.status).toBe(200);
     expect(res.body.social_tasks).toEqual(tasks);
+  });
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/todo/social`).set('Authorization', `Bearer ${readOnly.editor}`);
+    expect(res.status).toBe(403);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot add a deliverable or change who it is owed to: the rows are as they were', async () => {
+    const show = await seedShow();
+    const eventId = await seedEvent(show, 'invite');
+    const hostRow = await seedDeliverable(eventId, 'Arrive before the toast', 'host');
+    const base = `/api/v1/world/${show}/events/${eventId}/deliverables`;
+    const state = async () => JSON.stringify(await q('SELECT * FROM event_deliverables WHERE event_id = :eventId ORDER BY id', { eventId }));
+    const before = await state();
+    expect(JSON.parse(before)).toHaveLength(1);
+    await expectWriteRefused(() => request(app).post(base).send({ description: 'Tag the label', owed_to: 'brand' }), readOnly);
+    await expectWriteRefused(() => request(app).put(`${base}/${hostRow}`).send({ owed_to: 'brand' }), readOnly);
+    await expectWriteRefused(() => request(app).delete(`${base}/${hostRow}`), readOnly);
+    expect(await state()).toBe(before);
   });
 });

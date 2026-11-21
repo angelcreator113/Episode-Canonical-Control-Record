@@ -102,8 +102,10 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
         // Start Episode lands on the Overview, whose Planning card shows what
         // the episode inherited and the next decision (Evoni, 2026-10-03,
         // episode creation step 2). This replaces Production -> Assets
-        // (Task #1905, 2026-09-25) for this caller only; EpisodeDetail's
-        // default tab stays 'checklist'.
+        // (Task #1905, 2026-09-25) for this caller. The Overview is also
+        // where the episode page opens with no ?tab= (utils/episodeTabs
+        // DEFAULT_EP_TAB, since 2026-11-12); the tab is named here so this
+        // landing does not depend on that default.
         if (ep?.id) navigate(`/episodes/${ep.id}?tab=overview`);
         else setToast('Episode created but no episode id was returned.');
       } else {

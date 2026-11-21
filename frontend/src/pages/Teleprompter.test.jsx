@@ -3,8 +3,8 @@
 // and record at the same time").
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
 import { useState } from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 vi.mock('../services/api', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
@@ -466,5 +466,130 @@ describe('Teleprompter reader: Read as and silence cues', () => {
     expect(screen.queryByTestId('stp-read-as')).toBeNull();
     expect(screen.queryByTestId('stp-pace-lines')).toBeNull();
     expect(screen.getAllByTestId('stp-para')).toHaveLength(2);
+  });
+});
+
+// ── The way back to the episode's Script tab (PR-06) ──────────────────────
+describe('Teleprompter: the way back to the script (PR-06)', () => {
+  const Where = () => { const l = useLocation(); return <p data-testid="where">{l.pathname + l.search}</p>; };
+  const open = (path) => render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/teleprompter" element={<><Teleprompter /><Where /></>} />
+        <Route path="*" element={<Where />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const where = () => screen.getByTestId('where').textContent;
+  const q = (from, label) => `&from=${encodeURIComponent(from)}${label ? `&fromLabel=${encodeURIComponent(label)}` : ''}`;
+  /** The page's reads for a script source have been made, so nothing is pending when a test ends. */
+  const settled = () => waitFor(() => expect(vi.mocked(api.get).mock.calls.some(([u]) => String(u).startsWith('/api/v1/episodes?show_id=show-1'))).toBe(true));
+  // The page is taken down before the mocks lose their answers (the file's own afterEach restores them next).
+  afterEach(() => { cleanup(); });
+
+  test('an episode with no script: "Back to Script", to that episode\'s Script tab', async () => {
+    open('/teleprompter?episode=ep-2');
+    const back = await screen.findByTestId('stp-back');
+    expect(back.textContent).toBe('← Back to Script');
+    expect(back.getAttribute('href')).toBe('/episodes/ep-2?tab=scripts');
+    await settled();
+    fireEvent.click(back);
+    await waitFor(() => expect(where()).toBe('/episodes/ep-2?tab=scripts'));
+  });
+
+  test('from the Script tab button, the link is on the setup screen once the reader is exited; the episode and beat are kept', async () => {
+    open('/teleprompter?episode=ep-1&beat=11');
+    await screen.findByTestId('teleprompter');
+    // The reader has no new control: the link is on the page behind it, and Exit is the reader's own.
+    expect(screen.getByTestId('teleprompter').querySelector('[data-testid="stp-back"]')).toBeNull();
+    // Exit is the reader's own X; this change adds nothing to it.
+    fireEvent.click(screen.getByTestId('stp-close'));
+    await waitFor(() => expect(screen.queryByTestId('teleprompter')).toBeNull());
+    expect(where()).toBe('/teleprompter?episode=ep-1&beat=11');
+    expect(screen.getByTestId('stp-episode').value).toBe('ep-1');
+    expect(screen.getByTestId('stp-start-beat').value).toBe('11');
+    const back = screen.getByTestId('stp-back');
+    expect(back.getAttribute('href')).toBe('/episodes/ep-1?tab=scripts');
+    await settled();
+    fireEvent.click(back);
+    await waitFor(() => expect(where()).toBe('/episodes/ep-1?tab=scripts'));
+  });
+
+  test('no episode, or pasted text: no way back is shown', async () => {
+    const a = open('/teleprompter');
+    expect(screen.getByTestId('stp-paste')).toBeTruthy();
+    expect(screen.queryByTestId('stp-back')).toBeNull();
+    fireEvent.click(screen.getByTestId('stp-source-script'));
+    await screen.findByTestId('stp-show');
+    expect(screen.queryByTestId('stp-back')).toBeNull();
+    a.unmount();
+    // An episode in the address, then the pasted-text source: the link is for a script only.
+    open('/teleprompter?episode=ep-2');
+    await screen.findByTestId('stp-back');
+    await settled();
+    fireEvent.click(screen.getByTestId('stp-source-paste'));
+    expect(screen.queryByTestId('stp-back')).toBeNull();
+  });
+
+  test('an episode that cannot be loaded: no way back is shown', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    open('/teleprompter?episode=ep-404-not-mocked-as-an-episode');
+    vi.mocked(api.get).mockImplementation(async (url) => { if (String(url).startsWith('/api/v1/episodes/')) throw new Error('nope'); return { data: { data: [] } }; });
+    await waitFor(() => expect(screen.queryByText('Loading the script…')).toBeNull());
+    expect(screen.queryByTestId('stp-back')).toBeNull();
+  });
+
+  test('picking another episode: the link follows it', async () => {
+    open('/teleprompter?episode=ep-2');
+    await screen.findByTestId('stp-back');
+    await settled();
+    fireEvent.change(screen.getByTestId('stp-episode'), { target: { value: 'ep-1' } });
+    await waitFor(() => expect(screen.getByTestId('stp-back').getAttribute('href')).toBe('/episodes/ep-1?tab=scripts'));
+  });
+
+  test('an origin in the address is followed when it is this episode\'s, with its label', async () => {
+    open(`/teleprompter?episode=ep-2${q('/episodes/ep-2?tab=checklist', 'Checklist')}`);
+    const back = await screen.findByTestId('stp-back');
+    expect(back.textContent).toBe('← Back to Checklist');
+    expect(back.getAttribute('href')).toBe('/episodes/ep-2?tab=checklist');
+    await settled();
+  });
+
+  test('a stale origin does not follow her to another episode', async () => {
+    open(`/teleprompter?episode=ep-2${q('/episodes/ep-2?tab=checklist', 'Checklist')}`);
+    await screen.findByTestId('stp-back');
+    await settled();
+    fireEvent.change(screen.getByTestId('stp-episode'), { target: { value: 'ep-1' } });
+    await waitFor(() => expect(screen.getByTestId('stp-back').getAttribute('href')).toBe('/episodes/ep-1?tab=scripts'));
+    expect(screen.getByTestId('stp-back').textContent).toBe('← Back to Script');
+  });
+
+  test('another episode\'s origin, an outside address and a malformed one fall back to the Script tab', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const from of ['/episodes/ep-1?tab=checklist', 'https://evil.example/x', '//evil.example', '/\\evil.example', 'javascript:alert(1)', '/episodes/%E0%A4%A']) {
+      const view = open(`/teleprompter?episode=ep-2${q(from, 'Checklist')}`);
+      const back = await screen.findByTestId('stp-back');
+      expect(back.getAttribute('href')).toBe('/episodes/ep-2?tab=scripts');
+      expect(back.textContent).toBe('← Back to Script');
+      await settled();
+      view.unmount();
+    }
+  });
+
+  test('the link adds no read', async () => {
+    const urls = () => vi.mocked(api.get).mock.calls.map(([u]) => u).sort();
+    const a = open('/teleprompter?episode=ep-2');
+    await screen.findByTestId('stp-back');
+    await settled();
+    const plain = urls();
+    a.unmount();
+    vi.mocked(api.get).mockClear();
+    open(`/teleprompter?episode=ep-2${q('/episodes/ep-2?tab=checklist', 'Checklist')}`);
+    await screen.findByTestId('stp-back');
+    await settled();
+    expect(urls()).toEqual(plain);
+    expect(plain).toHaveLength(3);
+    expect(plain).toContain('/api/v1/episodes/ep-2');
+    expect(plain).toContain('/api/v1/shows');
   });
 });
