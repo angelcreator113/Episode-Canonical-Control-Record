@@ -7,6 +7,11 @@
  * loopback and Unix sockets, and records what it blocked in
  * globalThis.__tripwire. Under it, a guard in report mode (which lets calls
  * through) still cannot send a packet or a DNS query.
+ *
+ * Stage 3a: it also refuses loopback connections to the port of any proxy
+ * named in the environment when it loads (HTTP_PROXY, https_proxy, ALL_PROXY
+ * and the like), read before Jest removes them, so a request routed through
+ * a local proxy cannot leave either. It never prints a proxy's value.
  */
 
 const net = require('net');
@@ -18,14 +23,26 @@ const LOOPBACK = (h) => h === undefined || h === null || h === 'localhost' || h 
   || /^127\./.test(h) || /^::ffff:127\./i.test(h);
 const err = (h) => Object.assign(new Error(`tripwire blocked ${h}`), { code: 'ERR_TRIPWIRE_BLOCKED' });
 
+// Ports of loopback proxies named in the environment (the value itself is never recorded).
+const PROXY_PORTS = new Set();
+for (const [k, v] of Object.entries(process.env)) {
+  if (!/(^|_)(https?|all|socks5?)_?proxy$/i.test(k) || !v) continue;
+  try {
+    const u = new URL(v.includes('://') ? v : `http://${v}`);
+    if (LOOPBACK(u.hostname.replace(/^\[(.*)\]$/, '$1'))) PROXY_PORTS.add(Number(u.port || (u.protocol === 'https:' ? 443 : 80)));
+  } catch (e) { /* not a URL: nothing to block */ }
+}
+globalThis.__tripwireProxyPorts = PROXY_PORTS.size;
+
 const origConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function tripwireConnect(...args) {
   const a = Array.isArray(args[0]) ? args[0] : args;
   const o = a[0];
   const isPath = (o && typeof o === 'object' && o.path) || (typeof o === 'string' && !/^\d+$/.test(o));
   const host = o && typeof o === 'object' ? (o.host || o.hostname) : (typeof a[1] === 'string' ? a[1] : 'localhost');
-  if (!isPath && !LOOPBACK(host)) {
-    seen.push({ layer: 'socket', host });
+  const port = o && typeof o === 'object' ? Number(o.port) : Number(a[0]);
+  if (!isPath && (!LOOPBACK(host) || PROXY_PORTS.has(port))) {
+    seen.push({ layer: PROXY_PORTS.has(port) && LOOPBACK(host) ? 'proxy' : 'socket', host });
     process.nextTick(() => this.destroy(err(host)));
     return this;
   }

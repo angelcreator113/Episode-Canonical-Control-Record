@@ -1,0 +1,50 @@
+{
+  "_readme": "Jest network guard: reviewed local endpoints (Stage 3a). A loopback TCP port or a Unix socket is allowed only when an active entry here covers it; opening a listener does not authorize anything by itself. Every entry needs an id, a kind and a reason. Wildcards, non-loopback hosts and unknown keys are refused. Redis stays disabled until a test shows a legitimate need. Changes need review.",
+  "endpoints": [
+    {
+      "id": "postgres-test",
+      "kind": "tcp-env-url",
+      "env": "TEST_DATABASE_URL",
+      "defaultPort": 5432,
+      "reason": "The test database (CI: the postgres service on localhost:5432; local: a disposable server). Active only when the URL's host is loopback."
+    },
+    {
+      "id": "redis-test",
+      "kind": "tcp-env-hostport",
+      "hostEnv": "REDIS_HOST",
+      "portEnv": "REDIS_PORT",
+      "defaultHost": "127.0.0.1",
+      "defaultPort": 6379,
+      "enabled": false,
+      "reason": "Disabled: no legitimate in-process Redis use by a test has been shown (Stage 3a decision C)."
+    },
+    {
+      "id": "supertest",
+      "kind": "supertest",
+      "module": "supertest",
+      "version": "6.3.4",
+      "file": "lib/test.js",
+      "function": "serverAddress",
+      "reason": "The server supertest starts for request(app): registered by that exact server instance, only when Server#listen is called from the installed supertest's serverAddress(), and only while it listens."
+    },
+    {
+      "id": "test-server",
+      "kind": "test-server",
+      "files": [
+        "tests/unit/services/rawClipSource.test.js",
+        "tests/unit/guards/networkGuard.test.js",
+        "tests/networkGuard/fixtures/stage3a.fixture.test.js"
+      ],
+      "reason": "Loopback servers these test files open themselves and register explicitly with trustTestServer()."
+    },
+    {
+      "id": "test-socket",
+      "kind": "test-socket",
+      "files": [
+        "tests/unit/guards/networkGuard.test.js",
+        "tests/networkGuard/fixtures/stage3a.fixture.test.js"
+      ],
+      "reason": "Unix sockets these test files create in a temporary directory and register explicitly, by exact path, with trustTestSocket()."
+    }
+  ]
+}
