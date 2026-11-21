@@ -38,6 +38,12 @@ const CONSUMPTION_STYLES = [
  * Build the prompt to generate a follow profile from character DNA.
  */
 function buildFollowProfilePrompt(character) {
+  // What they do now is their decided occupation fact (services/characterFacts);
+  // what they did before is their past career, said as that. Their
+  // description is not a job.
+  const facts = character.canon_facts && typeof character.canon_facts === 'object' ? character.canon_facts : null;
+  const occupation = require('./characterFacts').isDecided(facts, 'occupation') ? String(facts.occupation).trim() : null;
+  const before = character.career_history ? String(character.career_history).trim() : null;
   return `You are a character psychologist analyzing a fictional character's social media consumption patterns.
 
 Given this character's psychological profile, generate their follow profile — what kinds of social media creators they'd naturally gravitate toward, and WHY based on their wound, desires, and psychology.
@@ -47,8 +53,8 @@ Given this character's psychological profile, generate their follow profile — 
 **Role:** ${character.role_type || 'unknown'}
 **Age:** ${character.age || 'unknown'}
 **Gender:** ${character.gender || 'unknown'}
-**Occupation:** ${character.career_history || character.description || 'unknown'}
-
+**Occupation:** ${occupation || 'unknown'}
+${before ? `**Before (their past career, not what they do now):** ${before}\n` : ''}
 **Core Desire:** ${character.core_desire || 'unknown'}
 **Core Fear:** ${character.core_fear || 'unknown'}
 **Core Wound:** ${character.core_wound || 'unknown'}
@@ -361,6 +367,7 @@ async function detectFollowTensions(db, charKeyA, charKeyB) {
 }
 
 module.exports = {
+  buildFollowProfilePrompt,
   generateFollowProfile,
   createFollowProfileFromDNA,
   buildFollowInfluenceContext,
