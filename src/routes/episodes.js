@@ -111,6 +111,8 @@ router.delete(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   requireAuth,
+  // It also clears the asset's own episode link; not for a document presentation (V2-2a).
+  require('../utils/documentPresentationAssets').protectDocumentPresentations((req) => req.params.assetId),
   asyncHandler(episodeController.removeEpisodeAsset)
 );
 
@@ -1319,6 +1321,10 @@ router.post('/:id/wardrobe-defaults', requireAuth, async (req, res) => {
       return res.status(400).json({
         error: 'character_name is required',
       });
+    }
+    {
+      const { anyDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
+      if (await anyDocumentPresentation(outfit_asset_id)) return refuseDocumentPresentation(res);
     }
 
     // Upsert: create or update

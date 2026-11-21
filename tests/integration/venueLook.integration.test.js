@@ -24,6 +24,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const lookMigration = require('../../src/migrations/20261002110000-add-world-events-venue-look');
 const { prepareSceneBrief } = require('../../src/services/sceneBriefService');
 
@@ -37,6 +38,8 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { replacements }))[0];
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 const DRAFT = {
   overall: 'A candlelit greenhouse gala in ivory and gold.',
@@ -53,7 +56,9 @@ const reply = (json) => ({ content: [{ text: JSON.stringify(json) }] });
   const show = uuid();
   const location = uuid();
   const sceneSet = uuid();
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('look');
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
   const url = (eventId, tail = '') => `/api/v1/world/${show}/events/${eventId}/venue-look${tail}`;
 
@@ -86,7 +91,7 @@ const reply = (json) => ({ content: [{ text: JSON.stringify(json) }] });
   beforeAll(async () => {
     await lookMigration.up(sequelize.getQueryInterface());
     token = TokenService.generateTokenPair({
-      id: 'test-user-look', email: 'user@look.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-look', email: 'admin@look.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:id, :name, :slug, '{}', NOW(), NOW())`,
       { id: show, name: `Look ${show.slice(0, 8)}`, slug: `look-${show.slice(0, 8)}` });
@@ -227,5 +232,18 @@ const reply = (json) => ({ content: [{ text: JSON.stringify(json) }] });
     const res = await auth(request(app).get(`/api/v1/world/${show}/events/${id}/episode-locations`));
     expect(res.status).toBe(200);
     expect(res.body.data.event_look.overall).toBe(DRAFT.overall);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot save or draft the look: the event is as it was and the AI is not called', async () => {
+    const id = await event();
+    expect((await auth(request(app).put(url(id))).send({ venue_look: { decor: 'Her own décor: peonies and brass.' } })).status).toBe(200);
+    mockCreate.mockResolvedValue(reply(DRAFT));
+    const state = async () => JSON.stringify(await rows('SELECT venue_look, updated_at FROM world_events WHERE id = :id', { id }));
+    const before = await state();
+    await expectWriteRefused(() => request(app).put(url(id)).send({ venue_look: { overall: 'Not theirs to write.' } }), readOnly);
+    await expectWriteRefused(() => request(app).post(url(id, '/draft')).send({}), readOnly);
+    expect(await state()).toBe(before);
+    expect(JSON.parse(before)[0].venue_look.decor).toBe('Her own décor: peonies and brass.');
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 });

@@ -22,6 +22,7 @@ jest.mock('@aws-sdk/client-s3', () => ({
 }));
 
 const request = require('supertest');
+const { writeStatus } = require('../helpers/writeGuard');
 const sharp = require('sharp');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
@@ -89,8 +90,16 @@ const ADMIN = '/api/v1/website-slots';
       expect((await call(request(app))).status).toBe(401);
       expect((await call(request(app)).set('Authorization', `Bearer ${userToken}`)).status).toBe(403);
     }
-    // The public path takes no writes at all.
-    for (const verb of ['post', 'put', 'patch', 'delete']) expect((await request(app)[verb](PUBLIC)).status).toBe(404);
+    // The public path takes no writes at all: there is no such route (an ADMIN's 404). Anyone else gets that
+    // 404 too, or the ADMIN write guard's refusal before it. Nothing is stored either way.
+    const [[before]] = await sequelize.query('SELECT COUNT(*)::int AS n FROM website_slots');
+    for (const verb of ['post', 'put', 'patch', 'delete']) {
+      expect([verb, (await request(app)[verb](PUBLIC)).status]).toEqual([verb, writeStatus(null, 404)]);
+      expect([verb, (await request(app)[verb](PUBLIC).set('Authorization', `Bearer ${userToken}`)).status]).toEqual([verb, writeStatus('user', 404)]);
+      expect([verb, (await asAdmin(request(app)[verb](PUBLIC))).status]).toEqual([verb, 404]);
+    }
+    const [[after]] = await sequelize.query('SELECT COUNT(*)::int AS n FROM website_slots');
+    expect(after.n).toBe(before.n);
   });
 
   it('uploads are refused until SITE_PUBLIC_BUCKET is set; nothing is stored', async () => {

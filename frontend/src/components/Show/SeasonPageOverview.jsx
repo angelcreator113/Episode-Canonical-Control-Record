@@ -30,7 +30,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, ArrowRight, Pencil } from 'lucide-react';
+import { ChevronRight, ArrowRight } from 'lucide-react';
 import SeasonProposals from './SeasonProposals';
 import SeasonKnows from './SeasonKnows';
 import SeasonTwists from './SeasonTwists';
@@ -42,7 +42,7 @@ import SeasonThreads from './SeasonThreads';
 import { SeasonBar, SummaryCard } from './SeasonPageParts';
 import EpisodeLedger from './EpisodeLedger';
 import SeasonAttention from './SeasonAttention';
-import { dateRange, dayLabel, arcPart, partProgress, revealMatrix, slotEvents } from '../../lib/seasonPage';
+import { dayLabel, arcPart, partProgress, revealMatrix, slotEvents } from '../../lib/seasonPage';
 import { useReleaseSchedule, scheduleSentence, startLine, firstDue, deadlineWarning, seasonOf, formatDay } from '../../lib/releaseSchedule';
 
 const GOAL_STATUS = { active: 'Active', paused: 'Paused', completed: 'Complete', failed: 'Missed', upcoming: 'Planned' };
@@ -77,22 +77,21 @@ function ReleasesFact({ api, showId, release = null, seasonNumber = null }) {
   );
 }
 
-function SeasonOverviewCard({ arc, roadmap, onEdit, api, showId, release }) {
+function SeasonOverviewCard({ arc, roadmap, api, showId, release }) {
   const temp = TEMP_CONFIG[arc.emotional_temperature] || TEMP_CONFIG.rising;
   const current = arcPart(arc, arc.current_phase);
   const total = arc.episode_end || roadmap?.slot_count || 24;
   const at = Number(arc.current_episode) || 0;
-  const dates = dateRange(arc.starts_on, arc.ends_on);
   return (
     <section className="szn-card szn-overview" data-testid="szn-overview-card" aria-label="Season Overview">
       <header className="szn-card-head">
         <h2 className="szn-card-title">Season Overview</h2>
-        {onEdit && <button type="button" className="szn-btn is-quiet is-small" onClick={onEdit} data-testid="szn-overview-edit"><Pencil size={14} aria-hidden="true" /> Edit</button>}
       </header>
+      {/* The season's cover and tagline: the header's until S2 (2026-11-20), which keeps a small picture only. */}
+      {arc.cover_url && <img className="szn-overview-cover" src={arc.cover_url} alt="" loading="lazy" data-testid="szn-overview-cover" />}
       <dl className="szn-facts">
-        <div><dt>Title</dt><dd>Season {arc.season_number || 1}: {arc.title}</dd></div>
+        {arc.tagline && <div><dt>Tagline</dt><dd data-testid="szn-tagline">{arc.tagline}</dd></div>}
         <div><dt>Logline</dt><dd>{arc.logline || <span className="szn-muted">No logline yet</span>}</dd></div>
-        <div><dt>Dates</dt><dd>{dates || <span className="szn-muted">No dates yet</span>}</dd></div>
         <ReleasesFact api={api} showId={showId} release={release} seasonNumber={roadmap?.season_number ?? arc.season_number ?? null} />
         <div>
           <dt>Status</dt>
@@ -105,7 +104,7 @@ function SeasonOverviewCard({ arc, roadmap, onEdit, api, showId, release }) {
         </div>
       </dl>
       <h3 className="szn-sub-title">Description</h3>
-      <p className="szn-prose" data-testid="szn-description">{arc.description || <span className="szn-muted">No description yet. Add one with Edit.</span>}</p>
+      <p className="szn-prose" data-testid="szn-description">{arc.description || <span className="szn-muted">No description yet. Add one with Edit Season.</span>}</p>
     </section>
   );
 }
@@ -270,14 +269,17 @@ function GoalsSummary({ goals, goTab }) {
   );
 }
 
-export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goTab, onEdit, onPanel, attention = null, hrefFor = null, release = null, readOnly = false, season = null }) {
+export function SeasonOverviewTab({ plan, api, showId, arc, roadmap, events, goTab, onPanel, attention = null, hrefFor = null, release = null, readOnly = false, season = null, healthDetails = null, glance = null }) {
   return (
     <div className="szn-overview-tab">
       {attention && hrefFor && (
         <SeasonAttention items={attention} hrefFor={hrefFor} loading={Boolean(release && !release.view && !release.error)} />
       )}
+      {/* The season's counts and "What should I do next?", then the stat cards: on the page's header until 2026-11-20. */}
+      {healthDetails}
+      {glance && <section className="szn-glance" aria-label="Production at a glance">{glance}</section>}
       <div className={`szn-overview-row${readOnly ? ' is-two' : ''}`}>
-        <SeasonOverviewCard arc={arc} roadmap={roadmap} onEdit={readOnly ? null : onEdit} api={api} showId={showId} release={release} />
+        <SeasonOverviewCard arc={arc} roadmap={roadmap} api={api} showId={showId} release={release} />
         <SeasonPartsCard arc={arc} roadmap={roadmap} goTab={goTab} />
         {/* The checklist, the proposals and what the season knows act on the season in progress. */}
         {!readOnly && <ChecklistCard plan={plan} onPanel={onPanel} goTab={goTab} />}

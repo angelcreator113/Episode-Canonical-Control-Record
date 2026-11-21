@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const { sequelize } = models;
 
@@ -23,6 +24,8 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const parse = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 const list = (status, version = 1, items = null) => ({
   type: 'shopping_list', status, version, source: 'draft', history: [],
@@ -34,12 +37,14 @@ const list = (status, version = 1, items = null) => ({
 });
 
 (shouldSkip ? describe.skip : describe)('Use an approved shopping list in the episode', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('use-list');
   const shows = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-use-list', email: 'evoni@use-list.dev', name: 'Use List', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-use-list', email: 'evoni@use-list.dev', name: 'Use List', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
@@ -140,5 +145,21 @@ const list = (status, version = 1, items = null) => ({
     const next = await use(ids.ep);
     expect(next.body.data).toMatchObject({ added: 1, removed: 1, version: 4 });
     expect((await tasksOf(ids.ep)).map((t) => [t.slot, t.completed])).toEqual([['dress', false], ['purse', false], ['shoes', true], ['perfume', true]]);
+  });
+
+  guardIt('a viewer and an editor cannot use an approved list: no tasks are written, on a new episode or a started one', async () => {
+    const fresh = await seed(list('approved', 2));
+    await expectWriteRefused(() => request(app).post(url(fresh.ep)), readOnly);
+    expect(await tasksOf(fresh.ep)).toBeNull();
+
+    const started = await seed(list('approved', 3));
+    await run(`INSERT INTO episode_todo_lists (id, episode_id, show_id, event_id, tasks, status, created_at, updated_at)
+               VALUES (:id, :ep, :show, :ev, CAST(:tasks AS jsonb), 'generated', NOW(), NOW())`, {
+      ...started, id: uuid(), tasks: JSON.stringify([{ slot: 'dress', label: 'Outfit for the studio session', required: true, completed: false }]),
+    });
+    const state = async () => JSON.stringify((await run('SELECT * FROM episode_todo_lists WHERE episode_id = :ep', started))[0]);
+    const before = await state();
+    await expectWriteRefused(() => request(app).post(url(started.ep)), readOnly);
+    expect(await state()).toBe(before);
   });
 });

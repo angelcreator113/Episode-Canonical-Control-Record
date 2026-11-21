@@ -71,7 +71,9 @@ const parsed = (v) => {
   }
 };
 
-router.get('/', requireAuth, async (req, res) => {
+// ADMIN: the studio's picture library (Evoni, 2026-11-15). The audience's pictures reach it through the feed and
+// The Pulse's profiles, which give approved, public, released pictures only; this read returns the stored row.
+router.get('/', ...admin, async (req, res) => {
   try {
     const items = await media().listFor(models(), {
       entityType: req.query.entity_type, entityId: req.query.entity_id, audience: media().audienceOf(req.user),
@@ -110,7 +112,7 @@ router.post('/:id/variations', ...admin, aiRateLimiter, async (req, res) => {
   }
 });
 
-router.get('/:id/family', requireAuth, async (req, res) => {
+router.get('/:id/family', ...admin, async (req, res) => {
   try {
     return res.json({ success: true, ...(await require('../services/mediaVariations').familyOf(models(), req.params.id, { audience: media().audienceOf(req.user) })) });
   } catch (err) {
@@ -118,7 +120,7 @@ router.get('/:id/family', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/:id/sources', requireAuth, async (req, res) => {
+router.get('/:id/sources', ...admin, async (req, res) => {
   try {
     const audience = media().audienceOf(req.user);
     await media().getAsset(models(), req.params.id, { audience });
@@ -128,7 +130,7 @@ router.get('/:id/sources', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/:id', requireAuth, async (req, res) => {
+router.get('/:id', ...admin, async (req, res) => {
   try {
     return res.json({ success: true, asset: await media().getAsset(models(), req.params.id, { audience: media().audienceOf(req.user) }) });
   } catch (err) {

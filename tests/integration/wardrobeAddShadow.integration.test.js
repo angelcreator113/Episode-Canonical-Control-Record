@@ -18,6 +18,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const wardrobeImageService = require('../../src/services/wardrobeImageService');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const { sequelize } = models;
 
@@ -27,15 +28,19 @@ const shouldSkip =
   !process.env.DATABASE_URL?.includes('episode_metadata_test');
 
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('POST /wardrobe/:id/add-shadow (Task #2334)', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('add-shadow');
   const ids = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-add-shadow', email: 'test@add-shadow.dev', name: 'Add Shadow Test',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-add-shadow', email: 'admin@add-shadow.dev', name: 'Add Shadow Admin',
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     jest.spyOn(console, 'log').mockImplementation(() => {});
   });
@@ -85,5 +90,23 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
     const [[row]] = await run('SELECT s3_url_processed, s3_key_processed FROM wardrobe WHERE id = :id', { id });
     expect(row).toEqual({ s3_url_processed: 'https://example.test/coat-shadow.png', s3_key_processed: 'wardrobe/coat-shadow.png' });
+  });
+
+  guardIt('signed out, a viewer and an editor cannot add a shadow: the item is as it was, nothing is downloaded or uploaded', async () => {
+    const id = crypto.randomUUID();
+    ids.push(id);
+    await run(`INSERT INTO wardrobe (id, name, clothing_category, character, s3_url, created_at, updated_at)
+               VALUES (:id, 'Cut-out coat', 'outerwear', 'lala', 'https://example.test/coat.png', NOW(), NOW())`, { id });
+    axios.get.mockReset();
+    axios.get.mockResolvedValue({ data: await rgbaPng() });
+    const upload = jest.spyOn(wardrobeImageService, 'uploadWardrobeImage').mockReset()
+      .mockResolvedValue({ s3Url: 'https://example.test/never.png', s3Key: 'wardrobe/never.png' });
+    const state = async () => JSON.stringify((await run('SELECT s3_url, s3_url_processed, s3_key_processed, updated_at FROM wardrobe WHERE id = :id', { id }))[0]);
+    const before = await state();
+    await expectWriteRefused(() => request(app).post(`/api/v1/wardrobe/${id}/add-shadow`).send({}), readOnly);
+    expect(await state()).toBe(before);
+    expect(JSON.parse(before)).toMatchObject([{ s3_url_processed: null }]);
+    expect(axios.get).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
   });
 });

@@ -33,6 +33,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const sceneGen = require('../../src/services/sceneGenerationService');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const approvedMigration = require('../../src/migrations/20261001220000-world-locations-approved-base');
 const venueLookMigration = require('../../src/migrations/20261002110000-add-world-events-venue-look');
 const kindMigration = require('../../src/migrations/20261002120000-add-scene-angle-kind');
@@ -50,10 +51,14 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { replacements }))[0];
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Dressed angles (§8(hh) L10)', () => {
   const show = uuid();
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('dressed');
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
   const dressedUrl = (ep, angleId, tail) => `/api/v1/episode-brief/${ep}/dressed-angles/${angleId}/${tail}`;
 
@@ -107,7 +112,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const qi = sequelize.getQueryInterface();
     for (const m of [approvedMigration, venueLookMigration, kindMigration, looksMigration, chosenMigration, lookAnglesMigration]) await m.up(qi, Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-dressed', email: 'user@dressed.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-dressed', email: 'admin@dressed.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :slug, '{}', NOW(), NOW())`,
       { show, name: `Dressed ${show.slice(0, 8)}`, slug: `dressed-${show.slice(0, 8)}` });
@@ -254,5 +259,25 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(res.body.data.angles[0].dressed).toMatchObject({ status: 'complete', image_url: 'https://x/dressed.jpg' });
     const none = await auth(request(app).get(`/api/v1/episode-brief/${w.ep}/dressed-angles?scene_set_id=${w.home}`));
     expect(none.body.data).toEqual({ look: null, angles: [] });
+  });
+
+  guardIt('signed out, a viewer and an editor cannot generate or upload a dressed angle: no row, no image call, nothing stored', async () => {
+    const w = await world();
+    const dressed = jest.spyOn(sceneGen, 'generateDressedStill').mockResolvedValue({ stillUrl: 'https://x/never.jpg', cost: 0.04 });
+    const { PutObjectCommand } = require('@aws-sdk/client-s3');
+    const puts = PutObjectCommand.mock.calls.length;
+    const state = async () => JSON.stringify({
+      dressed: await rows('SELECT * FROM scene_set_look_angles WHERE look_id = :look', { look: w.lookId }),
+      angle: await rows('SELECT still_image_url, generation_status, updated_at FROM scene_angles WHERE id = :angle', { angle: w.angle }),
+      look: await rows('SELECT status, image_url, updated_at FROM scene_set_looks WHERE id = :look', { look: w.lookId }),
+    });
+    const before = await state();
+    await expectWriteRefused(() => request(app).post(dressedUrl(w.ep, w.angle, 'generate')).send({}), readOnly);
+    await expectWriteRefused(() => request(app).post(dressedUrl(w.ep, w.angle, 'brief')).send({}), readOnly);
+    await expectWriteRefused(() => request(app).post(dressedUrl(w.ep, w.angle, 'upload'))
+      .attach('images', Buffer.from('fake-png'), { filename: 'door.png', contentType: 'image/png' }), readOnly);
+    expect(await state()).toBe(before);
+    expect(dressed).not.toHaveBeenCalled();
+    expect(PutObjectCommand.mock.calls.length).toBe(puts);
   });
 });

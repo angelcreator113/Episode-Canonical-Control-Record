@@ -12,6 +12,7 @@ const sharp = require('sharp');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const { sequelize } = models;
 
@@ -22,14 +23,18 @@ const shouldSkip =
 
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, background: { r, g: 120, b: 160 } } }).png().toBuffer();
 
 (shouldSkip ? describe.skip : describe)("Episode Lookbook: data and upload routes", () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
   // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
-  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  // suite reads them as one; an editor is refused them (a test below).
   const adminToken = TokenService.generateTokenPair({ id: 'test-admin-episodeLookbook', email: 'admin@episodeLookbook.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
+  const readOnly = readOnlyTokens('lookbook');
   const shows = [];
   const savedBuckets = {};
   const sets = [];
@@ -38,7 +43,7 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
     // No bucket in tests: uploads are stored as data URLs (the uploadPng rule).
     for (const k of ['S3_PRIMARY_BUCKET', 'AWS_S3_BUCKET']) { savedBuckets[k] = process.env[k]; delete process.env[k]; }
     token = TokenService.generateTokenPair({
-      id: 'test-user-lookbook', email: 'test@lookbook.dev', name: 'Lookbook Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-lookbook', email: 'admin@lookbook.dev', name: 'Lookbook Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
@@ -308,8 +313,29 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
     const res = await asAdmin(request(app).get(base(ids.ep)));
     expect([res.body.data.event, res.body.data.scene_set, res.body.data.venue_options, res.body.data.texture_pieces]).toEqual([null, null, [], []]);
   });
-  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
-    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/lookbook`).set('Authorization', `Bearer ${token}`);
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/lookbook`).set('Authorization', `Bearer ${readOnly.editor}`);
     expect(res.status).toBe(403);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot add, sort or delete a photo, or save the fields or the venue: the Lookbook is as it was', async () => {
+    const ids = await seed();
+    const v = await seedVenue(ids);
+    const up = await upload(ids.ep, { category: 'lips' });
+    const id = up.body.data.images[0].id;
+    await run("UPDATE episode_lookbooks SET sheet_status = 'approved', approved_at = NOW(), sheet_inputs_hash = :h WHERE episode_id = :ep", { ...ids, h: 'x'.repeat(64) });
+    const state = async () => JSON.stringify({
+      lookbook: (await run('SELECT * FROM episode_lookbooks WHERE episode_id = :ep', ids))[0],
+      images: (await run('SELECT * FROM episode_lookbook_images WHERE episode_id = :ep ORDER BY id', ids))[0],
+    });
+    const before = await state();
+    const image = await png();
+    await expectWriteRefused(() => request(app).post(`${base(ids.ep)}/images`).field('category', 'hero')
+      .attach('files', image, { filename: 'look.png', contentType: 'image/png' }), readOnly);
+    await expectWriteRefused(() => request(app).patch(`${base(ids.ep)}/images/${id}`).send({ category: 'hero' }), readOnly);
+    await expectWriteRefused(() => request(app).delete(`${base(ids.ep)}/images/${id}`), readOnly);
+    await expectWriteRefused(() => request(app).put(base(ids.ep)).send({ tagline: 'changed' }), readOnly);
+    await expectWriteRefused(() => request(app).put(`${base(ids.ep)}/venue`).send({ source: 'scene_angle', ref_id: v.angle, in_lookbook: true }), readOnly);
+    expect(await state()).toBe(before);
   });
 });

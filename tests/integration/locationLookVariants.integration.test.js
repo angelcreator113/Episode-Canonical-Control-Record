@@ -30,6 +30,7 @@ const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
 const sceneGen = require('../../src/services/sceneGenerationService');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const migration = require('../../src/migrations/20261015150000-create-location-look-variants');
 const perSetMigration = require('../../src/migrations/20261015170000-location-look-variants-per-set');
 
@@ -44,9 +45,13 @@ const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { replacements }))[0];
 const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Times & seasons of the everyday look', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('variants');
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
   const url = (setId, tail = '') => `/api/v1/scene-sets/${setId}/look-variants${tail}`;
 
@@ -74,7 +79,7 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     await migration.up(sequelize.getQueryInterface(), Sequelize);
     await perSetMigration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-variants', email: 'user@variants.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-variants', email: 'admin@variants.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {
@@ -281,6 +286,23 @@ const PNG = Buffer.from('89504e470d0a1a0a', 'hex');
     await perSetMigration.up(sequelize.getQueryInterface(), Sequelize);
     expect((await variant(loc, 'time', 'afternoon')).scene_set_id).toBe(set);
     expect(await variant(orphanLoc, 'time', 'afternoon')).toBeUndefined();
+  });
+
+  guardIt('signed out, a viewer and an editor cannot generate, upload or remove a variant: the slots are as they were, nothing stored or generated', async () => {
+    const { loc, set } = await everyday({ front: true });
+    await run(`INSERT INTO location_look_variants (world_location_id, scene_set_id, kind, value, status, source, image_url, created_at, updated_at)
+               VALUES (:loc, :set, 'time', 'morning', 'complete', 'uploaded', 'https://x/mine.jpg', NOW(), NOW())`, { loc, set });
+    const dressed = jest.spyOn(sceneGen, 'generateDressedStill').mockResolvedValue({ stillUrl: 'https://x/never.jpg', cost: 0.04 });
+    const state = async () => JSON.stringify(await rows('SELECT * FROM location_look_variants WHERE world_location_id = :loc ORDER BY id', { loc }));
+    const before = await state();
+    expect(JSON.parse(before)).toHaveLength(1);
+    await expectWriteRefused(() => request(app).post(url(set, '/time/night/generate')).send({}), readOnly);
+    await expectWriteRefused(() => request(app).post(url(set, '/season/winter/generate')).send({}), readOnly);
+    await expectWriteRefused(() => request(app).post(url(set, '/season/rain/upload')).attach('image', PNG, { filename: 's.png', contentType: 'image/png' }), readOnly);
+    await expectWriteRefused(() => request(app).delete(url(set, '/time/morning')), readOnly);
+    expect(await state()).toBe(before);
+    expect(dressed).not.toHaveBeenCalled();
+    expect(mockS3Send).not.toHaveBeenCalled();
   });
 });
 

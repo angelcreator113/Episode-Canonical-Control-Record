@@ -45,6 +45,7 @@ const { Sequelize } = require('sequelize');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const approvedMigration = require('../../src/migrations/20261001220000-world-locations-approved-base');
 const venueLookMigration = require('../../src/migrations/20261002110000-add-world-events-venue-look');
 const looksMigration = require('../../src/migrations/20261002130000-create-scene-set-looks');
@@ -60,10 +61,14 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { replacements }))[0];
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('"Generate this look": the base path (DJ bugs 1-3)', () => {
   const show = uuid();
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('lookbase');
   const saved = {};
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
   const url = (ev, tail = '') => `/api/v1/world/${show}/events/${ev}/look${tail}`;
@@ -99,7 +104,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const qi = sequelize.getQueryInterface();
     for (const m of [baseModelMigration, approvedMigration, venueLookMigration, looksMigration]) await m.up(qi, Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-look-base', email: 'user@lookbase.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-look-base', email: 'admin@lookbase.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :slug, '{}', NOW(), NOW())`,
       { show, name: `Look base ${show.slice(0, 8)}`, slug: `look-base-${show.slice(0, 8)}` });
@@ -215,5 +220,23 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     { set: lookStuck.set, ev: lookStuck.ev });
     got = await auth(request(app).get(url(lookStuck.ev)));
     expect(got.body.data.look).toMatchObject({ status: 'failed', error: 'Timed out: no image after 15 minutes' });
+  });
+
+  guardIt('signed out, a viewer and an editor cannot generate the look or ask for its brief: the set is as it was, no provider is called', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-anthropic';
+    const v = await venue();
+    const state = async () => JSON.stringify({
+      set: await rows('SELECT generation_status, base_still_url, base_generation, visual_language, updated_at FROM scene_sets WHERE id = :set', v),
+      looks: await rows('SELECT * FROM scene_set_looks WHERE scene_set_id = :set OR event_id = :ev', v),
+      event: await rows('SELECT scene_set_id, venue_look, updated_at FROM world_events WHERE id = :ev', v),
+    });
+    const before = await state();
+    await expectWriteRefused(() => request(app).post(url(v.ev, '/generate')).send({}), readOnly);
+    await expectWriteRefused(() => request(app).post(url(v.ev, '/brief')).send({}), readOnly);
+    await new Promise((r) => setTimeout(r, 100)); // a background run would have started by now
+    expect(await state()).toBe(before);
+    expect(JSON.parse(before).set[0].generation_status).toBe('pending');
+    expect(axios.post).not.toHaveBeenCalled();
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 });
