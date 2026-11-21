@@ -54,6 +54,8 @@ No new page, table, service, dashboard, wizard or AI agent is introduced by this
 6. Game-facing homepage links stay, in a secondary section, initially.
 7. Show navigation opens the Season page, with a clear route to Producer Mode. Legacy redirects and links are preserved.
 
+**Decision 7, amended 2026-11-20 (Evoni).** Season is one of Producer Mode's six main areas, on its own address and page; it is not a place beside Producer Mode. The detail, and what is already built, is in §6.3.
+
 ### 2.2 Constraints
 
 - Resume memory is **browser-only** for now. Existing saved work and state keep working.
@@ -96,7 +98,7 @@ That blueprint is a design proposal following Evoni's rulings of 2026-11-04 (rec
 | **Ruling 3** — one Complete workflow; the proposed EPISODE "Complete" tab with `/evaluate` folding in (blueprint §4, §8 step 4) | **Stands, outside this sequence.** R1–R5 leave the episode's tabs as they are. The audit's own consolidation list (its Part 7 I) is **not** authoritative; ruling 3 and the blueprint govern completion |
 | **Sidebar** — "introduce the five workspace headings" WORLD, SHOWS, SEASON, EPISODE, LALA (blueprint §8 step 2; ruling 1 names these as target workspaces) | **Conflict; superseded for the sidebar by §6.3 of this plan.** R5 groups the sidebar as PRODUCE, FRANCHISE, WRITE, STUDIO, SYSTEM with a pinned Current Episode row. The workspaces remain the ownership vocabulary: FRANCHISE holds what the blueprint calls WORLD; PRODUCE holds SHOWS, SEASON and EPISODE destinations. **This needs Evoni's confirmation at R5**, because it departs from the wording of ruling 1 |
 | **LALA workspace** (Lala home, Money, Stats, Closet, Goals, Relationships, Phone) | **Deferred, not cancelled.** Not built in R1–R5. Until then the "Lala's journey" material stays on Home in the secondary section (decision 6) |
-| **Show home** as the landing for a show (`ShowOverview`), then Season home | **Superseded for navigation** by decision 7: a show opens its Season page; Producer Mode's Overview stays one click away |
+| **Show home** as the landing for a show (`ShowOverview`), then Season home | **Superseded for navigation** by decision 7: a show opens its Season page; Producer Mode's Overview stays one click away. As amended on 2026-11-20 (§6.3): the Season page is one of Producer Mode's six areas, it opens on its own Overview, and Producer Mode's Overview is the first tab of the shared bar above it |
 | **SEASON › Event Board** (ranked candidates for a slot, as a new page) | **Stands as a later proposal.** S2 (§5.2) offers "use an existing event" and "create a new event for this slot" inside the existing slot panel and must not block an Event Board |
 | **Event Package** "readiness (enforced on the server)" | **Refined.** How and when is Phase 5: tiers Block / Confirm / Info, report-only first (§2.2). No enforcement change in this sequence |
 | **Journey** "Start Episode (uses the pencilled slot)" | **Stands and is strengthened** by S1–S4 |
@@ -177,6 +179,8 @@ No server write is made, so `updated_at` is undisturbed and no page view is logg
 ---
 
 ## 5. Slot-aware planning (S1–S4)
+
+**Two different things are called S1 to S4.** In this document S1 to S4 are always the four slot-planning steps of §5.2 (PR-10 to PR-13 in §9): which slot a new episode takes, and the Start that places it. The Season page's own redesign also has phases named S1 to S4 (its landing tab, header, density and tab grouping). That is separate work with its own pull requests; it is not planned or tracked here, and nothing in §5 or §9 refers to it. Where this document mentions it, it says "Season page redesign".
 
 ### 5.1 Today
 
@@ -272,7 +276,7 @@ Top to bottom:
 
 | # | Section | Built from |
 |---|---|---|
-| 1 | Show header: name, season position, links to Season Roadmap and Producer Mode | existing hero; `seasonStats`; `useActiveShow` |
+| 1 | Show header: name, season position, links to the Season Roadmap (a link that names the Roadmap: `seasonPageHref` with the `roadmap` tab) and Producer Mode | existing hero; `seasonStats`; `useActiveShow` |
 | 2 | **Now producing**: what, where I left off (**Resume**), what next (**Next**), "Open episode" | the `NowProducing` card extracted from `ShowOverview`; `primaryAction`; `activeEpisode` |
 | 3 | **Plan next episode**: next slot, its story purpose, its pencilled event → the Roadmap with that slot open | `useNextSlot`; `seasonPageHref` |
 | 4 | **Needs attention**: what is blocking | `attentionItems`; the existing To-Do card |
@@ -282,6 +286,7 @@ Top to bottom:
 
 - Empty states: no show → create one; no season → set one up; no episode → "Plan next episode" leads; a failed read says so and offers Retry.
 - The Plan card links into the Roadmap. **Home never starts an episode.**
+- Both Roadmap links above name their destination. A plain link to the Season page opens its Overview (§6.3); a link that names the Roadmap, or carries a slot, opens the Roadmap.
 
 ### 6.2 Episode Command Center (the Overview tab)
 
@@ -317,7 +322,7 @@ An existing test requires the text "Producer Mode" to be absent from the Overvie
 ```
 Home
 ▸ Current Episode                          → the Resume target; hidden when none
-PRODUCE     Season Roadmap · Episodes · Events & Opportunities · Editor · Teleprompter
+PRODUCE     Season Roadmap (names the Roadmap) · Episodes · Events & Opportunities · Editor · Teleprompter
 FRANCHISE   Shows (each show → its Season page) · LalaVerse · Characters · Relationships · The Pulse
 WRITE       Stories (Threads · Story Calendar · Story Evaluation) · Writing desk
 STUDIO      Assets · Scene Sets · Wardrobe · Templates
@@ -326,10 +331,26 @@ Search · Settings · Admin
 
 - Show-scoped rows are links built from the active show; with none, they open the show chooser.
 - Characters and Relationships are hidden for non-admins; both already refuse them on arrival.
-- Show links open the Season page. "Producer Mode" is linked from Home, the Shows card and the Season page. Breadcrumbs stop nesting Season under Producer Mode.
+- Show links open the Season page. "Producer Mode" is linked from Home and the Shows card. ~~Breadcrumbs stop nesting Season under Producer Mode.~~ Withdrawn on 2026-11-20; see the amendment below.
 - **The `/shows/:id` redirect and its old-tab mapping are untouched,** so saved links keep working.
 - Naming: four leftover "feed" strings become The Pulse wording; the breadcrumb "Universe" becomes "LalaVerse". "Lala's posts", "JustAWoman's Feed" and "Phone" are different things and keep their names.
 - See §3.1 for the conflict with the blueprint's workspace headings.
+
+**Amended 2026-11-20 (Evoni): Season belongs to Producer Mode.**
+
+*Decided:*
+
+- Season is one of the six main Producer Mode areas (Overview, Season, Assets, Cast & Continuity, World, Release). It may keep its own address (`/shows/:showId/season`) and page component (`SeasonPage`), but it is part of the same Producer Mode workspace.
+- The breadcrumb hierarchy is Home → Shows → Producer Mode → Season. The earlier line in this section, that breadcrumbs would stop nesting Season under Producer Mode, is withdrawn.
+- The ordinary Season address opens the Season page's Overview. An explicit deep link keeps its destination.
+
+*Built, on `main`:*
+
+- **One navigation for both pages** (PR #3910). The six tabs are one component, `ProducerNav`, drawn by Producer Mode (`WorldAdmin`) and by the Season page from one list (`PRODUCER_TABS`; addresses from `producerTabHref`). On the Season page it sits above the season's header with Season open, and it replaces the old "← Producer Mode" back link: the bar's Overview tab is the way back.
+- **The breadcrumb** already has that hierarchy (`Breadcrumbs`, the Season page's crumbs). Nothing was changed for it.
+- **Where the Season address lands** (PR #3908, `defaultSeasonTab` and `tabForAddress` in `lib/seasonPage`). With no `tab`, the Season page opens Overview. An address that carries context still opens the place that context belongs to: a slot, view, part or status opens the Roadmap; an event or event filter opens Events; `deal_with` opens Opportunities. An address that names a tab opens that tab. `seasonPageHref` builds all of these.
+
+*Still planned, not built:* the sidebar of this section, and what remains of PR-21 (§9).
 
 ---
 
@@ -532,7 +553,7 @@ Every pull request follows the repo's loop (`DEVELOPMENT_WORKFLOW.md`) and the e
 |---|---|---|
 | 19 | Sidebar regrouped; show-scoped links; admin-only rows hidden for non-admins | 09 |
 | 20 | Current Episode row; the sidebar Teleprompter opens on it | 03, 04, 19 |
-| 21 | Show links open the Season page; Producer Mode links; breadcrumbs | 04, 19 |
+| 21 | Show links open the Season page; Producer Mode links from Home and the Shows card. **Already on `main`, outside this sequence, and no longer part of this row:** the Season page's route to Producer Mode (the shared bar, PR #3910) and the Season address opening Overview (PR #3908). **Dropped:** the breadcrumb change; the hierarchy Home → Shows → Producer Mode → Season stays (§6.3, 2026-11-20). What remains is checked against the code when this row is scoped | 04, 19 |
 | 22 | Naming | — |
 
 **Acceptance tests per pull request** are in `docs/reads/2026-11-17-studio-home-refined-plan.md` (Phases 0–3) and §5.5 and §7 here; each pull request restates its own before work starts.
