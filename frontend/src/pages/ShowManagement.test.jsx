@@ -130,9 +130,35 @@ describe('My Shows layout list', () => {
     const a = showActivity(EPS, Date.parse('2026-10-23T00:00:00Z'));
     expect(a.released).toBe(1);
     expect(a.inProgress).toBe(2);
-    expect(a.current.id).toBe('e3');
+    // The one to continue is the show's official production episode: the
+    // first unfinished one in story order (Evoni, 2026-11-17). It was the
+    // most recently updated one, e3.
+    expect(a.current.id).toBe('e2');
+    expect(a.producing.id).toBe('e2');
     expect(a.nextAir).toEqual({ date: '2026-11-01T12:00:00Z', code: 'S1 E2' });
-    expect(showActivity([], 0)).toEqual({ released: 0, inProgress: 0, current: null, nextAir: null });
+    expect(showActivity([], 0)).toEqual({ released: 0, inProgress: 0, current: null, producing: null, nextAir: null });
+  });
+
+  test('showActivity: the episode last opened is the one to continue, and never the one in production', () => {
+    const now = Date.parse('2026-10-23T00:00:00Z');
+    // e2 is officially in production; e3 was opened last.
+    const a = showActivity(EPS, now, 'e3');
+    expect(a.current.id).toBe('e3');
+    expect(a.producing.id).toBe('e2');
+    // Remembered: finished, archived, deleted, another show's, or nothing real.
+    for (const id of ['e1', 'e0', 'deleted', 'other-show-episode', '', null, undefined]) {
+      const b = showActivity(EPS, now, id);
+      expect(b.current.id).toBe('e2');
+      expect(b.producing.id).toBe('e2');
+    }
+    // The counts do not depend on what was opened.
+    expect(showActivity(EPS, now, 'e3')).toMatchObject({ released: 1, inProgress: 2 });
+  });
+
+  test('showActivity: nothing unfinished means nothing to continue and nothing in production', () => {
+    const done = [EPS[0], { id: 'e7', episode_number: 7, status: 'draft', evaluation_status: 'accepted' }, EPS[3]];
+    expect(showActivity(done, 0, 'e1')).toMatchObject({ current: null, producing: null });
+    expect(showActivity(done, 0)).toMatchObject({ current: null, producing: null });
   });
 
   test('sameNameTag tells same-name shows apart and leaves the rest alone', () => {
@@ -154,6 +180,7 @@ describe('My Shows layout list', () => {
     ];
     beforeEach(() => {
       localStorage.setItem('primeStudios.activeShowId', 'aaaaaaaa-1');
+      localStorage.removeItem('working-episode-id');
       vi.mocked(apiClient.get).mockReset().mockImplementation(async (url) => {
         if (url.includes('/episodes?show_id=aaaaaaaa-1')) return { data: { data: EPS } };
         if (url.includes('/episodes?')) return { data: { data: [] } };
@@ -175,10 +202,86 @@ describe('My Shows layout list', () => {
       renderPage();
       const first = await waitFor(() => screen.getAllByTestId('sm-card')[0]);
       await waitFor(() => expect(within(first).getByTestId('sm-card-stages').textContent).toMatch(/^2 in production · 1 released/));
-      expect(within(first).getByTestId('sm-continue').getAttribute('href')).toBe('/episodes/e3');
-      expect(within(first).getByTestId('sm-continue').textContent).toContain('Continue S1 E3');
+      // Continue names the official production episode (story order), with no
+      // "In production" line beside it since they are the same episode.
+      expect(within(first).getByTestId('sm-continue').getAttribute('href')).toBe('/episodes/e2');
+      expect(within(first).getByTestId('sm-continue').textContent).toContain('Continue S1 E2');
+      expect(within(first).queryByTestId('sm-in-production')).toBeNull();
       // A show with no episodes says nothing more.
       expect(within(screen.getAllByTestId('sm-card')[1]).queryByTestId('sm-card-stages')).toBeNull();
+    });
+
+    test('E2 in production, E3 opened last: Continue resumes E3 and the card names E2 as in production', async () => {
+      localStorage.setItem('working-episode-id', 'e3');
+      renderPage();
+      const first = await waitFor(() => screen.getAllByTestId('sm-card')[0]);
+      await waitFor(() => expect(within(first).getByTestId('sm-continue').getAttribute('href')).toBe('/episodes/e3'));
+      expect(within(first).getByTestId('sm-continue').textContent).toContain('Continue S1 E3');
+      const line = within(first).getByTestId('sm-in-production');
+      expect(line.textContent).toBe('In production: S1 E2');
+      expect(within(line).getByRole('link').getAttribute('href')).toBe('/episodes/e2');
+      // The resumed episode is never called "in production".
+      expect(within(first).getByTestId('sm-continue').textContent).not.toMatch(/in production/i);
+    });
+
+    test('a remembered episode that is finished, gone, or not real is passed over', async () => {
+      for (const id of ['e1', 'e0', 'deleted-episode', '']) {
+        localStorage.setItem('working-episode-id', id);
+        const { unmount } = renderPage();
+        const first = await waitFor(() => screen.getAllByTestId('sm-card')[0]);
+        await waitFor(() => expect(within(first).getByTestId('sm-continue').getAttribute('href')).toBe('/episodes/e2'));
+        expect(within(first).queryByTestId('sm-in-production')).toBeNull();
+        unmount();
+      }
+    });
+
+    test('two shows: each card resumes against its own episodes', async () => {
+      const OTHER = [
+        { id: 'o1', season_number: 1, episode_number: 1, title: 'Other one', status: 'draft', updated_at: '2026-10-02T00:00:00Z' },
+        { id: 'o2', season_number: 1, episode_number: 2, title: 'Other two', status: 'draft', updated_at: '2026-10-03T00:00:00Z' },
+      ];
+      vi.mocked(apiClient.get).mockReset().mockImplementation(async (url) => {
+        if (url.includes('/episodes?show_id=aaaaaaaa-1')) return { data: { data: EPS } };
+        if (url.includes('/episodes?show_id=bbbbbbbb-2')) return { data: { data: OTHER } };
+        return { data: { data: TWINS } };
+      });
+      // The episode last opened belongs to the second show.
+      localStorage.setItem('working-episode-id', 'o2');
+      renderPage();
+      await waitFor(() => expect(screen.getAllByTestId('sm-continue')).toHaveLength(2));
+      const [first, second] = screen.getAllByTestId('sm-card');
+      // The first show does not have that episode: its own production episode, and no extra line.
+      expect(within(first).getByTestId('sm-continue').getAttribute('href')).toBe('/episodes/e2');
+      expect(within(first).queryByTestId('sm-in-production')).toBeNull();
+      // The second show resumes it, and names its own production episode.
+      expect(within(second).getByTestId('sm-continue').getAttribute('href')).toBe('/episodes/o2');
+      expect(within(second).getByTestId('sm-in-production').textContent).toBe('In production: S1 E1');
+    });
+
+    test('a show with nothing unfinished has no Continue and no "In production" line', async () => {
+      vi.mocked(apiClient.get).mockReset().mockImplementation(async (url) => {
+        if (url.includes('/episodes?show_id=aaaaaaaa-1')) return { data: { data: [EPS[0], EPS[3]] } };
+        if (url.includes('/episodes?')) return { data: { data: [] } };
+        return { data: { data: TWINS } };
+      });
+      localStorage.setItem('working-episode-id', 'e1');
+      renderPage();
+      const first = await waitFor(() => screen.getAllByTestId('sm-card')[0]);
+      await waitFor(() => expect(within(first).getByTestId('sm-card-stages').textContent).toMatch(/^0 in production · 1 released/));
+      expect(within(first).queryByTestId('sm-continue')).toBeNull();
+      expect(within(first).queryByTestId('sm-in-production')).toBeNull();
+    });
+
+    test('storage that cannot be read: the page still shows Continue for the production episode', async () => {
+      const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        renderPage();
+        const card = await waitFor(() => screen.getAllByTestId('sm-continue')[0]);
+        expect(card.getAttribute('href')).toBe('/episodes/e2');
+        expect(screen.queryByTestId('sm-in-production')).toBeNull();
+      } finally { spy.mockRestore(); warn.mockRestore(); error.mockRestore(); }
     });
 
     test('the totals are one line; empty status tabs are hidden', async () => {

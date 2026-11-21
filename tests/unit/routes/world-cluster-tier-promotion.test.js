@@ -101,14 +101,14 @@ const REQUIRE_AUTH_COUNTS = {
   'world.js': 5,
   // 116 with inject.js POST .../detach-episode (Evoni, 2026-11-12).
   'worldEvents.js': 116,
-  'worldStudio.js': 39,
+  'worldStudio.js': 57, // 39 + the 18 reads, an ADMIN's since 2026-11-16
   'worldTemperatureRoutes.js': 3,
 };
 
 const OPTIONAL_AUTH_COUNTS = {
   'world.js': 0,
   'worldEvents.js': 0,
-  'worldStudio.js': 19, // 1 import + 18 Tier 4 plain (the Tier 3 factory is admin only since SEC-5)
+  'worldStudio.js': 0, // the 18 Tier 4 reads are an ADMIN's since 2026-11-16 (Evoni), and the import went with them
   'worldTemperatureRoutes.js': 0,
 };
 
@@ -175,9 +175,9 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       );
     });
 
-    test('worldStudio.js uses direct destructuring import for optionalAuth + requireAuth (mixed split)', () => {
+    test('worldStudio.js uses a direct destructuring import (requireAuth + authorize; optionalAuth left 2026-11-16)', () => {
       expect(readSrc('worldStudio.js')).toMatch(
-        /const\s*\{\s*optionalAuth,\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/,
+        /const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/,
       );
     });
   });
@@ -308,16 +308,18 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       expect(src).not.toMatch(/PUBLIC:\s*World ecosystem preview generation/);
     });
 
-    test('Tier 4 — file has 18 PUBLIC group-rationale comments before plain-optionalAuth GETs', () => {
-      const publicCommentCount = (src.match(/^\/\/ PUBLIC: World cluster read; published catalog data with no creator attribution per Item 15 lock$/gm) || []).length;
-      expect(publicCommentCount).toBe(18);
+    // The 18 reads were Tier 4 PUBLIC (plain optionalAuth) until 2026-11-16. They return world characters,
+    // intimate scenes, world state and the map: production material, an ADMIN's to read (Evoni, 2026-11-16).
+    test('the 18 former Tier 4 reads carry the ADMIN rationale comment, and none says PUBLIC', () => {
+      const adminCommentCount = (src.match(/^\/\/ ADMIN: production material \(Evoni, 2026-11-16\)\. It was an open read \(Tier 4\) until then\.$/gm) || []).length;
+      expect(adminCommentCount).toBe(18);
+      expect(src).not.toMatch(/^\/\/ PUBLIC:/m);
     });
 
-    test('Tier 4 — exactly 18 GET handlers use plain optionalAuth (not factory form)', () => {
-      // Match "router.get(<...>, optionalAuth," NOT followed by `(`
-      const tier4Pattern = /router\.get\([^)]*,\s*optionalAuth,/g;
-      const matches = src.match(tier4Pattern) || [];
-      expect(matches.length).toBe(18);
+    test('exactly 18 GET handlers use requireAuth + authorize([\'ADMIN\']), and none uses optionalAuth', () => {
+      const adminGets = src.match(/^router\.get\('[^']+', requireAuth, authorize\(\['ADMIN'\]\),/gm) || [];
+      expect(adminGets.length).toBe(18);
+      expect(src.match(/router\.get\([^)]*,\s*optionalAuth,/g) || []).toHaveLength(0);
     });
 
     test('Tier 1 — exactly 37 mutation handlers use requireAuth (24 POST + 6 PUT + 7 DELETE; the preview POST is admin since SEC-5)', () => {
@@ -402,22 +404,23 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     // 161 with flow.js (its import, GET .../flow, POST .../fill-missing; 2026-10-25).
     // 162 with the ecosystem preview admin only (SEC-5, 2026-10-29).
     // 163 with worldEvents inject.js POST .../detach-episode (2026-11-12).
-    test('CP3 zone contains 163 total requireAuth references (25 imports + 138 handlers)', () => {
+    // 181 with worldStudio.js's 18 reads, an ADMIN's since 2026-11-16.
+    test('CP3 zone contains 181 total requireAuth references (25 imports + 156 handlers)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\brequireAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(163);
+      expect(total).toBe(181);
     });
 
-    test('CP3 zone contains 19 total optionalAuth references (all in worldStudio.js)', () => {
+    test('CP3 zone contains no optionalAuth reference (worldStudio.js held the last 19 until 2026-11-16)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/\boptionalAuth\b/g) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(19);
+      expect(total).toBe(0);
     });
 
     test('CP3 zone contains no degradeOnInfraFailure factory invocation (the Tier 3 preview is admin only since SEC-5)', () => {
@@ -429,13 +432,13 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       expect(total).toBe(0);
     });
 
-    test('CP3 zone contains 18 PUBLIC comments (the 18 Tier 4 group; the Tier 3 one went with SEC-5)', () => {
+    test('CP3 zone contains no PUBLIC comment (the 18 Tier 4 group became ADMIN on 2026-11-16)', () => {
       const total = CP3_FILES.reduce((sum, filename) => {
         const src = readSrc(filename);
         const matches = src.match(/^\/\/ PUBLIC:/gm) || [];
         return sum + matches.length;
       }, 0);
-      expect(total).toBe(18);
+      expect(total).toBe(0);
     });
 
     test('CP3 zone contains 0 authenticateToken active hits (planning forecast was 1; was lazy-noop fallback false positive)', () => {

@@ -32,7 +32,8 @@ const REASON = 'Quiet deletion. 4K followers abandoned without announcement.';
   let admin;
   let editor;
   const as = (token, req) => req.set('Authorization', `Bearer ${token}`);
-  const check = () => as(editor, request(app).get(`/api/v1/cast/characters/${ids.char}/check`));
+  // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+  const check = (token = admin) => as(token, request(app).get(`/api/v1/cast/characters/${ids.char}/check`));
   const fix = (body, token = admin) => as(token, request(app).post(`/api/v1/cast/characters/${ids.char}/check/fix`)).send(body);
   const flagAt = (flags, field) => flags.find((f) => f.field === field);
   const profile = async () => (await run('SELECT follower_count_approx, follower_tier, full_profile, platform_presences FROM social_profiles WHERE id = :pid', { pid }))[0][0];

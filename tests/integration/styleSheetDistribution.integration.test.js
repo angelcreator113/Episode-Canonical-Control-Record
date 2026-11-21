@@ -29,6 +29,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)('Style sheet in Distribution', () => {
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-styleSheetDistribution', email: 'admin@styleSheetDistribution.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const shows = [];
   const profiles = [];
   const savedBuckets = {};
@@ -106,7 +110,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const ids = await seed();
     const res = await auth(request(app).post(distUrl(ids.ep)));
     expect([res.status, res.body.code]).toEqual([409, 'SHEET_NOT_APPROVED']);
-    expect((await auth(request(app).get(distUrl(ids.ep)))).body.data).toEqual({ sent: false });
+    expect((await asAdmin(request(app).get(distUrl(ids.ep)))).body.data).toEqual({ sent: false });
     expect((await auth(request(app).patch(distUrl(ids.ep))).send({ caption: 'x' })).status).toBe(404);
   });
 
@@ -149,15 +153,18 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(edited.body.data).toMatchObject({ caption: 'Studio night.', disclosure: DISCLOSURE });
     expect(edited.body.data.post_text.startsWith(`${DISCLOSURE}\n\nStudio night.\n\n`)).toBe(true);
 
-    // No affiliate link left: the disclosure stays while links are included (Task #3170).
+    // No affiliate link left: nothing to disclose, and the post says nothing of affiliates (Evoni, 2026-11-15;
+    // before, the sentence stayed whenever links were included).
     await run('UPDATE wardrobe SET affiliate_url = NULL WHERE id = :id', { id: ids.studs });
-    const plain = (await auth(request(app).get(distUrl(ids.ep)))).body.data;
-    expect(plain).toMatchObject({ disclosure: DISCLOSURE, disclosure_locked: true });
+    const plain = (await asAdmin(request(app).get(distUrl(ids.ep)))).body.data;
+    expect(plain).toMatchObject({ disclosure: null, disclosure_locked: false });
+    expect(plain.post_text.startsWith('Studio night.\n\n')).toBe(true);
+    expect(plain.post_text).not.toContain('affiliate');
     expect(plain.post_text).toContain('Crimson Bloom Enamel Stud Earrings: https://shop.example/studs');
 
     // An Amazon link: the Amazon Associates sentence follows the affiliate one, locked.
     await run('UPDATE wardrobe SET affiliate_url = :u WHERE id = :id', { id: ids.studs, u: 'https://www.amazon.com/dp/B0TEST?tag=lala-20' });
-    const amazon = (await auth(request(app).get(distUrl(ids.ep)))).body.data;
+    const amazon = (await asAdmin(request(app).get(distUrl(ids.ep)))).body.data;
     expect(amazon).toMatchObject({ disclosure: `${DISCLOSURE} ${AMAZON_DISCLOSURE}`, disclosure_locked: true });
     expect(amazon.post_text.startsWith(`${DISCLOSURE} ${AMAZON_DISCLOSURE}\n\nStudio night.\n\n`)).toBe(true);
 
@@ -202,7 +209,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await approve(ids.ep);
     await auth(request(app).post(distUrl(ids.ep)));
     await auth(request(app).put(`/api/v1/episodes/${ids.ep}/lookbook`)).send({ tagline: 'Changed.' });
-    expect((await auth(request(app).get(distUrl(ids.ep)))).body.data.out_of_date).toBe(true);
+    expect((await asAdmin(request(app).get(distUrl(ids.ep)))).body.data.out_of_date).toBe(true);
     expect((await auth(request(app).post(distUrl(ids.ep)))).body.code).toBe('SHEET_NOT_APPROVED');
 
     const removed = await auth(request(app).delete(distUrl(ids.ep)));
@@ -210,5 +217,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const dm = await stored(ids.ep);
     expect(dm.style_sheet).toBeUndefined();
     expect(dm.youtube).toMatchObject({ enabled: true });
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/style-sheet/distribution`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

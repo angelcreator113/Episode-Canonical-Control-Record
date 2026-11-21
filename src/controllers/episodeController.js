@@ -22,6 +22,7 @@ const SocketService = require('../services/SocketService');
 const { normalizeTeaser } = require('../utils/episodeTeaser');
 const { parseAirDate } = require('../utils/episodeAirDate');
 const { lockEpisodes } = require('../utils/episodeLocks');
+const { isDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 const { snapshotFrozen, isFreezeError, sameValue, startRecordError } = require('../utils/snapshotFreeze');
 /* eslint-enable no-unused-vars */
 
@@ -989,6 +990,8 @@ module.exports = {
           found: assets.length,
         });
       }
+      // One document presentation among them refuses the whole request.
+      if (assets.some(isDocumentPresentation)) return refuseDocumentPresentation(res);
 
       // Create episode asset links
       const episodeAssets = await Promise.all(

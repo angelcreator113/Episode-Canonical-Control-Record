@@ -12,6 +12,7 @@ import { resolve } from 'path';
 vi.mock('../../services/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
 import api from '../../services/api';
 import EventDocuments from './EventDocuments';
+import AuthContext from '../../contexts/AuthContext';
 import { resetUndoStore } from './useUndo';
 
 const SHOP = {
@@ -211,7 +212,8 @@ describe('EventDocuments', () => {
     api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 2, status: 'approved' } } });
     fireEvent.click(within(shop).getByRole('button', { name: /Approve/ }));
     await waitFor(() => expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Approved'));
-    expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/approve`);
+    // The version on screen and what the button means go with it (V2-1).
+    expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/approve`, { version: 2, intent: 'approve' });
     expect(within(shop).queryByRole('button', { name: /Approve/ })).toBeNull();
 
     // Redraft over an approved, edited document is done at once, with Undo.
@@ -240,7 +242,7 @@ describe('EventDocuments', () => {
     fireEvent.click(within(shop).getByRole('button', { name: /Undo/ }));
     await waitFor(() => expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Approved'));
     expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/restore`, { fromVersion: 2 });
-    expect(api.post).toHaveBeenLastCalledWith(`${BASE}/shopping_list/approve`);
+    expect(api.post).toHaveBeenLastCalledWith(`${BASE}/shopping_list/approve`, { version: 4, intent: 'approve' });
     expect(screen.getByTestId('evd-meta-shopping_list').textContent).toContain('Version 4');
     expect(within(shop).queryByTestId('evd-undo-shopping_list')).toBeNull();
   });
@@ -324,7 +326,7 @@ describe('EventDocuments', () => {
     api.post.mockResolvedValueOnce({ data: { success: true, data: { ...OFFER, status: 'approved', overlay: { asset_id: 'a-2', url: 'https://cdn/offer.png', version: 1 } } } });
     fireEvent.click(screen.getByTestId('evd-make-overlay-offer_letter'));
     await waitFor(() => expect(screen.getByTestId('evd-overlay-offer_letter').textContent).toContain('Overlay ready'));
-    expect(api.post).toHaveBeenCalledWith(`${BASE}/offer_letter/approve`);
+    expect(api.post).toHaveBeenCalledWith(`${BASE}/offer_letter/approve`, { version: 1, intent: 'render' });
   });
 
   test('a draft edited after its overlay was drawn says the overlay is out of date', async () => {
@@ -458,5 +460,90 @@ describe('EventDocuments: the documents rework (2026-10-24)', () => {
     renderDocs();
     expect((await screen.findByTestId('evd-overlay-offer_letter')).textContent).toContain('Overlay out of date: the terms changed');
     expect(screen.getByTestId('evd-make-overlay-offer_letter')).toBeTruthy();
+  });
+
+  // ── Approving is an admin's, and drawing is its own step (V2-1, 2026-11-19) ──
+  describe('approval and the overlay drawing', () => {
+    const as = (user) => render(
+      <AuthContext.Provider value={{ user }}>
+        <EventDocuments showId="show-1" eventId="ev-1" event={EVENT} outfitPieces={PIECES} />
+      </AuthContext.Provider>,
+    );
+    const ADMIN_USER = { name: 'Evoni', groups: ['admin'] };
+    const EDITOR_USER = { name: 'Editor', groups: ['editor'] };
+    const docs = (shop, offer = null) => api.get.mockResolvedValue({ data: { success: true, data: { shopping_list: shop, offer_letter: offer, ...DEAL } } });
+
+    test('a signed-in user who is not an admin sees Approve off, with why, and nothing is sent', async () => {
+      docs(SHOP);
+      as(EDITOR_USER);
+      const button = await screen.findByTestId('evd-approve-shopping_list');
+      expect(button.disabled).toBe(true);
+      expect(button.getAttribute('title')).toBe('Only an admin can approve a document.');
+      fireEvent.click(button);
+      expect(api.post).not.toHaveBeenCalled();
+      // Editing is still hers.
+      expect(within(screen.getByTestId('evd-shopping_list')).getByRole('button', { name: /Edit/ }).disabled).toBe(false);
+    });
+
+    test('an admin sees Approve on, and it sends the version on screen and the intent', async () => {
+      docs({ ...SHOP, version: 3 });
+      as(ADMIN_USER);
+      const button = await screen.findByTestId('evd-approve-shopping_list');
+      expect(button.disabled).toBe(false);
+      expect(button.getAttribute('title')).toBeNull();
+      api.post.mockResolvedValueOnce({ data: { success: true, data: { ...SHOP, version: 3, status: 'approved' } } });
+      fireEvent.click(button);
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/approve`, { version: 3, intent: 'approve' }));
+    });
+
+    test('a stale approval is refused: the server\'s words are shown and the document stays a draft on screen', async () => {
+      docs(SHOP);
+      as(ADMIN_USER);
+      api.post.mockRejectedValueOnce({ response: { status: 409, data: { success: false, error: 'The shopping list changed since you opened it (now version 2). Reload it and try again.' } } });
+      fireEvent.click(await screen.findByTestId('evd-approve-shopping_list'));
+      expect((await screen.findByRole('alert')).textContent).toContain('changed since you opened it');
+      expect(screen.getByTestId('evd-state-shopping_list').textContent).not.toBe('Approved');
+    });
+
+    test('a drawing that failed is said, not shown as ready; the approval stands and Try again sends a render', async () => {
+      const failed = { ...SHOP, status: 'approved', approved_by: { id: 'u-1' }, overlay: null, overlay_render: { status: 'failed', version: 1, at: '2026-11-19T10:00:00.000Z', error: 'storage refused the upload' } };
+      docs(failed);
+      as(ADMIN_USER);
+      const row = await screen.findByTestId('evd-overlay-shopping_list');
+      const said = screen.getByTestId('evd-overlay-failed-shopping_list');
+      expect(said.getAttribute('role')).toBe('alert');
+      expect(said.textContent).toContain('The overlay could not be drawn: storage refused the upload');
+      expect(said.textContent).toContain('The approval stands');
+      expect(row.textContent).not.toContain('Overlay ready');
+      expect(screen.getByTestId('evd-state-shopping_list').textContent).toBe('Approved');
+      const retry = screen.getByTestId('evd-make-overlay-shopping_list');
+      expect(retry.textContent).toContain('Try again');
+      api.post.mockResolvedValueOnce({ data: { success: true, data: { ...failed, overlay: { asset_id: 'a-9', url: 'https://cdn/list.png', version: 1 }, overlay_render: { status: 'ok', version: 1, at: '2026-11-19T10:01:00.000Z' } } } });
+      fireEvent.click(retry);
+      await waitFor(() => expect(screen.getByTestId('evd-overlay-shopping_list').textContent).toContain('Overlay ready'));
+      expect(api.post).toHaveBeenCalledWith(`${BASE}/shopping_list/approve`, { version: 1, intent: 'render' });
+      expect(screen.queryByTestId('evd-overlay-failed-shopping_list')).toBeNull();
+    });
+
+    test('a failed drawing of an earlier version says nothing about the version on screen', async () => {
+      docs({ ...SHOP, version: 2, status: 'approved', overlay: null, overlay_render: { status: 'failed', version: 1, at: '2026-11-19T10:00:00.000Z', error: 'old failure' } });
+      as(ADMIN_USER);
+      const row = await screen.findByTestId('evd-overlay-shopping_list');
+      expect(row.textContent).toContain('No overlay yet');
+      expect(screen.queryByTestId('evd-overlay-failed-shopping_list')).toBeNull();
+    });
+
+    test('while a drawing is under way there is no button to start another; a non-admin cannot redraw', async () => {
+      docs({ ...SHOP, status: 'approved', overlay: null, overlay_render: { status: 'rendering', version: 1, started_at: new Date().toISOString() } });
+      const view = as(ADMIN_USER);
+      expect((await screen.findByTestId('evd-overlay-shopping_list')).textContent).toContain('Drawing the overlay…');
+      expect(screen.queryByTestId('evd-make-overlay-shopping_list')).toBeNull();
+      view.unmount();
+      docs({ ...SHOP, status: 'approved', overlay: null });
+      as(EDITOR_USER);
+      const make = await screen.findByTestId('evd-make-overlay-shopping_list');
+      expect(make.disabled).toBe(true);
+      expect(make.getAttribute('title')).toBe('Only an admin can approve a document.');
+    });
   });
 });

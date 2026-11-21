@@ -106,6 +106,7 @@ vi.mock('../services/api', () => ({
 import api from '../services/api';
 import { resetVoiceStudioStatus } from '../lib/voiceStudioApi';
 import EpisodeDetail from './EpisodeDetail';
+import { episodeLocation, rememberEpisodeLocation } from '../utils/activeEpisode';
 
 const Where = () => { const l = useLocation(); return <div data-testid="where">{l.pathname}{l.search}</div>; };
 const renderAt = (entry) => render(
@@ -161,5 +162,85 @@ describe('Production → Voice', () => {
     renderAt('/episodes/ep-1?tab=voice&beat=3');
     expect((await screen.findByTestId('voice-studio-body')).textContent).toBe('ep-1 embedded');
     expect(screen.getByTestId('where').textContent).toBe('/episodes/ep-1?tab=voice&beat=3');
+  });
+});
+
+// PR-04 (Evoni, 2026-11-18): Voice is a resume location only while it is
+// open to this admin. Nothing here widens who can open Voice.
+describe('Production → Voice as a resume location', () => {
+  let on;
+  const OPEN = { voiceStudio: true };
+  beforeEach(() => {
+    resetVoiceStudioStatus();
+    window.localStorage.clear();
+    on = true;
+    who.user = { groups: ['admin'] };
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/voice-studio/status') {
+        if (on) return { data: { data: { on: true } } };
+        throw Object.assign(new Error('404'), { response: { status: 404 } });
+      }
+      return { data: {} };
+    });
+  });
+
+  test('an admin with Voice Studio on: the Voice tab is remembered', async () => {
+    renderAt('/episodes/ep-1?tab=voice');
+    await screen.findByTestId('voice-studio-body');
+    await waitFor(() => expect(episodeLocation('ep-1', OPEN)?.tab).toBe('voice'));
+  });
+
+  test('it is remembered once the switch has answered, not before', async () => {
+    let answer;
+    vi.mocked(api.get).mockImplementation((url) => (url === '/api/v1/voice-studio/status'
+      ? new Promise((resolve) => { answer = () => resolve({ data: { data: { on: true } } }); })
+      : Promise.resolve({ data: {} })));
+    rememberEpisodeLocation('ep-1', 'files', {}, 1000);
+    renderAt('/episodes/ep-1?tab=voice');
+    await screen.findByTestId('voice-studio-body');
+    await waitFor(() => expect(typeof answer).toBe('function'));
+    // Still unknown: what was saved stays.
+    expect(episodeLocation('ep-1', OPEN)).toEqual({ tab: 'files', at: 1000 });
+    answer();
+    await waitFor(() => expect(episodeLocation('ep-1', OPEN)?.tab).toBe('voice'));
+  });
+
+  test('Voice Studio switched off: ?tab=voice is not remembered, and what was saved stays', async () => {
+    on = false;
+    rememberEpisodeLocation('ep-1', 'files', {}, 1000);
+    renderAt('/episodes/ep-1?tab=voice');
+    await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalledWith('/api/v1/voice-studio/status'));
+    await waitFor(() => expect(makePills()).toEqual(['Scenes', 'Files', 'Edit']));
+    expect(episodeLocation('ep-1', OPEN)).toEqual({ tab: 'files', at: 1000 });
+    // The address is honoured all the same.
+    expect(screen.getByTestId('where').textContent).toBe('/episodes/ep-1?tab=voice');
+  });
+
+  test('not an admin: ?tab=voice is not remembered, and the switch is not asked', async () => {
+    who.user = { groups: ['editor'] };
+    renderAt('/episodes/ep-1?tab=voice');
+    await waitFor(() => expect(makePills()).toEqual(['Scenes', 'Files', 'Edit']));
+    expect(window.localStorage.getItem('working-episode-locations')).toBeNull();
+    expect(vi.mocked(api.get)).not.toHaveBeenCalledWith('/api/v1/voice-studio/status');
+  });
+
+  test('a Voice location saved while it was on is passed over once it is off, and is not deleted', async () => {
+    rememberEpisodeLocation('ep-1', 'voice', OPEN, 1000);
+    const saved = window.localStorage.getItem('working-episode-locations');
+    on = false;
+    // Opening the Overview with Voice off changes nothing that was saved.
+    renderAt('/episodes/ep-1');
+    await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalledWith('/api/v1/voice-studio/status'));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/episodes/ep-1'));
+    expect(episodeLocation('ep-1', { voiceStudio: false })).toBeNull();
+    expect(window.localStorage.getItem('working-episode-locations')).toBe(saved);
+    // Switched on again: it is there.
+    expect(episodeLocation('ep-1', OPEN)).toEqual({ tab: 'voice', at: 1000 });
+  });
+
+  test('another working tab is remembered for an admin as for anyone', async () => {
+    renderAt('/episodes/ep-1?tab=files');
+    await waitFor(() => expect(episodeLocation('ep-1')?.tab).toBe('files'));
   });
 });

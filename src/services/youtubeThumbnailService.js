@@ -22,6 +22,7 @@ const layers = require('./thumbnailLayers');
 const archiver = require('archiver');
 const { createCache } = require('./pictureCache');
 const { readDocuments } = require('./eventDocumentsService');
+const { NOT_DOCUMENT_PRESENTATION_SQL } = require('../utils/documentPresentationAssets');
 const { readLogo } = require('./showLogoService');
 const { EPISODE_EVENT_ID_SQL } = require('../utils/episodeEventSql');
 const { PutObjectCommand, ListObjectsV2Command, S3Client } = require('@aws-sdk/client-s3');
@@ -166,6 +167,8 @@ async function sources(sequelize, episodeId) {
           AND s3_url_processed ILIKE '%.png'
           -- The shopping-list paper (eventDocumentOverlayService) is a PNG too, not a cut-out.
           AND asset_type IS DISTINCT FROM 'DOCUMENT_OVERLAY'
+          -- Nor are a document's presentation panels (V2-2a).
+          AND ${NOT_DOCUMENT_PRESENTATION_SQL}
         ORDER BY (asset_group = 'LALA' OR character_name ILIKE '%lala%') DESC NULLS LAST, created_at DESC
         LIMIT 40`,
       { replacements: { showId: episode.show_id } })
@@ -324,6 +327,7 @@ async function libraryImages(sequelize, showId) {
     `SELECT name, asset_group, asset_type, COALESCE(s3_url_processed, s3_url_raw) AS url
        FROM assets
       WHERE show_id = :showId AND deleted_at IS NULL AND COALESCE(s3_url_processed, s3_url_raw) IS NOT NULL
+        AND ${NOT_DOCUMENT_PRESENTATION_SQL}
       ORDER BY created_at DESC
       LIMIT 200`,
     { replacements: { showId } });

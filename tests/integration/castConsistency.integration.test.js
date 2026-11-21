@@ -30,11 +30,13 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const ids = { show: uuid(), reg: uuid(), maren: uuid(), nia: uuid(), ghost: uuid() };
   const p = {};
   let token;
+  let editorToken;
   const get = (q) => request(app).get(`/api/v1/cast/consistency?registry_id=${q}`).set('Authorization', `Bearer ${token}`);
 
   beforeAll(async () => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
-    token = TokenService.generateTokenPair({ id: 'test-editor-rollout', email: 'e@rollout.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-admin-rollout', email: 'evoni@rollout.dev', name: 'Evoni', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+    editorToken = TokenService.generateTokenPair({ id: 'test-editor-rollout', email: 'e@rollout.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
     await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())', { show: ids.show, name: `Rollout ${tag}`, slug: `rollout-${tag}` });
     await run("INSERT INTO character_registries (id, title, show_id, created_at, updated_at) VALUES (:reg, 'Rollout', :show, NOW(), NOW())", ids);
     for (const key of ['maren', 'nia']) {
@@ -63,6 +65,14 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('DELETE FROM social_profiles WHERE id IN (:a)', { a: Object.values(p) });
     await run('DELETE FROM shows WHERE id = :show', ids);
     await sequelize.close();
+  });
+
+  // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+  it('the rollout is an ADMIN\'s to read: an editor is refused', async () => {
+    const res = await request(app).get(`/api/v1/cast/consistency?registry_id=${ids.reg}`).set('Authorization', `Bearer ${editorToken}`);
+    expect(res.status).toBe(403);
+    expect(res.body.summary).toBeUndefined();
+    expect((await request(app).get(`/api/v1/cast/consistency?registry_id=${ids.reg}`)).status).toBe(401);
   });
 
   it('each character with their facts, findings, voice and what is left; the neediest first', async () => {

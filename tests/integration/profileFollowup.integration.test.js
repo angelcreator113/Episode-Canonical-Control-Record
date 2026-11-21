@@ -116,7 +116,7 @@ const one = async (sql, replacements = {}) => (await run(sql, replacements))[0][
     if (madeMainShow) await run('DELETE FROM shows WHERE id = :id', { id: mainShow });
   });
 
-  it('a signed-in non-admin is refused on the remaining character writes, nothing changes, and reads stay open', async () => {
+  it('a signed-in non-admin is refused on the remaining character writes, nothing changes, and the production reads are refused too', async () => {
     const base = '/api/v1/character-registry';
     const writes = [
       request(app).post(`${base}/registries/${ids.reg}/characters`).send({ display_name: 'Not allowed', character_key: `no-${TAG}` }),
@@ -145,11 +145,14 @@ const one = async (sql, replacements = {}) => (await run(sql, replacements))[0][
     expect(ent.n).toBe(0);
     const crossed = await one('SELECT status FROM social_profiles WHERE id = :id', { id: profiles.toCross });
     expect(crossed.status).toBe('finalized');
-    expect((await asEditor(request(app).get(`${base}/characters/${ids.maren}`))).status).toBe(200);
-    expect((await asEditor(request(app).get(`${base}/registries/${ids.reg}`))).status).toBe(200);
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    expect((await asEditor(request(app).get(`${base}/characters/${ids.maren}`))).status).toBe(403);
+    expect((await asEditor(request(app).get(`${base}/registries/${ids.reg}`))).status).toBe(403);
+    expect((await asAdmin(request(app).get(`${base}/characters/${ids.maren}`))).status).toBe(200);
+    expect((await asAdmin(request(app).get(`${base}/registries/${ids.reg}`))).status).toBe(200);
   });
 
-  it('a signed-in non-admin is refused on the Pulse people tools, no profile changes, and reads stay open', async () => {
+  it('a signed-in non-admin is refused on the Pulse people tools, no profile changes, and reads its public columns only', async () => {
     const sp = '/api/v1/social-profiles';
     const id = profiles.agreed;
     const writes = [
@@ -175,8 +178,12 @@ const one = async (sql, replacements = {}) => (await run(sql, replacements))[0][
     expect(profile).toEqual({ status: 'finalized', deleted_at: null, follower_count_approx: '2M' });
     const made = await one('SELECT COUNT(*)::int AS n FROM social_profiles WHERE handle ILIKE :h', { h: `%no${TAG}%` });
     expect(made.n).toBe(0);
-    expect((await asEditor(request(app).get(`${sp}/${id}`))).status).toBe(200);
-    expect((await asEditor(request(app).get(`${sp}/templates`))).status).toBe(200);
+    // One profile stays an open read, in its public columns only; the generator's templates are an ADMIN's.
+    const shown = await asEditor(request(app).get(`${sp}/${id}`));
+    expect(shown.status).toBe(200);
+    expect(Object.keys(shown.body.profile).sort()).toEqual([...require('../../src/services/publicSocialProfile').PUBLIC_PROFILE_FIELDS].sort());
+    expect((await asEditor(request(app).get(`${sp}/templates`))).status).toBe(403);
+    expect((await asAdmin(request(app).get(`${sp}/templates`))).status).toBe(200);
   });
 
   it('created_from: crossing a feed profile and The Cast\'s New character record how the character was made', async () => {

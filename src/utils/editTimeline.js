@@ -61,6 +61,16 @@ const DEFAULT_LAYOUT = Object.freeze({ x: FRAME_W - PIP_WIDTH - PIP_MARGIN, y: F
 /** A gap longer than one frame at 30 fps is a coverage finding (R5.1). */
 const GAP_TOLERANCE_MS = 33;
 
+// The frame grid (render manifest, Evoni, 2026-11-16): 30 frames a second. A frame's time is
+// whole ms; the working preview's snapToFrame (frontend previewPlan) gives the same answers.
+const FPS = 30;
+/** The frame nearest to an edit time. */
+const frameOf = (ms) => Math.round(((Number(ms) || 0) * FPS) / 1000);
+/** A frame's edit time, in whole ms. */
+const frameTime = (frame) => Math.round((frame * 1000) / FPS);
+/** An edit time snapped to the nearest frame. */
+const snapToFrame = (ms) => frameTime(frameOf(ms));
+
 const modeOf = (edit, beat) => (edit.beatModes && edit.beatModes[beat] === 'gameplay_only' ? 'gameplay_only' : 'required');
 const lockedLength = (edit, beat) => {
   const ms = edit.beatDurations ? Number(edit.beatDurations[beat]) : NaN;
@@ -314,14 +324,30 @@ const sourceTimeAt = (event, t) => event.source_start_ms + (t - event.timeline_s
  * approved revision's file and trim), nothing for any other. Visibility is not
  * read: hiding the PIP changes nothing here. Events are cut at the edit's
  * end, source and timeline together.
+ *
+ * With a range ({ start_ms, end_ms }; render manifest, Evoni, 2026-11-16) the
+ * plan is cut to [start_ms, end_ms) the same way: an event wholly outside is
+ * dropped, one crossing an edge is cut there. Each event then also carries
+ * envelope_start_ms and envelope_end_ms, its span before the range cut it (as
+ * the whole plan has it), so a fade the range cuts goes on from where it was
+ * and does not start again. Without a range nothing is added.
  */
-function mixPlan(edit, timeline = beatTimeline(edit), placed = placedSegments(edit, timeline)) {
+function mixPlan(edit, timeline = beatTimeline(edit), placed = placedSegments(edit, timeline), range = null) {
   const end = timeline.duration;
-  const cut = (ev) => {
-    if (ev.timeline_start_ms >= end || ev.timeline_end_ms <= 0) return null;
-    const lead = Math.max(0, -ev.timeline_start_ms);
-    const tail = Math.max(0, ev.timeline_end_ms - end);
+  const trim = (ev, from, to) => {
+    if (ev.timeline_start_ms >= to || ev.timeline_end_ms <= from) return null;
+    const lead = Math.max(0, from - ev.timeline_start_ms);
+    const tail = Math.max(0, ev.timeline_end_ms - to);
     return { ...ev, timeline_start_ms: ev.timeline_start_ms + lead, source_start_ms: ev.source_start_ms + lead, timeline_end_ms: ev.timeline_end_ms - tail, source_end_ms: ev.source_end_ms - tail };
+  };
+  const from = range ? Math.max(0, Number(range.start_ms) || 0) : 0;
+  const asked = range && range.end_ms != null && Number.isFinite(Number(range.end_ms)) ? Number(range.end_ms) : end;
+  const to = Math.min(end, asked);
+  const cut = (ev) => {
+    const whole = trim(ev, 0, end);
+    if (!whole || !range) return whole;
+    const part = to > from ? trim(whole, from, to) : null;
+    return part && { ...part, envelope_start_ms: whole.timeline_start_ms, envelope_end_ms: whole.timeline_end_ms };
   };
   const commentary = [];
   for (const p of placed) {
@@ -359,7 +385,50 @@ function mixPlan(edit, timeline = beatTimeline(edit), placed = placedSegments(ed
     });
     if (ev) dialogue.push(ev);
   }
-  return { duration_ms: end, commentary, audio, dialogue };
+  return { duration_ms: end, ...(range ? { range: { start_ms: from, end_ms: Math.max(from, to) } } : {}), commentary, audio, dialogue };
+}
+
+/**
+ * Where Prime's commentary and a dialogue line are heard at once:
+ * [{ commentary (segment id), dialogue (item id), start_ms, end_ms }].
+ * Reported only: nothing is muted, ducked or moved.
+ */
+function audioOverlaps(mix) {
+  const out = [];
+  for (const c of (mix && mix.commentary) || []) {
+    for (const d of (mix && mix.dialogue) || []) {
+      const start = Math.max(c.timeline_start_ms, d.timeline_start_ms);
+      const end = Math.min(c.timeline_end_ms, d.timeline_end_ms);
+      if (start < end) out.push({ commentary: c.segment_id, dialogue: d.item_id, start_ms: start, end_ms: end });
+    }
+  }
+  return out;
+}
+
+const KEYING = ['queued', 'processing', 'failed'];
+/**
+ * Which file a picture layer is drawn from (render manifest, Evoni,
+ * 2026-11-16): { use: 'original' | 'cutout', blocked, reason }. purpose is
+ * 'final' or 'preview'; layer is 'scene', 'pip' or 'performer'; clip is the
+ * take's row. A scene is always the original. Prime's PIP is her cutout when
+ * the edit asks for it (useCutout) and the cutout is done. A performer is
+ * their cutout once it is done; a take never sent for green removal is drawn
+ * as it is, meant that way. A cutout that is wanted and not there
+ * (cutout_missing) blocks a final; a preview draws the original and says so.
+ */
+function mediaChoice({ purpose, layer, useCutout, clip }) {
+  const original = { use: 'original', blocked: false, reason: null };
+  if (layer === 'scene') return original;
+  const status = (clip && clip.key_status) || 'none';
+  const ready = status === 'done' && Boolean(clip && (clip.url_cutout || clip.s3_key_cutout));
+  const missing = { use: 'original', blocked: purpose === 'final', reason: 'cutout_missing' };
+  if (layer === 'pip') {
+    if (!useCutout) return original;
+    return ready ? { use: 'cutout', blocked: false, reason: null } : missing;
+  }
+  if (ready) return { use: 'cutout', blocked: false, reason: null };
+  // done with no file is a cutout that is wanted and not there, like one still queued or failed.
+  return KEYING.includes(status) || status === 'done' ? missing : original;
 }
 
 /** Uncovered stretches of each required beat: prime_footage_missing (R5.1). */
@@ -537,7 +606,9 @@ function timingChanges(before, after) {
 
 module.exports = {
   FRAME_W, FRAME_H, DEFAULT_LAYOUT, GAP_TOLERANCE_MS, BEATS,
+  FPS, frameOf, frameTime, snapToFrame,
   beatTimeline, resolveAnchor, placedSegments, placedDialogue, visibleAt, layoutAt, mixPlan, sourceTimeAt, coverageFindings, editFindings,
   modeAt, layersAt, itemSpans,
+  audioOverlaps, mediaChoice,
   timingOf, timingChanges,
 };

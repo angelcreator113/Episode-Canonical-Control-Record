@@ -13,6 +13,7 @@
  * Regression coverage kept from Task #1425: generate reaches
  * compositeInvitation.
  */
+jest.mock('../../../src/middleware/auditLog', () => ({ logger: { logActionInTransaction: jest.fn(async () => ({})) } }));
 jest.mock('axios');
 
 const mockS3Send = jest.fn().mockResolvedValue({});
@@ -311,7 +312,7 @@ describe('approveInvitation', () => {
   it('approves, links, mirrors the words and supersedes the rest in one transaction', async () => {
     const v = version('v2', { text: { opening: 'New.', body: 'Body.', closing: 'Bye.' } });
     const { models, state } = fakeModels({ event: baseEvent(), assets: [v] });
-    const r = await svc.approveInvitation(models, { showId: SHOW, eventId: 'evt-1', assetId: 'v2' });
+    const r = await svc.approveInvitation(models, { showId: SHOW, eventId: 'evt-1', assetId: 'v2', actor: { id: 'admin-1' } });
 
     expect(models.sequelize.transaction).toHaveBeenCalledTimes(1);
     expect(v.approval_status).toBe('approved');
@@ -328,20 +329,30 @@ describe('approveInvitation', () => {
 
   it('syncs the episode overlay after commit when the event has an episode', async () => {
     const { models } = fakeModels({ event: baseEvent({ used_in_episode_id: 'ep-9' }), assets: [version('v2')] });
-    const r = await svc.approveInvitation(models, { showId: SHOW, eventId: 'evt-1', assetId: 'v2' });
+    const r = await svc.approveInvitation(models, { showId: SHOW, eventId: 'evt-1', assetId: 'v2', actor: { id: 'admin-1' } });
     expect(overlay.syncEpisodeInvitationOverlay).toHaveBeenCalledWith(models, { eventId: 'evt-1', episodeId: 'ep-9' });
     expect(r.placementId).toBe('pl-1');
   });
 
   it('refuses an asset that is not one of the event\'s versions', async () => {
     const { models, state } = fakeModels({ event: baseEvent(), assets: [version('v-x', { event_id: 'evt-2' })] });
-    await expect(svc.approveInvitation(models, { showId: SHOW, eventId: 'evt-1', assetId: 'v-x' })).rejects.toMatchObject({ status: 404 });
+    await expect(svc.approveInvitation(models, { showId: SHOW, eventId: 'evt-1', assetId: 'v-x', actor: { id: 'admin-1' } })).rejects.toMatchObject({ status: 404 });
     expect(state.updates).toHaveLength(0);
+  });
+
+  it('is not written without the admin who is approving (V2-1, 2026-11-19)', async () => {
+    for (const actor of [undefined, null, {}, { id: null }]) {
+      const v = version('v2');
+      const { models, state } = fakeModels({ event: baseEvent(), assets: [v] });
+      await expect(svc.approveInvitation(models, { showId: SHOW, eventId: 'evt-1', assetId: 'v2', actor })).rejects.toMatchObject({ status: 403 });
+      expect(state.updates).toHaveLength(0);
+      expect(v.approval_status).not.toBe('approved');
+    }
   });
 
   it('refuses a missing assetId with a 400', async () => {
     const { models } = fakeModels({ event: baseEvent() });
-    await expect(svc.approveInvitation(models, { showId: SHOW, eventId: 'evt-1' })).rejects.toMatchObject({ status: 400 });
+    await expect(svc.approveInvitation(models, { showId: SHOW, eventId: 'evt-1', actor: { id: 'admin-1' } })).rejects.toMatchObject({ status: 400 });
   });
 });
 

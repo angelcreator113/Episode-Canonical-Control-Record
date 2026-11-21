@@ -26,6 +26,10 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
 
 (shouldSkip ? describe.skip : describe)("Episode Lookbook: data and upload routes", () => {
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-episodeLookbook', email: 'admin@episodeLookbook.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const shows = [];
   const savedBuckets = {};
   const sets = [];
@@ -90,14 +94,14 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
 
   it('reads an empty Lookbook, created on first read: 0 of 11', async () => {
     const ids = await seed();
-    const res = await auth(request(app).get(base(ids.ep)));
+    const res = await asAdmin(request(app).get(base(ids.ep)));
     expect(res.status).toBe(200);
     const lb = res.body.data;
     expect(lb.episode_id).toBe(ids.ep);
     expect(lb.sheet_status).toBe('draft');
     expect(lb.images_in).toBe(0);
     expect(lb.readiness).toEqual({ done: 0, total: 11, missing: ['front', 'side', 'back', 'hero', 'hair', 'nails', 'eyes', 'lips', 'skin', 'venue', 'inspo'] });
-    const again = await auth(request(app).get(base(ids.ep)));
+    const again = await asAdmin(request(app).get(base(ids.ep)));
     expect(again.body.data.id).toBe(lb.id);
     const [[{ n }]] = await run('SELECT COUNT(*)::int AS n FROM episode_lookbooks WHERE episode_id = :ep', ids);
     expect(n).toBe(1);
@@ -123,13 +127,13 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
     expect(moved.status).toBe(200);
     expect(moved.body.data.image.category).toBe('hero');
     await auth(request(app).patch(`${base(ids.ep)}/images/${b.id}`)).send({ category: 'venue', sort_order: 2 });
-    const res = await auth(request(app).get(base(ids.ep)));
+    const res = await asAdmin(request(app).get(base(ids.ep)));
     expect(res.body.data.images.hero.map((i) => i.id)).toEqual([a.id]);
     expect(res.body.data.images.venue.map((i) => [i.id, i.sort_order, i.in_lookbook])).toEqual([[b.id, 2, true]]);
     expect(res.body.data.readiness.done).toBe(2);
     // A venue photo toggled out of the lookbook no longer counts.
     await auth(request(app).patch(`${base(ids.ep)}/images/${b.id}`)).send({ in_lookbook: false });
-    const after = await auth(request(app).get(base(ids.ep)));
+    const after = await asAdmin(request(app).get(base(ids.ep)));
     expect(after.body.data.readiness.done).toBe(1);
     expect(after.body.data.readiness.missing).toContain('venue');
   });
@@ -139,7 +143,7 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
     const first = await upload(ids.ep, { category: 'front' });
     const second = await upload(ids.ep, { category: 'front', r: 10 });
     expect(second.status).toBe(201);
-    const res = await auth(request(app).get(base(ids.ep)));
+    const res = await asAdmin(request(app).get(base(ids.ep)));
     expect(res.body.data.images.front.map((i) => i.id)).toEqual([second.body.data.images[0].id]);
     const firstId = first.body.data.images[0].id;
     expect(res.body.data.images.unsorted.map((i) => i.id)).toEqual([firstId]);
@@ -148,7 +152,7 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
     // Sorting a tray photo into the spot replaces it too; the one it replaces goes to To sort.
     const tray = await upload(ids.ep);
     await auth(request(app).patch(`${base(ids.ep)}/images/${tray.body.data.images[0].id}`)).send({ category: 'front' });
-    const now = await auth(request(app).get(base(ids.ep)));
+    const now = await asAdmin(request(app).get(base(ids.ep)));
     expect(now.body.data.images.front.map((i) => i.id)).toEqual([tray.body.data.images[0].id]);
     expect(now.body.data.images.unsorted.map((i) => i.id).sort()).toEqual([firstId, second.body.data.images[0].id].sort());
     // A single-photo spot takes one file per upload.
@@ -177,16 +181,16 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
     const patch = await auth(request(app).patch(`${base(ids.ep)}/images/${id}`)).send({ category: 'hero' });
     const del = await auth(request(app).delete(`${base(ids.ep)}/images/${id}`));
     expect([patch.status, del.status]).toEqual([404, 404]);
-    const res = await auth(request(app).get(base(ids.other)));
+    const res = await asAdmin(request(app).get(base(ids.other)));
     expect(res.body.data.images.eyes.map((i) => i.id)).toEqual([id]);
-    expect((await auth(request(app).get(base(ids.ep)))).body.data.images_in).toBe(0);
+    expect((await asAdmin(request(app).get(base(ids.ep)))).body.data.images_in).toBe(0);
   });
 
   it('a deleted or unknown episode is 404', async () => {
     const ids = await seed();
     await run('UPDATE episodes SET deleted_at = NOW() WHERE id = :ep', ids);
-    expect((await auth(request(app).get(base(ids.ep)))).status).toBe(404);
-    expect((await auth(request(app).get(base(uuid())))).status).toBe(404);
+    expect((await asAdmin(request(app).get(base(ids.ep)))).status).toBe(404);
+    expect((await asAdmin(request(app).get(base(uuid())))).status).toBe(404);
     expect((await upload(ids.ep)).status).toBe(404);
   });
 
@@ -271,7 +275,7 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
   it("pre-fills Venue from the event's scene set; toggling makes a row that counts", async () => {
     const ids = await seed();
     const v = await seedVenue(ids);
-    const res = await auth(request(app).get(base(ids.ep)));
+    const res = await asAdmin(request(app).get(base(ids.ep)));
     expect(res.body.data.event).toEqual({ id: v.event, name: 'Studio Session' });
     expect(res.body.data.scene_set).toEqual({ id: v.set, name: 'Studio by Sable' });
     expect(res.body.data.venue_options.map((o) => [o.source, o.ref_id, o.label, o.in_lookbook])).toEqual([
@@ -301,7 +305,11 @@ const png = (r = 200) => sharp({ create: { width: 4, height: 6, channels: 3, bac
 
   it('with no event the venue list is empty', async () => {
     const ids = await seed();
-    const res = await auth(request(app).get(base(ids.ep)));
+    const res = await asAdmin(request(app).get(base(ids.ep)));
     expect([res.body.data.event, res.body.data.scene_set, res.body.data.venue_options, res.body.data.texture_pieces]).toEqual([null, null, [], []]);
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/lookbook`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

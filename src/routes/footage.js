@@ -9,6 +9,7 @@ const logger = require('../utils/logger');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
+const { isDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 
 // Configure multer for memory storage (we'll upload directly to S3)
 const upload = multer({
@@ -195,6 +196,8 @@ router.post('/episodes/:episodeId/assets', requireAuth, async (req, res) => {
     if (assets.length !== assetIds.length) {
       return res.status(404).json({ error: 'One or more assets not found' });
     }
+    // One document presentation among them refuses the whole request.
+    if (assets.some(isDocumentPresentation)) return refuseDocumentPresentation(res);
 
     // Link assets to episode (creates rows in episode_assets table)
     await episode.addAssets(assets);

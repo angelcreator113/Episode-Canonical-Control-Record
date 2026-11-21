@@ -5,6 +5,7 @@ const { Layer, LayerAsset, Asset, Episode } = require('../models');
 // 7th cumulative instance). 2 GETs are public layer-catalog reads (no req.user
 // consumption); 7 writes are Tier 1.
 const { optionalAuth, requireAuth } = require('../middleware/auth');
+const { isDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 
 /**
  * GET /api/v1/layers
@@ -283,6 +284,7 @@ router.post('/:id/assets', requireAuth, async (req, res) => {
         error: 'Asset not found'
       });
     }
+    if (isDocumentPresentation(asset)) return refuseDocumentPresentation(res);
 
     const layerAsset = await LayerAsset.create({
       layer_id: id,

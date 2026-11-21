@@ -16,7 +16,7 @@
  */
 const express = require('express');
 const multer = require('multer');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -70,7 +70,8 @@ const shape = (fit) => ({
   created_at: fit.createdAt || fit.created_at || null,
 });
 
-router.get('/', async (req, res) => {
+// ADMIN: every fit, whenever it is dated (Evoni, 2026-11-15). The Pulse reads /latest, which stays a reader's.
+router.get('/', authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return res.status(400).json({ success: false, error: 'show_id must be a show id (UUID).' });
@@ -106,7 +107,7 @@ router.get('/latest', async (req, res) => {
     const { PulseFit, sequelize } = models;
     const clock = require('../services/storyClock');
     let at;
-    try { at = await clock.resolveAt(models, showId, req.query.at ?? 'present'); } catch (err) {
+    try { at = await require('../services/readerMoment').momentFor(req, models, showId, req.query.at ?? 'present'); } catch (err) {
       if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
       throw err;
     }

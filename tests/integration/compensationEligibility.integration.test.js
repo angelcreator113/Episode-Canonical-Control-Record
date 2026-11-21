@@ -42,6 +42,42 @@ const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
 
+/**
+ * A response's words, with every id left out. A refusal must never carry an offer's terms (its 900
+ * payment), and that is tested by looking for "900" and "payment" in the body. Ids are random, so their
+ * digits are not content: one happened to hold "...f90027b26b02" and failed the look-up (main, 2026-11-15).
+ * Only ids go: a fee or the word under any key, or in any sentence, is still found (tested below).
+ */
+const UUID_ANYWHERE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const SHOW_NAME = /a2-[0-9a-f]{8}/g;   // the seeded show's name, the first eight characters of its id
+const wordsOf = (value) => JSON.stringify(value).replace(UUID_ANYWHERE, '<id>').replace(SHOW_NAME, '<show>');
+
+describe('the leak check these tests use', () => {
+  test('an id\'s own digits are not a leak', () => {
+    const body = { success: false, offers: [{ id: 'd4d4d4d4-404b-4b6c-b6cb-f90027b26b02', name: 'Offer a', status: 'booked' }], show: 'a2-9009009a' };
+    expect(JSON.stringify(body)).toMatch(/900/);
+    expect(wordsOf(body)).not.toMatch(/900|payment/);
+  });
+  test('a real fee or the word, anywhere in the body, still is', () => {
+    const id = 'd4d4d4d4-404b-4b6c-b6cb-f90027b26b02';
+    for (const leaking of [
+      { offers: [{ id, payment_amount: 900 }] },
+      { offers: [{ id, fee: 900 }] },
+      { offers: [{ id, terms: { amount: '900' } }] },
+      { error: 'Its payment was not booked.' },
+      { error: `Offer ${id} pays 900 coins.` },
+      { offers: [{ id, name: 'Offer a', status: 'booked', payment_amount: null }] },
+      [900],
+    ]) {
+      // The two patterns this file looks for: the fee or the word; the fee or its field.
+      expect([JSON.stringify(leaking), /900|payment/.test(wordsOf(leaking))]).toEqual([JSON.stringify(leaking), true]);
+      if (/900|payment_amount/.test(JSON.stringify(leaking).replace(id, ''))) {
+        expect([JSON.stringify(leaking), /payment_amount|900/.test(wordsOf(leaking))]).toEqual([JSON.stringify(leaking), true]);
+      }
+    }
+  });
+});
+
 const ADMIN = { id: 'test-admin-a2', name: 'Admin' };
 const COST = 80;
 const FEE = 120;
@@ -264,7 +300,7 @@ const NO_TERMS = { cost_coins: 300 };
       expect(err.toJSON()).toMatchObject({ success: false, code: 'OFFER_RESOLUTION_REQUIRED', reason });
       // The refusal names the offers, never their terms.
       expect(err.toJSON().offers.map((o) => Object.keys(o).sort())).toEqual(offers.map(() => ['id', 'name', 'status']));
-      expect(JSON.stringify(err.toJSON())).not.toMatch(/900|payment/);
+      expect(wordsOf(err.toJSON())).not.toMatch(/900|payment/);
       expect(await snapshot(ids)).toEqual(before);
     });
 
@@ -672,7 +708,7 @@ const NO_TERMS = { cost_coins: 300 };
         expect(res.status).toBe(409);
         expect(res.body).toMatchObject({ success: false, code: 'OFFER_RESOLUTION_REQUIRED', reason });
         // Named by id, name and status only.
-        expect(JSON.stringify(res.body)).not.toMatch(/payment_amount|900/);
+        expect(wordsOf(res.body)).not.toMatch(/payment_amount|900/);
         expect(await snapshot(ids)).toEqual(before);
       }
       expect((await offer(attached.opp.b)).status).toBe('booked');
@@ -694,7 +730,7 @@ const NO_TERMS = { cost_coins: 300 };
         expect(res.status).toBe(409);
         expect(res.body).toMatchObject({ success: false, code: 'OFFER_RESOLUTION_REQUIRED', reason: 'multiple_live_offers' });
         expect(res.body.offers.map((o) => o.id).sort()).toEqual([ids.opp.a, ids.opp.b].sort());
-        expect(JSON.stringify(res.body)).not.toMatch(/payment_amount|900/);
+        expect(wordsOf(res.body)).not.toMatch(/payment_amount|900/);
         // Neither offer moved and nothing was recorded.
         expect(await snapshot(ids)).toEqual(before);
         expect((await offer(ids.opp.a)).status).toBe('booked');

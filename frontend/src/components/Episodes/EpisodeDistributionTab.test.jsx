@@ -24,6 +24,7 @@ import {
   putEpisodeDistributionApi,
   generateEpisodeDistributionApi,
 } from './EpisodeDistributionTab';
+import { readReturn } from '../../utils/returnPath';
 
 describe('EpisodeDistributionTab — Track 6 CP11 module-scope helpers', () => {
   beforeEach(() => {
@@ -99,7 +100,12 @@ describe('EpisodeDistributionTab — thumbnail', () => {
     const box = await screen.findByTestId('distribution-thumbnail');
     expect(box.querySelector('img').getAttribute('src')).toBe('https://b.s3.amazonaws.com/t.png');
     const link = screen.getByRole('link', { name: 'Edit in Thumbnail Studio' });
-    expect(link.getAttribute('href')).toBe('/template-studio/youtube?show=show-1&episode=ep-1');
+    // The editor is told it was opened from this tab (PR-06), so its way back returns here.
+    expect(link.getAttribute('href')).toBe('/template-studio/youtube?show=show-1&episode=ep-1&from=%2Fepisodes%2Fep-1%3Ftab%3Ddistribution&fromLabel=Distribution');
+    const origin = new URLSearchParams(link.getAttribute('href').split('?')[1]);
+    expect(origin.get('show')).toBe('show-1');
+    expect(origin.get('episode')).toBe('ep-1');
+    expect(readReturn(origin, { episodeId: 'ep-1', fallback: { href: 'x', text: 'x' } })).toEqual({ href: '/episodes/ep-1?tab=distribution', text: 'Back to Distribution', origin: true });
     expect(screen.queryByRole('button', { name: /Upload Thumbnail|Remove/ })).toBeNull();
   });
 
@@ -109,7 +115,7 @@ describe('EpisodeDistributionTab — thumbnail', () => {
       distribution_metadata: { youtube: { enabled: true, title: 'x', hashtags: [] } },
     });
     expect((await screen.findByRole('link', { name: 'Make it in Thumbnail Studio' })).getAttribute('href'))
-      .toBe('/template-studio/youtube?show=show-1&episode=ep-2');
+      .toBe('/template-studio/youtube?show=show-1&episode=ep-2&from=%2Fepisodes%2Fep-2%3Ftab%3Ddistribution&fromLabel=Distribution');
   });
 });
 
@@ -231,5 +237,101 @@ describe('EpisodeDistributionTab — layout', () => {
     for (let i = 1; i < order.length; i += 1) {
       expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
+  });
+});
+
+// Evoni, 2026-11-16: a draft changes the drafted words only. What she has set on a platform, saved or not, stays.
+describe('EpisodeDistributionTab — a draft keeps what is not copy', () => {
+  const EP = {
+    id: 'ep-1', show_id: 'show-1', title: 'Gala Night', teaser: 'What did she leave behind?',
+    distribution_metadata: {
+      youtube: { enabled: true, title: 'Old title', description: 'Old words', hashtags: ['#old'], status: 'published', scheduled_time: '2026-11-02T18:00', platform_url: 'https://youtube.test/watch?v=1', thumbnail_url: 'https://img.test/t.png', generated_at: '2026-10-01T00:00:00.000Z' },
+      tiktok: { enabled: true, title: 'Old tiktok', description: 'Old', hashtags: [], status: 'scheduled', scheduled_time: '2026-11-20T17:30', generated_at: '2026-10-01T00:00:00.000Z' },
+      instagram: { enabled: false, title: '', caption: 'My own caption', description: 'Old ig', hashtags: ['#mine'], status: 'draft', generated_at: '2026-10-01T00:00:00.000Z' },
+    },
+  };
+  // What the server answers for a platform: its stored entry with the new words (services/distributionService).
+  const answer = (platform, stored) => ({ ...stored, title: `New ${platform} title`, description: `New ${platform} words`, hashtags: ['#new'], tags: ['new'], generated_at: '2026-11-16T12:00:00.000Z', account_name: 'acct', account_url: 'https://acct.test' });
+  const renderTab = async () => {
+    const rtl = await import('@testing-library/react');
+    const { MemoryRouter } = await import('react-router-dom');
+    const { default: Tab } = await import('./EpisodeDistributionTab');
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { success: true, data: [] } });
+    rtl.render(<MemoryRouter><Tab episode={EP} onUpdate={() => {}} onOpenTab={() => {}} /></MemoryRouter>);
+    await rtl.screen.findByTestId('dist-row-youtube');
+    return rtl;
+  };
+  const savedPayload = () => vi.mocked(apiClient.put).mock.calls.at(-1)[1].distribution_metadata;
+  beforeEach(() => {
+    Object.values(apiClient).forEach((fn) => fn?.mockReset?.());
+    vi.spyOn(window, 'alert').mockImplementation(() => {});
+  });
+
+  test('applyGeneratedCopy: only the copy fields of the platforms drafted change', async () => {
+    const { applyGeneratedCopy, GENERATED_COPY_FIELDS } = await import('./EpisodeDistributionTab');
+    const current = JSON.parse(JSON.stringify(EP.distribution_metadata));
+    const out = applyGeneratedCopy(current, { youtube: answer('youtube', { status: 'draft', scheduled_time: null, platform_url: null, thumbnail_url: null }) });
+    expect(out.youtube).toMatchObject({ status: 'published', scheduled_time: '2026-11-02T18:00', platform_url: 'https://youtube.test/watch?v=1', thumbnail_url: 'https://img.test/t.png', enabled: true });
+    expect(out.youtube).toMatchObject({ title: 'New youtube title', description: 'New youtube words', hashtags: ['#new'], tags: ['new'], account_name: 'acct' });
+    expect(Object.keys(out.youtube).filter((k) => out.youtube[k] !== current.youtube[k]).sort()).toEqual([...GENERATED_COPY_FIELDS].sort());
+    // Platforms the draft does not name are the very same objects.
+    expect(out.tiktok).toBe(current.tiktok);
+    expect(out.instagram).toBe(current.instagram);
+    // A platform drafted before keeps its switch as she left it: Instagram stays off.
+    expect(applyGeneratedCopy(current, { instagram: answer('instagram', {}) }).instagram).toMatchObject({ enabled: false, caption: 'My own caption', description: 'New instagram words' });
+    // A platform drafted for the first time is switched on and takes the server's defaults for what it lacks.
+    const first = applyGeneratedCopy({ facebook: { enabled: false, title: 'Gala Night', caption: '', description: '', hashtags: [], scheduled_time: null, status: 'draft', thumbnail_url: null, platform_url: null } },
+      { facebook: answer('facebook', { status: 'draft', scheduled_time: null, platform_url: null, thumbnail_url: null }) });
+    expect(first.facebook).toMatchObject({ enabled: true, title: 'New facebook title', status: 'draft', scheduled_time: null, platform_url: null, caption: '' });
+    // Nothing drafted: nothing changes.
+    expect(applyGeneratedCopy(current, {})).toEqual(current);
+    expect(applyGeneratedCopy(current, { youtube: null })).toEqual(current);
+  });
+
+  test('an unsaved change to the status and the link survives a draft, and is what Save sends', async () => {
+    const { screen, fireEvent, within } = await renderTab();
+    // She opens TikTok, marks it published and pastes its link, and has not saved.
+    fireEvent.click(within(screen.getByTestId('dist-row-tiktok')).getByRole('button', { name: /TikTok/ }));
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'published' } });
+    fireEvent.change(screen.getByDisplayValue('2026-11-20T17:30'), { target: { value: '2026-12-01T09:00' } });
+    // The server answers with what it has stored (still "scheduled") and the new words, for every platform.
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { success: true, data: { context_used: { source: 'teaser' }, platforms: {
+      youtube: answer('youtube', EP.distribution_metadata.youtube),
+      tiktok: answer('tiktok', EP.distribution_metadata.tiktok),
+      instagram: answer('instagram', EP.distribution_metadata.instagram),
+      facebook: answer('facebook', { status: 'draft', scheduled_time: null, platform_url: null, thumbnail_url: null }),
+    } } } });
+    fireEvent.click(within(screen.getByTestId('results-share')).getByRole('button', { name: /Draft for all platforms/ }));
+    expect((await screen.findByRole('status')).textContent).toMatch(/^Drafted for 4 platforms/);
+    // On the page: her status and time are still what she set. (The new words are checked in what Save sends.)
+    expect(screen.getByLabelText('Status').value).toBe('published');
+    expect(screen.getByDisplayValue('2026-12-01T09:00')).toBeTruthy();
+    // And in what Save sends.
+    vi.mocked(apiClient.put).mockResolvedValue({ data: { success: true } });
+    fireEvent.click(within(screen.getByTestId('distribution-savebar')).getByRole('button', { name: /Save Distribution/ }));
+    await screen.findByText('Saved.');
+    const sent = savedPayload();
+    expect(sent.tiktok).toMatchObject({ status: 'published', scheduled_time: '2026-12-01T09:00', title: 'New tiktok title', enabled: true });
+    expect(sent.youtube).toMatchObject({ status: 'published', platform_url: 'https://youtube.test/watch?v=1', thumbnail_url: 'https://img.test/t.png', scheduled_time: '2026-11-02T18:00', title: 'New youtube title' });
+    expect(sent.instagram).toMatchObject({ enabled: false, caption: 'My own caption', description: 'New instagram words' });
+    expect(sent.facebook).toMatchObject({ enabled: true, status: 'draft', title: 'New facebook title' });
+  });
+
+  test('a platform the draft does not name keeps its saved values and her unsaved ones', async () => {
+    const { screen, fireEvent, within } = await renderTab();
+    // Unsaved: TikTok switched off. Saved: YouTube published. The draft is for Instagram only.
+    fireEvent.click(screen.getByRole('switch', { name: 'TikTok on' }));
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { success: true, data: { context_used: { source: 'teaser' }, platforms: { instagram: answer('instagram', EP.distribution_metadata.instagram) } } } });
+    fireEvent.click(within(screen.getByTestId('results-share')).getByRole('button', { name: /Draft for all platforms/ }));
+    expect((await screen.findByRole('status')).textContent).toMatch(/^Drafted for 1 platforms/);
+    expect(screen.getByRole('switch', { name: 'TikTok on' }).checked).toBe(false);
+    expect(screen.getByRole('switch', { name: 'YouTube on' }).checked).toBe(true);
+    vi.mocked(apiClient.put).mockResolvedValue({ data: { success: true } });
+    fireEvent.click(within(screen.getByTestId('distribution-savebar')).getByRole('button', { name: /Save Distribution/ }));
+    await screen.findByText('Saved.');
+    const sent = savedPayload();
+    expect(sent.tiktok).toMatchObject({ enabled: false, status: 'scheduled', scheduled_time: '2026-11-20T17:30', title: 'Old tiktok' });
+    expect(sent.youtube).toEqual(EP.distribution_metadata.youtube);
+    expect(sent.instagram).toMatchObject({ description: 'New instagram words', caption: 'My own caption' });
   });
 });

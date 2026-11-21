@@ -37,7 +37,7 @@ import ReleaseBoard from '../components/Show/ReleaseBoard';
 import LalaFeedTab from '../components/Show/LalaFeedTab';
 import ShowInsightsTab from '../components/Show/ShowInsightsTab';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
-import { ArrowRight, ArrowLeft, Plus, Calendar, Sparkles, AlertTriangle, Loader2, RotateCw, X, Gem, Crown, Heart, ChevronDown, Search, FileUp, Globe2, CalendarRange } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Plus, Calendar, AlertTriangle, Loader2, RotateCw, X, ChevronDown, Search, FileUp } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import AddPieceDialog from '../components/Wardrobe/AddPieceDialog';
@@ -47,6 +47,7 @@ import { realDraftFrom, realChanges, realWorldErrorText } from '../lib/wardrobeR
 import { fetchAllEpisodes, partialNote } from '../lib/fetchAllPages';
 import './WorldAdmin.css';
 import useSideScroll from '../hooks/useSideScroll';
+import ProducerNav, { PRODUCER_TABS } from '../components/Show/ProducerNav';
 import '../styles/wardrobe-backdrop.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -131,35 +132,36 @@ const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', 
 // board), events, opportunities, story, goals and results. World gathers
 // Lala's posts, the world's moments and her rate card. Keys stay as they
 // were so existing ?tab= links keep working.
-const TABS = [
-  { key: 'overview', Icon: Sparkles, label: 'Overview' },
-  { key: 'season-page', Icon: CalendarRange, label: 'Season', page: 'season' },
-  { key: 'wardrobe', Icon: Gem, label: 'Assets', subs: [
+// The six tabs are components/Show/ProducerNav's (PRODUCER_TABS: the one
+// list, shared with the Season page). Their sub-tabs are Producer Mode's own.
+const SUBS = {
+  wardrobe: [
     { key: 'scene-sets', label: 'Scene Sets' },
     { key: 'wardrobe-items', label: 'Wardrobe' },
     { key: 'overlays-tab', label: "Lala's Phone" },
     { key: 'production-overlays', label: 'Overlays' },
-  ]},
-  { key: 'characters', Icon: Crown, label: 'Cast & Continuity', subs: [
+  ],
+  characters: [
     { key: 'characters-list', label: "Lala's State & Continuity" },
     { key: 'finances', label: "Lala's Finances" },
     { key: 'decisions', label: 'Activity & Decisions' },
-  ]},
-  { key: 'world', Icon: Globe2, label: 'World', subs: [
+  ],
+  world: [
     // Lala's Feed (Evoni's redesign, 2026-10-05: "bring the feed back"); the Sidebar's Social Media page stays.
     { key: 'feed', label: "Lala's posts" },
     // The world moves on its own calendar (Evoni, 2026-10-18; services/worldMoments).
     { key: 'moments', label: 'World moments' },
     // What Lala charges (Evoni, 2026-10-19; services/rateCard).
     { key: 'rate-card', label: 'Rate card' },
-  ]},
-  { key: 'release', Icon: Heart, label: 'Release', subs: [
+  ],
+  release: [
     // The next episode out the door (Evoni's redesign, 2026-10-05); the release tab opens on it.
     { key: 'release-next', label: 'Next release' },
     { key: 'distribution', label: 'Distribution' },
     { key: 'insights', label: 'Insights' },
-  ]},
-];
+  ],
+};
+const TABS = PRODUCER_TABS.map((t) => (SUBS[t.key] ? { ...t, subs: SUBS[t.key] } : t));
 
 // What moved to the Season page: the old ?tab= key, and goTo with it, opens
 // the Season page on that tab (lib/seasonPage SEASON_TABS). The Season Plan
@@ -546,7 +548,6 @@ function WorldAdmin() {
   });
   const lookKeywords = dressCodeKeywords(look.event);
   // The tab rows slide sideways: drag, swipe or wheel (Evoni, 2026-11-03).
-  const [tabBarRef, , tabBarScroll] = useSideScroll();
   const [subTabsRef, , subTabsScroll] = useSideScroll();
 
   if (loading) return (
@@ -676,27 +677,7 @@ function WorldAdmin() {
         // waiting on approval, under World.
         const counts = { world: feedWaiting || 0 };
         return (
-          <nav className={`wa-tab-bar ${tabBarScroll}`} ref={tabBarRef} aria-label="Producer Mode">
-            {TABS.map(t => {
-              const n = counts[t.key] || 0;
-              // Season is a page of its own, so its entry is a link.
-              if (t.page === 'season') {
-                return (
-                  <Link key={t.key} to={seasonPageHref(showId)} className="wa-tab" data-testid="wa-tab-season">
-                    <t.Icon size={15} aria-hidden="true" />
-                    <span className="wa-tab-label">{t.label}</span>
-                  </Link>
-                );
-              }
-              return (
-                <button key={t.key} type="button" onClick={() => switchTab(t.key)} className={`wa-tab${activeTab === t.key ? ' active' : ''}`} aria-current={activeTab === t.key ? 'page' : undefined}>
-                  <t.Icon size={15} aria-hidden="true" />
-                  <span className="wa-tab-label">{t.label}</span>
-                  {n > 0 && <span className="wa-tab-count" aria-label={`${n} waiting`}>{n}</span>}
-                </button>
-              );
-            })}
-          </nav>
+          <ProducerNav showId={showId} active={activeTab} onSelect={switchTab} counts={counts} />
         );
       })()}
       {/* ─── SUB-TABS ─── */}

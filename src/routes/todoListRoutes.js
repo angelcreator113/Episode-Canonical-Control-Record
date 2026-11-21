@@ -13,7 +13,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { isSocialTaskRequired, completionIsDerived, DELIVERABLE_COMPLETION_DERIVED } = require('../utils/socialTaskSource');
 
 // The 409 a manual tick of a deliverable's task gets (Evoni, 2026-10-26).
@@ -44,7 +44,7 @@ function readAsOf(query) {
 // at that point of the script (shopping, deal or career) and the deal
 // checklist, ticked from its [DELIVER] cues (Task #3191). Read-only: a tick
 // never changes a deliverable's status; approval stays in Money.
-router.get('/episodes/:episodeId/todo/at', requireAuth, async (req, res) => {
+router.get('/episodes/:episodeId/todo/at', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { asOf, error } = readAsOf(req.query);
     if (error) return res.status(400).json({ error });
@@ -116,7 +116,7 @@ router.post('/episodes/:episodeId/todo/use-shopping-list', requireAuth, async (r
   }
 });
 
-router.get('/episodes/:episodeId/todo', requireAuth, async (req, res) => {
+router.get('/episodes/:episodeId/todo', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId } = req.params;
     const models = req.app.get('models') || require('../models');
@@ -438,7 +438,7 @@ router.post('/episodes/:episodeId/todo/complete-social/:slot', requireAuth, asyn
 });
 
 // GET /episodes/:episodeId/todo/social — Get social tasks with completion status
-router.get('/episodes/:episodeId/todo/social', requireAuth, async (req, res) => {
+router.get('/episodes/:episodeId/todo/social', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { sequelize } = req.app.get('models') || require('../models');

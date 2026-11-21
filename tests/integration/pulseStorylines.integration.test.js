@@ -183,7 +183,7 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     expect(await models.PulseStorylineBeat.count({ where: { storyline_id: lineId, story_order: 31 } })).toBe(0);
     expect((await as(admin, request(app).post(`/api/v1/pulse-storylines/${uuid()}/suggest`))).status).toBe(404);
 
-    const res = await as(editor, request(app).get(`/api/v1/pulse-storylines?show_id=${ids.show}`));
+    const res = await as(admin, request(app).get(`/api/v1/pulse-storylines?show_id=${ids.show}`));
     expect(res.status).toBe(200);
     expect(res.body.present).toBe(27);
     expect(res.body.threads.map((t) => t.title)).toEqual(['The rival house']);
@@ -234,5 +234,9 @@ const say = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }] }
     } finally {
       await queue.saveSettings(models, ids.show, { automated_requests: 5 });
     }
+  });
+  test("The Pulse's production reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/pulse-storylines?show_id=00000000-0000-4000-8000-000000000000`).set('Authorization', `Bearer ${editor}`);
+    expect(res.status).toBe(403);
   });
 });
