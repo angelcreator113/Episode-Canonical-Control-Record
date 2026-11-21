@@ -261,6 +261,13 @@ app.use(attachRBAC);
 // Capture response data for audit logging
 app.use(captureResponseData);
 
+// ADMIN by default for every state-changing API request (Evoni, 2026-11-15;
+// middleware/adminWriteGuard). Mounted on /api ahead of every router, the
+// legacy /api/* ones included, so a write route added later is an ADMIN's
+// unless config/writeGuardManifest names it. ADMIN_WRITE_GUARD sets it:
+// unset or 'off' does nothing, 'report' only logs, 'enforce' refuses.
+app.use('/api', require('./middleware/adminWriteGuard').adminWriteGuard);
+
 // Teleprompter phone remote (Teleprompter batch 3): mounted ahead of the
 // global /api limiters, because the desktop asks for the phone's commands
 // about every 700ms; teleprompterRemoteRoutes carries its own per-user and
