@@ -32,6 +32,7 @@ jest.mock('aws-sdk', () => ({
 const fs = require('fs');
 const path = require('path');
 const request = require('supertest');
+const { writeStatus } = require('../../helpers/writeGuard');
 const TokenService = require('../../../src/services/tokenService');
 const { diagnosticRoutesEnabled } = require('../../../src/utils/diagnosticRoutes');
 
@@ -116,7 +117,8 @@ describe('flags unset: debug and seed routes are not mounted', () => {
   });
 
   test('POST /api/v1/seed/all is 404, even for an admin', async () => {
-    expect((await request(app).post('/api/v1/seed/all')).status).toBe(404);
+    // Signed out: not mounted (404), or the ADMIN write guard refuses first (401). An ADMIN always reaches the 404.
+    expect((await request(app).post('/api/v1/seed/all')).status).toBe(writeStatus(null, 404));
     expect((await request(app).post('/api/v1/seed/all').set('Authorization', `Bearer ${adminToken()}`)).status).toBe(404);
   });
 
@@ -149,7 +151,9 @@ describe('ENABLE_DEBUG_ROUTES=true: mounted, admin-only', () => {
   });
 
   test('the seed flag is still off: /api/v1/seed is 404', async () => {
-    expect((await request(app).post('/api/v1/seed/all')).status).toBe(404);
+    expect((await request(app).post('/api/v1/seed/all')).status).toBe(writeStatus(null, 404));
+    // The route is not mounted for an ADMIN either: the debug flag does not switch the seed routes on.
+    expect((await request(app).post('/api/v1/seed/all').set('Authorization', `Bearer ${adminToken()}`)).status).toBe(404);
   });
 });
 
