@@ -240,4 +240,127 @@ const SALT = 'test-salt-for-polls';
     for (let i = 0; i < 12; i += 1) statuses.push((await vote(poll.id, poll.options[0].id, { ip: '198.51.100.7' })).status);
     expect(statuses).toContain(429);
   });
+
+  // ── Poll usability (Evoni's rulings of 2026-11-15) ──────────────────────
+
+  const draftBody = (extra = {}) => ({
+    show_id: ids.show, world_event_id: ids.gala,
+    question: `DRAFT-SENTINEL-${tag}`,
+    options: [{ label: `draft-option-a-${tag}`, wardrobe_ids: [ids.w1] }, { label: `draft-option-b-${tag}`, wardrobe_ids: [] }],
+    ...extra,
+  });
+  const makeDraft = async (extra) => (await as(admin, request(app).post('/api/v1/pulse-polls')).send(draftBody(extra))).body.poll;
+  const adminList = async () => (await as(admin, request(app).get(`/api/v1/pulse-polls?show_id=${ids.show}`))).body.polls;
+
+  test('the Admin list, drafts included, is an ADMIN\'s: no token 401, another signed-in account 403', async () => {
+    const draft = await makeDraft();
+    const anonymous = await request(app).get(`/api/v1/pulse-polls?show_id=${ids.show}`);
+    expect(anonymous.status).toBe(401);
+    expect(JSON.stringify(anonymous.body)).not.toContain('SENTINEL');
+    const other = await as(editor, request(app).get(`/api/v1/pulse-polls?show_id=${ids.show}`));
+    expect(other.status).toBe(403);
+    expect(other.body.polls).toBeUndefined();
+    expect(JSON.stringify(other.body)).not.toContain('SENTINEL');
+    const mine = await as(admin, request(app).get(`/api/v1/pulse-polls?show_id=${ids.show}`));
+    expect(mine.status).toBe(200);
+    expect(mine.body.polls.find((p) => p.id === draft.id)).toMatchObject({ status: 'draft', world_event_id: ids.gala });
+  });
+
+  test('a draft leaves the server by no public route: not its question, options, event, episode or pieces', async () => {
+    const draft = await makeDraft();
+    for (const token of [null, editor]) {
+      const read = token ? as(token, request(app).get('/api/v1/public/polls')) : request(app).get('/api/v1/public/polls');
+      const res = await read;
+      expect(res.status).toBe(200);
+      const raw = JSON.stringify(res.body);
+      for (const secret of [draft.id, `DRAFT-SENTINEL-${tag}`, `draft-option-a-${tag}`, draft.options[0].id, ids.gala, ids.ep1, ids.w1]) {
+        expect(raw).not.toContain(secret);
+      }
+    }
+    // Its id answers a vote exactly as an unknown id does.
+    const onDraft = await vote(draft.id, draft.options[0].id, { ip: '203.0.113.60' });
+    const onNothing = await vote(uuid(), uuid(), { ip: '203.0.113.61' });
+    expect(onDraft.status).toBe(404);
+    expect(onDraft.body).toEqual(onNothing.body);
+  });
+
+  test('a draft edits its question, options and closing time by the existing route; its event stays', async () => {
+    const draft = await makeDraft();
+    const closes = new Date(Date.now() + 86400000).toISOString();
+    const change = {
+      question: 'Edited question?', closes_at: closes,
+      options: [{ label: 'One', wardrobe_ids: [ids.w2] }, { label: 'Two', wardrobe_ids: [] }, { label: 'Three', wardrobe_ids: [ids.w3] }],
+      // Not editable: sent, and not taken.
+      world_event_id: ids.elsewhere, episode_id: uuid(), show_id: ids.other, status: 'open',
+    };
+    expect((await request(app).put(`/api/v1/pulse-polls/${draft.id}`).send(change)).status).toBe(401);
+    expect((await as(editor, request(app).put(`/api/v1/pulse-polls/${draft.id}`)).send(change)).status).toBe(403);
+    const res = await as(admin, request(app).put(`/api/v1/pulse-polls/${draft.id}`)).send(change);
+    expect(res.status).toBe(200);
+    expect(res.body.poll).toMatchObject({ question: 'Edited question?', status: 'draft', show_id: ids.show, world_event_id: ids.gala, episode_id: ids.ep1 });
+    expect(new Date(res.body.poll.closes_at).toISOString()).toBe(closes);
+    expect(res.body.poll.options.map((o) => [o.label, o.wardrobe_ids])).toEqual([['One', [ids.w2]], ['Two', []], ['Three', [ids.w3]]]);
+    // The closing time clears with null.
+    const cleared = await as(admin, request(app).put(`/api/v1/pulse-polls/${draft.id}`)).send({ closes_at: null });
+    expect(cleared.body.poll.closes_at).toBeNull();
+    expect(cleared.body.poll.question).toBe('Edited question?');
+  });
+
+  test('removing a draft is an ADMIN\'s and a soft delete; the draft is gone from every read', async () => {
+    const draft = await makeDraft();
+    expect((await request(app).delete(`/api/v1/pulse-polls/${draft.id}`)).status).toBe(401);
+    expect((await as(editor, request(app).delete(`/api/v1/pulse-polls/${draft.id}`))).status).toBe(403);
+    expect((await adminList()).some((p) => p.id === draft.id)).toBe(true);
+
+    const res = await as(admin, request(app).delete(`/api/v1/pulse-polls/${draft.id}`));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: true });
+    expect((await adminList()).some((p) => p.id === draft.id)).toBe(false);
+    // Kept as rows, marked deleted.
+    const [[row]] = await run('SELECT status, deleted_at FROM pulse_polls WHERE id = :id', { id: draft.id });
+    expect(row.status).toBe('draft');
+    expect(row.deleted_at).not.toBeNull();
+    const [opts] = await run('SELECT deleted_at FROM pulse_poll_options WHERE poll_id = :id', { id: draft.id });
+    expect(opts).toHaveLength(2);
+    expect(opts.every((o) => o.deleted_at !== null)).toBe(true);
+    // Removed, it is not found: to remove again, to edit or to open.
+    expect((await as(admin, request(app).delete(`/api/v1/pulse-polls/${draft.id}`))).status).toBe(404);
+    expect((await as(admin, request(app).put(`/api/v1/pulse-polls/${draft.id}`)).send({ question: 'x' })).status).toBe(404);
+    expect((await as(admin, request(app).post(`/api/v1/pulse-polls/${draft.id}/open`))).status).toBe(404);
+    expect((await as(admin, request(app).delete('/api/v1/pulse-polls/not-an-id'))).status).toBe(404);
+  });
+
+  test('an open or closed poll is not removed: 409, and its votes and result stay', async () => {
+    const poll = await makeDraft({ question: 'Kept?' });
+    await as(admin, request(app).post(`/api/v1/pulse-polls/${poll.id}/open`));
+    expect((await vote(poll.id, poll.options[0].id, { ip: '203.0.113.70' })).status).toBe(201);
+    const whileOpen = await as(admin, request(app).delete(`/api/v1/pulse-polls/${poll.id}`));
+    expect(whileOpen.status).toBe(409);
+    expect(whileOpen.body.error).toBe('Only a draft poll can be removed.');
+    await as(admin, request(app).post(`/api/v1/pulse-polls/${poll.id}/close`));
+    expect((await as(admin, request(app).delete(`/api/v1/pulse-polls/${poll.id}`))).status).toBe(409);
+    const kept = (await adminList()).find((p) => p.id === poll.id);
+    expect(kept).toMatchObject({ status: 'closed', total: 1 });
+    const [[{ n }]] = await run('SELECT COUNT(*)::int AS n FROM pulse_poll_votes WHERE poll_id = :id AND deleted_at IS NULL', { id: poll.id });
+    expect(n).toBe(1);
+  });
+
+  test('a poll does not open while votes cannot be taken: 503, still a draft, never public; it opens once voting is set up', async () => {
+    const draft = await makeDraft({ question: 'Opens later?' });
+    delete process.env.POLL_HASH_SALT;
+    try {
+      const res = await as(admin, request(app).post(`/api/v1/pulse-polls/${draft.id}/open`));
+      expect(res.status).toBe(503);
+      expect(res.body.error).toBe('Voting is not set up on the server yet, so a poll cannot open.');
+      expect((await adminList()).find((p) => p.id === draft.id).status).toBe('draft');
+      expect((await request(app).get('/api/v1/public/polls')).body.polls.some((p) => p.id === draft.id)).toBe(false);
+      // Drafting and editing go on without it.
+      expect((await as(admin, request(app).put(`/api/v1/pulse-polls/${draft.id}`)).send({ question: 'Still editable?' })).status).toBe(200);
+    } finally {
+      process.env.POLL_HASH_SALT = SALT;
+    }
+    const opened = await as(admin, request(app).post(`/api/v1/pulse-polls/${draft.id}/open`));
+    expect(opened.status).toBe(200);
+    expect(opened.body.poll.status).toBe('open');
+  });
 });
