@@ -28,7 +28,7 @@ function getModels() {
   return _models;
 }
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 let anthropic;
@@ -90,7 +90,9 @@ router.post('/seed-brands', requireAuth, async (req, res) => {
 
 // -- ROUTE 2: GET /brands --
 
-router.get('/brands', requireAuth, async (req, res) => {
+// ADMIN (Evoni, 2026-11-15): the whole brand record, its contact, partnership and press fields included.
+// An audience's brand list, if one is built, gives named fields of these same records.
+router.get('/brands', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = getModels();
     // Fashion brands only: outlets, agencies and venues are companies too
@@ -230,7 +232,7 @@ router.post('/tag-piece', requireAuth, async (req, res) => {
 
 // -- ROUTE 5: GET /pieces/uncovered --
 
-router.get('/pieces/uncovered', requireAuth, async (req, res) => {
+router.get('/pieces/uncovered', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { show_id } = req.query;
     const models = getModels();

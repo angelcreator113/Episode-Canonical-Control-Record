@@ -113,7 +113,11 @@ describe('legacy format', () => {
 
 describe('studio format (unchanged)', () => {
   test('template_studio_id + asset_map creates the composition, its assets and outputs, and a 201', async () => {
-    mockSequelizeQuery.mockResolvedValue([[{ id: STUDIO, name: 'Studio', version: 1, required_roles: ['BG.MAIN'] }]]);
+    // The template's own read finds it; any other read (the document
+    // presentation rule's, 2026-11-19) finds nothing.
+    mockSequelizeQuery.mockImplementation(async (sql) => (/FROM template_studio/.test(String(sql))
+      ? [[{ id: STUDIO, name: 'Studio', version: 1, required_roles: ['BG.MAIN'] }]]
+      : [[]]));
     const composition = { id: 'comp-1', composition_config: {}, save: jest.fn() };
     mockModels.ThumbnailComposition.create.mockResolvedValue(composition);
     mockCompositionService.generateThumbnails.mockResolvedValue([{ format: 'YOUTUBE' }]);

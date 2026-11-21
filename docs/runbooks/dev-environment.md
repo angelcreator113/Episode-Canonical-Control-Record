@@ -86,13 +86,13 @@ sudo REF=<full sha> DIST_TARBALL=/home/ubuntu/dev-db/dist-<sha>.tar.gz DIST_SHA2
   bash /home/ubuntu/dev-db/bin/install-dev-app.sh
 ```
 
-The installer refuses while the app is online or with under 2.8 GiB RAM+swap. It applies pending migrations to the local database only, then swaps trees.
+The installer refuses while the app is online, with under 2.8 GiB RAM+swap, or with under 2,048 MiB of free disk (`MIN_FREE_MIB`). It applies pending migrations to the local database only, then swaps trees. `deploy-dev-box.sh` also needs `MIGRATIONS_FILE` (the commit's migration file names, one per line) for its preflight; the installer alone does not.
 
 **A failed migration installs nothing.** The migration step is `scripts/dev-db/migrate-local-db.sh`, run on the staged tree before the swap. It reads the ledger with `scripts/check-pending-migrations.js` (the check the production Deploy workflow uses), runs `db:migrate` when files are pending, and reads the ledger again. If `db:migrate` fails, if anything is still pending, or if the ledger cannot be read, the installer exits 1 before the swap: the live tree and the running app are as they were, `deploy-dev-box.sh` restarts the existing tree, and the Deploy to Development run fails. The log has a `MIGRATION FAILED` or `MIGRATION INCOMPLETE` line and sequelize's own `ERROR` line; a good run has `MIGRATIONS OK`. A healthy `/health` says nothing about migrations.
 
 - A migration that runs in one transaction is rolled back whole. Migrations that finished before the failing one stay applied, under the old code.
 - The staged tree stays at `episode-metadata.next` until the next install removes it.
-- The rollback tree (`episode-metadata.prev`) is removed at the start of every install, before the clone, because the disk holds only two trees. So after a failed migration the live tree is intact but there is no `.prev` to roll back to; redeploy an earlier commit instead. Start afterwards:
+- The rollback tree (`episode-metadata.prev`) is kept until the swap (since 2026-11-13; before that it was removed at the start of every install, so a failed install left nothing to roll back to). After a failed migration both the live tree and `.prev` are as they were. Start afterwards:
 
 ```bash
 sudo -u ubuntu -H bash -lc 'cd ~/episode-metadata && pm2 start ecosystem.dev.config.js --only episode-api,episode-worker && pm2 save'
@@ -100,6 +100,84 @@ ss -ltn | grep 3002   # expect 127.0.0.1:3002 only
 ```
 
 Rollback: stop both, `mv episode-metadata episode-metadata.bad && mv episode-metadata.prev episode-metadata`, start.
+
+## Deploying a chosen commit, and rolling back (2026-11-13)
+
+*Deploy to Development* (`.github/workflows/deploy-dev.yml`) has one optional input, `commit`.
+
+| `commit` | What is installed |
+|---|---|
+| empty | The commit the run was dispatched on, as before. |
+| a full 40-character sha | That commit, if `scripts/dev-db/select-deploy-commit.sh` accepts it. This is the redeploy and the rollback. |
+
+A selected commit is accepted only when all of these hold; otherwise the run stops in its first job and nothing reaches the box:
+
+1. It is a full, lowercase, 40-character sha.
+2. The run was dispatched on `main`. The workflow, its environment rules and the on-box scripts are then `main`'s, whatever commit is installed.
+3. The commit is on `main`.
+4. `main`'s CI passed for exactly that commit: one Validate run on a push to `main` whose Tests, Route Validation and Cost Exposure Audit jobs all succeeded. Nothing is re-run in its place.
+
+What does not change with the input: the instance (tag `Name=episode-dev-backend`), the GitHub environment `development`, the role `episode-gha-deploy-dev`, and the staging prefix `deploys/dev/` in `episode-metadata-storage-dev`.
+
+**Limits.** A commit from before 2026-11-11 (#3795) has no `scripts/dev-db/migrate-local-db.sh`, and the installer refuses it. The on-box scripts are always the dispatched commit's, so the installer, preflight and verification are today's.
+
+### The preflight (before anything is stopped)
+
+`deploy-dev-box.sh` first runs `scripts/dev-db/preflight-dev-deploy.sh`, which only reads. A refusal ends the run with the dev app still running and both trees as they were.
+
+| Check | Refuses when |
+|---|---|
+| Disk | under `MIN_FREE_MIB` (2,048 MiB) free on `/` |
+| Memory | under `MIN_MEM_MIB` (2,800 MiB) of RAM + swap |
+| Schema | the local database has applied a migration that the commit does not have (a rollback across a migration); an applied name or a file name of the commit is in neither naming convention; the commit has a file named on the retired list; or the ledger cannot be read |
+
+Migrations the commit has and the database lacks are not a refusal: the installer applies them before the swap, as before.
+
+**Schema and rollback.** With no migration between the installed commit and the one selected, installing the earlier commit is a complete rollback of the code. Data the newer code wrote stays in the local database; older code ignores JSON keys it does not know. Across a migration the preflight refuses, because this workflow never runs a down-migration. The choices then are to fix forward, or to refresh the dev data (which replaces the whole local database and erases test records).
+
+**How names are compared** (`preflight-dev-deploy.sh`, `NAME_RE` and `RETIRED_APPLIED`). Exactly as the ledger and the commit give them: nothing is renamed, trimmed or given a missing `.js`, and the ledger is never written. Two conventions are recognised, the ones `src/migrations` uses: a 14-digit prefix (403 files on 2026-11-21) and an 8-digit prefix (3 files). A name in neither, applied or in the commit, is a refusal, never skipped.
+
+**The nine retired names.** The dev database is a copy of production's, so its ledger keeps names from before the first commit this workflow can install (2026-11-11, PR #3795). Read on 2026-11-21 with one read-only query (`SELECT name FROM "SequelizeMeta"`; Evoni's approval of that day): 415 rows, of which 406 are the files on `main` (nothing pending), and 9 are in no selectable commit. No row lacked `.js`, none had another prefix shape, and there were no duplicates. Without an exception those nine would refuse every deploy, so the preflight sets aside exactly these names, and prints each one when it does:
+
+| Applied name | Where it went |
+|---|---|
+| `20260208000000-create-lala-formula.js` | on `main` as `20260208000002-create-lala-formula.js` |
+| `20260307140000-create-franchise-knowledge.js` | on `main` as `20260307210000-create-franchise-knowledge.js` |
+| `20260315000000-add-relationship-engine-columns.js` | on `main` as `20260615000000-add-relationship-engine-columns.js` |
+| `20260315100000-add-expanded-world-character-columns.js` | on `main` as `20260615120000-add-expanded-world-character-columns.js` |
+| `20260320000000-create-scene-sets-and-angles.js` | on `main` as `20260625000000-create-scene-sets-and-angles.js` |
+| `20260710000000-create-generation-jobs.js` | on `main` as `20260323000000-create-generation-jobs.js` |
+| `20260311200000-create-story-calendar-system.js` | no file of that name on `main` |
+| `20260306100000-create-episode-orchestration-tables.js` | no file of that name on `main`, and none found in its history |
+| `20260627000000-add-base-still-url.js` | only in the root `migrations/` tree, which does not run |
+
+What that exception does and does not show: none of the nine is a file in any selectable commit, so setting them aside cannot hide a difference between two of those commits. It does not show that the schema those nine once made is what today's code expects; the preflight never could. The match is by whole name only. Any other applied name the commit lacks is refused, including the 16 other names that have left `src/migrations` and are not in the ledger. A commit that has one of the nine as a file is refused until the list is reviewed.
+
+**Known limit: a failed start after a migration.** The installer applies the new commit's migrations before the swap. If the new app then fails `deploy-dev-box.sh`'s verification, the previous tree is put back and started against the newer schema. Nothing undoes the migration, and the preflight cannot foresee it. Until that has had its own safety review, a commit that adds a migration is not deployed to dev (Evoni, 2026-11-21); the select step prints how many migration files `main` has that the commit lacks, and the preflight prints how many are still to apply.
+
+### Rolling back
+
+1. **A deploy that fails its own verification** puts the previous tree back by itself (`deploy-dev-box.sh`).
+2. **By workflow:** Actions, *Deploy to Development*, Run workflow on `main`, with `commit` set to the sha to return to. The last successful deploy's sha is in that run's summary.
+3. **By hand, on the box** (needs a shell): stop both, `mv episode-metadata episode-metadata.bad && mv episode-metadata.prev episode-metadata`, start (the commands are under *Installing a commit*). `.prev` holds the commit installed before the current one.
+
+## Disk
+
+The root volume is 20 GB. Measured on 2026-11-20, after that day's deploy, with the live and rollback trees both present: about 12 GB free.
+
+One application tree is about 700 MiB (`node_modules` 550 M, `dist` 10 M), measured from the deploy logs of 2026-11-11 and 2026-11-12, when the volume was about 8 GB:
+
+| Moment, on the 8 GB volume | Free on `/` |
+|---|---|
+| Before a deploy, live and rollback trees present | 414 M, then 404 M (95% used) |
+| After the old rollback tree was removed | 1.1 G |
+| After the new tree was staged | 414 M, then 404 M |
+
+It fitted then only because the rollback tree was deleted first, which left a failed install with nothing to roll back to.
+
+**Threshold: 2,048 MiB free before a deploy.** An install keeps the rollback tree and adds one tree (about 700 MiB), leaving about 1.3 GiB of margin. The preflight and the installer both enforce it. At about 12 GB free it passes; at the 2026-11-12 level it refused.
+
+Up to four trees can be on disk: live, rollback (`.prev`), one being staged (`.next`), and one kept from a failed verification (`.failed`, replaced by the next failure). If space runs short, it can be freed (npm cache, logs, a leftover `.next` or `.failed` tree), each a delete for Evoni to approve. Never remove: `episode-metadata`, `episode-metadata.prev`, `~/.config/episode-dev/`, `/home/ubuntu/dev-db/`, the PostgreSQL data directory, `/etc/letsencrypt`, the nginx site files, `~/.pm2/dump.pm2`, `/swapfile`.
 
 ## The public dev site (Task #3781, 2026-11-10)
 

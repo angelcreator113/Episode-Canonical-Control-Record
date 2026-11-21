@@ -26,10 +26,15 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const regA = uuid();
   const regB = uuid();
   let token;
+  let editorToken;
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-registries-show', email: 'test@registries-show.dev', name: 'Registries Show Test',
+      id: 'test-admin-registries-show', email: 'test@registries-show.dev', name: 'Registries Show Test',
+      groups: ['ADMIN'], role: 'ADMIN',
+    }).accessToken;
+    editorToken = TokenService.generateTokenPair({
+      id: 'test-editor-registries-show', email: 'editor@registries-show.dev', name: 'Registries Show Editor',
       groups: ['USER', 'EDITOR'], role: 'USER',
     }).accessToken;
     for (const [show, reg, n] of [[showA, regA, 2], [showB, regB, 3]]) {
@@ -50,6 +55,16 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   const get = (qs) => request(app).get(`/api/v1/character-registry/registries${qs}`).set('Authorization', `Bearer ${token}`);
+
+  // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+  it('the registries are an ADMIN\'s to list: an editor is refused, with or without a show', async () => {
+    for (const qs of ['', `?show_id=${showA}`]) {
+      const res = await request(app).get(`/api/v1/character-registry/registries${qs}`).set('Authorization', `Bearer ${editorToken}`);
+      expect(res.status).toBe(403);
+      expect(res.body.registries).toBeUndefined();
+    }
+    expect((await request(app).get('/api/v1/character-registry/registries')).status).toBe(401);
+  });
 
   it('lists only that show\'s registries and their characters', async () => {
     const res = await get(`?show_id=${showA}&limit=100`);

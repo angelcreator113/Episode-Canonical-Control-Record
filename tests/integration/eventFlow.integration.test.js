@@ -226,4 +226,98 @@ const reply = (obj) => ({ content: [{ type: 'text', text: JSON.stringify(obj) }]
       expect(res.body.data.drafts).toEqual([]);
     });
   });
+
+  // Continuity PR 1 (Evoni, 2026-11-13): warnings only. Its own events, on
+  // their own day, added after everything above has run.
+  describe('GET …/flow: schedule and continuity', () => {
+    const DAY = '2026-12-05';
+    const s = { gala: crypto.randomUUID(), dinner: crypto.randomUUID(), brunch: crypto.randomUUID(), declined: crypto.randomUUID(), started: crypto.randomUUID(), booked: crypto.randomUUID(), echo: crypto.randomUUID(), row: crypto.randomUUID() };
+    const cc = (automation) => JSON.stringify({ automation });
+    const nia = () => [{ profile_id: guest, display_name: 'Nia Cole' }];
+    const add = (id, name, { time = null, status = 'draft', src = null, loc = null, used = null, opp = null, automation = {} } = {}) => run(`INSERT INTO world_events
+        (id, show_id, name, event_type, prestige, status, event_date, event_time, source_profile_id, venue_location_id, opportunity_id,
+         used_in_episode_id, canon_consequences, created_at, updated_at)
+      VALUES (:id, :show, :name, 'invite', 5, :status, :date, :time, :src, :loc, :opp, :used, CAST(:cc AS jsonb), NOW(), NOW())`,
+    { id, show: ids.show, name, status, date: DAY, time, src, loc, opp, used, cc: cc(automation) });
+    const put = (eventId, body) => request(app).put(`/api/v1/world/${ids.show}/events/${eventId}`).set('Authorization', `Bearer ${token}`).send(body);
+    const stored = async (eventId) => (await sequelize.query('SELECT status, event_date, event_time, canon_consequences FROM world_events WHERE id = :id', { replacements: { id: eventId }, type: sequelize.QueryTypes.SELECT }))[0];
+
+    beforeAll(async () => {
+      await run(`INSERT INTO world_locations (id, name, city, venue_type, created_at, updated_at) VALUES (:echo, 'Echo Hall', 'Echo Park', 'ballroom', NOW(), NOW()), (:row, 'Row House', 'Radiance Row', 'gallery', NOW(), NOW())`, s);
+      await run(`INSERT INTO opportunities (id, show_id, name, opportunity_type, status, created_at, updated_at) VALUES (:id, :show, 'Booked gala', 'appearance', 'booked', NOW(), NOW())`, { id: s.booked, show: ids.show });
+      await add(s.gala, 'Winter Gala', { time: '19:00', src: host, loc: s.echo, opp: s.booked, automation: { guest_profiles: nia(), event_end_time: '22:00' } });
+      await add(s.dinner, 'Late Dinner', { time: '22:30', loc: s.row, automation: { guest_profiles: nia(), event_end_time: '00:30' } });
+      await add(s.brunch, 'Brunch', { time: '11:00', loc: s.echo, automation: { guest_profiles: nia(), event_end_time: '13:00' } });
+      await add(s.declined, 'Declined Party', { time: '19:00', status: 'declined', automation: { guest_profiles: nia(), event_end_time: '23:00' } });
+      await add(s.started, 'Started Shoot', { time: '21:00', used: crypto.randomUUID(), loc: s.echo, automation: { event_end_time: '23:00' } });
+    });
+    afterAll(async () => {
+      await run('DELETE FROM world_events WHERE id IN (:ids)', { ids: Object.values(s) });
+      await run('DELETE FROM opportunities WHERE id = :id', { id: s.booked });
+      await run('DELETE FROM world_locations WHERE id IN (:echo, :row)', s);
+    });
+
+    it('the same day is not a conflict by itself: only people at both, whose times cross or leave too little time to travel', async () => {
+      const res = await flow(s.gala);
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+      const { schedule, conflicts, place, travel_minutes: travel, lala } = res.body.schedule;
+      expect(schedule).toMatchObject({ day: DAY, start_time: '19:00', end_time: '22:00', end_suggested: false, provisional: false, verifiable: true, problems: [] });
+      expect(place).toEqual({ venue_id: s.echo, city: 'Echo Park', dream: true });
+      expect(travel).toEqual({ same_venue: 0, same_city: 20, between_dream_cities: 45 });
+      expect(lala).toEqual({ level: 'confirmed' });
+      const seen = conflicts.map((c) => [c.other.name, c.person.name, c.kind, c.severity]);
+      expect(seen).toEqual([
+        // Lala is confirmed for the gala (its offer is booked) and committed to the shoot (its episode): 21:00-23:00 crosses 19:00-22:00.
+        ['Started Shoot', 'Lala', 'overlap', 'lala'],
+        // Nia: the gala ends 22:00 in Echo Park, the dinner starts 22:30 in Radiance Row: 30 minutes for a 45 minute journey.
+        ['Late Dinner', 'Nia Cole', 'travel', 'guest'],
+      ]);
+      expect(conflicts[1].travel).toMatchObject({ basis: 'between_dream_cities', minutes: 45, gap: 30 });
+      // The brunch is the same day with the same guest, hours earlier: nothing. The declined party holds nobody.
+      expect(conflicts.some((c) => ['Brunch', 'Declined Party'].includes(c.other.name))).toBe(false);
+      // The older date-only check is still answered as it was: it names every same-day event.
+      expect(res.body.clashes.sameDay.map((e) => e.name).sort()).toEqual(['Brunch', 'Declined Party', 'Late Dinner', 'Started Shoot']);
+      expect(res.body.clashes.doubleBooked.map((p) => p.name)).toEqual(['Nia Cole']);
+    });
+
+    it('reading it writes nothing', async () => {
+      const before = await Promise.all(Object.values(s).slice(0, 5).map(stored));
+      await flow(s.gala);
+      await flow(s.dinner);
+      expect(await Promise.all(Object.values(s).slice(0, 5).map(stored))).toEqual(before);
+    });
+
+    it('the optional end time, end date and offset save through the event PUT into automation, beside what is there; null removes them', async () => {
+      const saved = await put(s.brunch, { canon_consequences: { automation: { event_end_time: '15:30', event_end_date: DAY, utc_offset_minutes: 60 } } });
+      expect(saved.status).toBe(200);
+      let row = await stored(s.brunch);
+      expect(row.canon_consequences.automation).toEqual({ guest_profiles: nia(), event_end_time: '15:30', event_end_date: DAY, utc_offset_minutes: 60 });
+      expect(row).toMatchObject({ status: 'draft', event_date: DAY, event_time: '11:00' });
+      const read = (await flow(s.brunch)).body.schedule.schedule;
+      expect(read).toMatchObject({ end_time: '15:30', end_day: DAY, offset_minutes: 60, offset_set: true, verifiable: true });
+
+      expect((await put(s.brunch, { canon_consequences: { automation: { event_end_time: '13:00', event_end_date: null, utc_offset_minutes: null } } })).status).toBe(200);
+      row = await stored(s.brunch);
+      expect(row.canon_consequences.automation).toEqual({ guest_profiles: nia(), event_end_time: '13:00' });
+    });
+
+    it('nothing is refused: an event with a host and a guest in two places can still be saved and marked ready', async () => {
+      await add(crypto.randomUUID(), 'Second Hosting', { time: '20:00', src: host, automation: { event_end_time: '21:00' } });
+      const res = await flow(s.gala);
+      expect(res.body.schedule.conflicts.find((c) => c.severity === 'host')).toMatchObject({ kind: 'overlap', other: { name: 'Second Hosting' }, person: { name: 'Ama Velour', role: 'host', other_role: 'host' } });
+      expect((await put(s.gala, { status: 'ready' })).status).toBe(200);
+      expect((await stored(s.gala)).status).toBe('ready');
+      expect((await put(s.gala, { status: 'draft' })).status).toBe(200);
+    });
+
+    it('a time that cannot be read is an explicit failure with the people it leaves unverified', async () => {
+      expect((await put(s.dinner, { event_time: '10:30 PM' })).status).toBe(200);
+      const res = await flow(s.dinner);
+      expect(res.body.schedule.schedule).toMatchObject({ verifiable: false, start: null });
+      expect(res.body.schedule.schedule.problems.map((p) => p.code)).toEqual(['time_unreadable']);
+      expect(res.body.schedule.conflicts.filter((c) => c.kind === 'unverified').map((c) => c.other.name).sort()).toEqual(['Brunch', 'Winter Gala']);
+      expect((await put(s.dinner, { event_time: '22:30' })).status).toBe(200);
+    });
+  });
 });

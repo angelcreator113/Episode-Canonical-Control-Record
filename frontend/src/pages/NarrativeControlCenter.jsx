@@ -317,8 +317,9 @@ function CharacterArcTab() {
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB: Relationship Timeline
 // ═══════════════════════════════════════════════════════════════════════════
-function RelTimelineTab() {
+export function RelTimelineTab() {
   const [relationships, setRelationships] = useState([]);
+  const [loadError, setLoadError] = useState(null);
   const [selectedRel, setSelectedRel] = useState(null);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -326,10 +327,23 @@ function RelTimelineTab() {
   const [form, setForm] = useState({ event_type: 'milestone', title: '', description: '', tension_before: 5, tension_after: 5, relationship_stage: '' });
 
   useEffect(() => {
-    fetchJSON(`${API}/relationships`).then(data => {
-      setRelationships(data.relationships || data || []);
-      setLoading(false);
-    });
+    let live = true;
+    fetchJSON(`${API}/relationships`)
+      .then(data => {
+        if (!live) return;
+        const list = data.relationships || data || [];
+        setRelationships(Array.isArray(list) ? list : []);
+      })
+      .catch((err) => {
+        console.error('[NarrativeControl] relationships could not be read:', err.response?.status || err.message);
+        if (!live) return;
+        // Relationships are production material: the server answers 403 to an account that is not an admin.
+        setLoadError(err.response?.status === 403
+          ? 'Relationships are for admins. Your account is not in the admin group.'
+          : 'Relationships could not be loaded just now. Try again in a moment.');
+      })
+      .finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
   }, []);
 
   const loadEvents = async (relId) => {
@@ -352,6 +366,7 @@ function RelTimelineTab() {
   const stageColors = { strangers: '#94a3b8', acquaintances: '#64748b', flirting: '#f472b6', friends: '#3b82f6', close_friends: '#2563eb', lovers: '#ec4899', partners: '#a855f7', exes: '#ef4444', enemies: '#dc2626' };
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: T.slate }}>Loading...</div>;
+  if (loadError) return <div role="alert" data-testid="rel-timeline-error" style={{ padding: 40, textAlign: 'center', color: T.slate }}>{loadError}</div>;
 
   return (
     <div style={{ display: 'flex', gap: 20 }}>

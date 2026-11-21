@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const { sequelize } = models;
 
@@ -24,11 +25,15 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const rows = async (sql, replacements = {}) => (await run(sql, replacements))[0];
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('the episode estimate prices the chosen look (Task #1919)', () => {
   const show = uuid();
   const closet = { gown: uuid(), coat: uuid(), boots: uuid(), heels: uuid() };
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('pnl-look');
   const start = (eventId) => request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`)
     .set('Authorization', `Bearer ${token}`).send({ draft_script: false });
 
@@ -41,7 +46,7 @@ const rows = async (sql, replacements = {}) => (await run(sql, replacements))[0]
   }
 
   beforeAll(async () => {
-    token = TokenService.generateTokenPair({ id: 'test-user-pnl-look', email: 'evoni@pnl-look.dev', name: 'PnL Look', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-admin-pnl-look', email: 'evoni@pnl-look.dev', name: 'PnL Look', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
       { show, name: `PnL ${show.slice(0, 8)}`, slug: `pnl-${show.slice(0, 8)}` });
     // A closet worth 5000 coins, none of it chosen for these episodes.
@@ -93,5 +98,17 @@ const rows = async (sql, replacements = {}) => (await run(sql, replacements))[0]
     const { expenses, fin } = await money(res.body.episode?.id || res.body.data?.episode?.id);
     expect(fin).toMatchObject({ outfit_cost: 1500, outfit_chosen: true });
     expect(expenses).toBe(1600);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot start an episode: no episode, no to-do list, the event unlinked', async () => {
+    const eventId = await event();
+    const state = async () => JSON.stringify({
+      episodes: await rows('SELECT id FROM episodes WHERE show_id = :show ORDER BY id', { show }),
+      todos: await rows('SELECT id FROM episode_todo_lists WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show) ORDER BY id', { show }),
+      event: await rows('SELECT status, used_in_episode_id, updated_at FROM world_events WHERE id = :eventId', { eventId }),
+    });
+    const before = await state();
+    await expectWriteRefused(() => request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`).send({ draft_script: false }), readOnly);
+    expect(await state()).toBe(before);
   });
 });

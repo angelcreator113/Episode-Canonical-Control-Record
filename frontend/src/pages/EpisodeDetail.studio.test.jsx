@@ -5,8 +5,8 @@
  * data are left out.
  */
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({ isAuthenticated: true, loading: false }),
@@ -29,6 +29,7 @@ vi.mock('../components/ToastContainer', () => ({
 vi.mock('../services/episodeService', () => ({
   default: {
     getEpisode: vi.fn(),
+    deleteEpisode: vi.fn(),
     updateEpisode: vi.fn(),
   },
 }));
@@ -171,6 +172,81 @@ describe('the studio header', () => {
     renderAt('/episodes/ep-1?tab=overview');
     const header = await screen.findByTestId('ed-header');
     expect(within(header).getByTestId('ed-crumb-episodes').getAttribute('href')).toBe('/episodes');
+  });
+
+  // Producer Mode PR A (Evoni, 2026-11-15): where the page goes when the
+  // episode is deleted, or was never found.
+  describe('after Delete, and "not found"', () => {
+    const Where = () => { const l = useLocation(); return <p data-testid="where">{l.pathname + l.search}</p>; };
+    const mount = (entry) => render(
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
+          <Route path="*" element={<Where />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const remove = async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(await screen.findByText('Delete Episode'));
+    };
+    beforeEach(() => {
+      vi.mocked(api.get).mockResolvedValue({ data: {} });
+      vi.mocked(episodeService.deleteEpisode).mockReset();
+      vi.mocked(episodeService.deleteEpisode).mockResolvedValue({});
+    });
+
+    test('deleted: the Season page\'s Episodes tab, in the season the episode was placed in (read before it is gone)', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      vi.mocked(episodeService.getEpisode).mockResolvedValue({ ...FULL, season_number: 1, season_context: { season_number: 2, slot_number: 3, label: 'S2 · E3' } });
+      mount('/episodes/ep-1?tab=overview');
+      await remove();
+      expect((await screen.findByTestId('where')).textContent).toBe('/shows/show-1/season?tab=episodes&season=2');
+      expect(episodeService.deleteEpisode).toHaveBeenCalledWith('ep-1');
+      confirm.mockRestore();
+    });
+
+    test('deleted, with no season stored: the Episodes tab of the season in progress', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      vi.mocked(episodeService.getEpisode).mockResolvedValue({ ...FULL, season_number: 4 });
+      mount('/episodes/ep-1?tab=overview');
+      await remove();
+      expect((await screen.findByTestId('where')).textContent).toBe('/shows/show-1/season?tab=episodes');
+      confirm.mockRestore();
+    });
+
+    test('deleted, with no show: the list it always went to', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      vi.mocked(episodeService.getEpisode).mockResolvedValue({ id: 'ep-1', title: 'Loose', episode_number: 4 });
+      mount('/episodes/ep-1?tab=overview');
+      await remove();
+      expect((await screen.findByTestId('where')).textContent).toBe('/episodes');
+      confirm.mockRestore();
+    });
+
+    test('not deleted when it is refused or declined: the page stays where it is', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      vi.mocked(episodeService.getEpisode).mockResolvedValue(FULL);
+      mount('/episodes/ep-1?tab=overview');
+      await remove();
+      expect(episodeService.deleteEpisode).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('where')).toBeNull();
+      confirm.mockReturnValue(true);
+      vi.mocked(episodeService.deleteEpisode).mockRejectedValue(Object.assign(new Error('filmed'), { response: { status: 409, data: { error: 'This episode has been filmed.' } } }));
+      await remove();
+      await waitFor(() => expect(episodeService.deleteEpisode).toHaveBeenCalledTimes(1));
+      expect(screen.queryByTestId('where')).toBeNull();
+      confirm.mockRestore();
+    });
+
+    test('an episode that cannot be read: a way back that says where it goes', async () => {
+      vi.mocked(episodeService.getEpisode).mockRejectedValue(new Error('gone'));
+      mount('/episodes/ep-x');
+      const back = await screen.findByTestId('ed-notfound-back');
+      expect(back.textContent).toContain('Back to Shows');
+      fireEvent.click(back);
+      expect((await screen.findByTestId('where')).textContent).toBe('/episodes');
+    });
   });
 
   test('the chosen tab is the magenta pill; the tabs keep their names and order', async () => {

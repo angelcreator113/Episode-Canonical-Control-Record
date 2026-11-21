@@ -648,3 +648,27 @@ describe('OfferDecisionDialog: an event that already has an episode, and checkin
     expect(screen.queryByTestId('offer-decision-check')).toBeNull();
   });
 });
+
+// Evoni, 2026-11-15 (Producer Mode PR A): "Open the episode" stays in the app
+// and opens the episode's Overview; the dialog closes, since it can be open
+// on the episode page itself. It was a plain link that reloaded the page.
+describe('OfferDecisionDialog: Open the episode, in the app', () => {
+  test('a router link to the episode (no tab: its Overview) that closes the dialog; no reload', async () => {
+    const { MemoryRouter, Routes, Route, useLocation } = await import('react-router-dom');
+    const Where = () => { const l = useLocation(); return <p data-testid="where">{l.pathname + l.search}</p>; };
+    const onCancel = vi.fn();
+    const pending = { opportunity: null, opportunities: [], canDecide: true, refusal: { kind: 'has_episode', episode: { id: 'ep-9', title: 'The Gala', episode_number: 3 } } };
+    render(
+      <MemoryRouter initialEntries={['/shows/show-1/events/ev-1']}>
+        <Where />
+        <Routes><Route path="*" element={<OfferDecisionDialog pending={pending} onChoose={vi.fn()} onCancel={onCancel} />} /></Routes>
+      </MemoryRouter>,
+    );
+    const link = screen.getByTestId('offer-decision-open-episode');
+    expect(link.textContent).toBe('Open the episode');
+    expect(link.getAttribute('href')).toBe('/episodes/ep-9');
+    fireEvent.click(link);
+    expect(screen.getByTestId('where').textContent).toBe('/episodes/ep-9');
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+});

@@ -16,9 +16,10 @@ const router = express.Router();
 const { createAnthropicClient } = require('../services/anthropicClient');
 // F-AUTH-1 Step 3 CP7: mixed Tier 1+4 within single file (per v2.31 §5.21,
 // 3rd cumulative instance after worldStudio.js at CP3 + universe.js at CP6).
-// Writes require authentication (Tier 1); GETs are public catalog reads with
-// no req.user consumption (Tier 4). /multi-product/all also Tier 4 PUBLIC.
-const { optionalAuth, requireAuth } = require('../middleware/auth');
+// Writes require authentication (Tier 1). The five GETs were public catalog reads
+// (Tier 4) until 2026-11-16: the show bible and the writing plan are production
+// material, so they are an ADMIN's to read (Evoni, 2026-11-16).
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const db = require('../models');
 const { Op } = require('sequelize');
@@ -47,7 +48,7 @@ const scopeFields = ({ scope, show_id }) => {
   return { fields };
 };
 
-router.get('/franchise-brain/entries', optionalAuth, async (req, res) => {
+router.get('/franchise-brain/entries', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const { category, status, severity, scope, show_id } = req.query;
   try {
     const where = {};
@@ -310,7 +311,7 @@ router.patch('/franchise-brain/entries/:id/unarchive', requireAuth, async (req, 
 // ─────────────────────────────────────────────────────────────────────────────
 // AMBER ACTIVITY — summary of Amber's contributions + growth metrics
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/franchise-brain/amber-activity', optionalAuth, async (req, res) => {
+router.get('/franchise-brain/amber-activity', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     // Entries Amber has pushed/created
     const amberEntries = await db.FranchiseKnowledge.findAll({
@@ -495,7 +496,7 @@ Respond ONLY in valid JSON:
 // ─────────────────────────────────────────────────────────────────────────────
 // DOCUMENTS — list stored ingested documents
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/franchise-brain/documents', optionalAuth, async (req, res) => {
+router.get('/franchise-brain/documents', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!db.BrainDocument) {
       return res.json({ documents: [], message: 'BrainDocument model not available — run migration' });
@@ -511,7 +512,7 @@ router.get('/franchise-brain/documents', optionalAuth, async (req, res) => {
   }
 });
 
-router.get('/franchise-brain/documents/:id', optionalAuth, async (req, res) => {
+router.get('/franchise-brain/documents/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (!db.BrainDocument) {
       return res.status(404).json({ error: 'BrainDocument model not available' });
@@ -654,7 +655,7 @@ Respond ONLY in valid JSON:
 // ─────────────────────────────────────────────────────────────────────────────
 // GET ALL MULTI-PRODUCT CONTENT (for WritingRhythm pipeline view)
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/multi-product/all', optionalAuth, async (req, res) => {
+router.get('/multi-product/all', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const content = await db.MultiProductContent.findAll({
       order: [['created_at', 'DESC']],

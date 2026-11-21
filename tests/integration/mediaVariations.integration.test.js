@@ -161,8 +161,14 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
     expect(res.body.root_id).toBe(parent.id);
     expect(res.body.items[0].id).toBe(parent.id);
     expect(res.body.items.filter((i) => i.parent_asset_id === parent.id)).toHaveLength(2);
-    const member = await as(request(app).get(`/api/v1/media/${parent.id}/family`), user);
-    expect(member.body.items.map((i) => i.id)).toEqual([parent.id]);
-    expect((await as(request(app).get(`/api/v1/media/${child.id}/family`), user)).status).toBe(404);
+    // The library's reads are an ADMIN's since 2026-11-15 (tests/integration/pictureReadAuthorization).
+    const refused = await as(request(app).get(`/api/v1/media/${parent.id}/family`), user);
+    expect(refused.status).toBe(403);
+    expect(refused.body.items).toBeUndefined();
+    // What a reader who is not an ADMIN may see is still the library's rule.
+    const { familyOf } = require('../../src/services/mediaVariations');
+    const member = await familyOf(models, parent.id, { audience: 'member' });
+    expect(member.items.map((i) => i.id)).toEqual([parent.id]);
+    await expect(familyOf(models, child.id, { audience: 'member' })).rejects.toMatchObject({ status: 404 });
   });
 });

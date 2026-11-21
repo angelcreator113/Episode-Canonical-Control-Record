@@ -102,7 +102,9 @@ const DAY = 24 * HOUR;
     const early = await schedule(p.id, new Date(air.getTime() - 2 * DAY));
     expect(early.status).toBe(409);
     expect(early.body.problems[0]).toMatch(/^Too early: it is revealed During Ep 3/);
-    const suggested = await request(app).get(`/api/v1/feed-posts/${p.id}/release-time/suggest?tz_offset=0`).set('Authorization', `Bearer ${editor}`);
+    const suggested = await request(app).get(`/api/v1/feed-posts/${p.id}/release-time/suggest?tz_offset=0`).set('Authorization', `Bearer ${admin}`);
+    // An operational read of the studio's: an ADMIN's since 2026-11-15 (tests/integration/feedPostPublicFields).
+    expect((await request(app).get(`/api/v1/feed-posts/${p.id}/release-time/suggest?tz_offset=0`).set('Authorization', `Bearer ${editor}`)).status).toBe(403);
     expect(suggested.status).toBe(200);
     expect(new Date(suggested.body.at).getTime()).toBeGreaterThanOrEqual(air.getTime());
     expect(suggested.body.why).toMatch(/moved to keep the story in order$/);
@@ -119,7 +121,10 @@ const DAY = 24 * HOUR;
     const reply = await mk({ story_order: 32, parent_post_id: parent.id });
     await mk({ story_order: 31, release_state: 'held' });
 
-    const plan = await request(app).get(`/api/v1/feed-posts/release-plan?show_id=${planShow}&tz_offset=0`).set('Authorization', `Bearer ${editor}`);
+    const planRefused = await request(app).get(`/api/v1/feed-posts/release-plan?show_id=${planShow}&tz_offset=0`).set('Authorization', `Bearer ${editor}`);
+    expect(planRefused.status).toBe(403);
+    expect(planRefused.body.items).toBeUndefined();
+    const plan = await request(app).get(`/api/v1/feed-posts/release-plan?show_id=${planShow}&tz_offset=0`).set('Authorization', `Bearer ${admin}`);
     expect(plan.status).toBe(200);
     expect(plan.body.items.map((i) => i.post_id)).toEqual([parent.id, reply.id, after.id]);
     const byId = Object.fromEntries(plan.body.items.map((i) => [i.post_id, i]));
@@ -139,8 +144,8 @@ const DAY = 24 * HOUR;
     const anyway = await request(app).post('/api/v1/feed-posts/release-plan').set('Authorization', `Bearer ${admin}`).send({ items: [items[1]], anyway: true });
     expect(anyway.body.scheduled).toEqual([reply.id]);
 
-    const again = await request(app).get(`/api/v1/feed-posts/release-plan?show_id=${planShow}&tz_offset=0`).set('Authorization', `Bearer ${editor}`);
+    const again = await request(app).get(`/api/v1/feed-posts/release-plan?show_id=${planShow}&tz_offset=0`).set('Authorization', `Bearer ${admin}`);
     expect(again.body.items).toEqual([]);
-    expect((await request(app).get('/api/v1/feed-posts/release-plan').set('Authorization', `Bearer ${editor}`)).status).toBe(400);
+    expect((await request(app).get('/api/v1/feed-posts/release-plan').set('Authorization', `Bearer ${admin}`)).status).toBe(400);
   });
 });

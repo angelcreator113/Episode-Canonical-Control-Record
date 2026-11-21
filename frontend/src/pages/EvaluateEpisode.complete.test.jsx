@@ -168,3 +168,69 @@ describe('completing from this page is the one shared operation', () => {
     expect(screen.getByTestId('evaluate-estimate-note').textContent).toMatch(/Completing an episode needs an admin account/);
   });
 });
+
+// ── The way back (PR-05): the tab Evaluate was opened from ────────────────
+describe('the way back (PR-05)', () => {
+  const OTHER = '99999999-2222-4333-8444-555555555555';
+  const q = (from, label) => `?from=${encodeURIComponent(from)}${label ? `&fromLabel=${encodeURIComponent(label)}` : ''}`;
+  const open = (search = '') => render(
+    <AuthContext.Provider value={ADMIN}>
+      <MemoryRouter initialEntries={[`/episodes/ep-1/evaluate${search}`]}>
+        <Routes>
+          <Route path="/episodes/:id/evaluate" element={<><EvaluateEpisode /><Where /></>} />
+          <Route path="*" element={<Where />} />
+        </Routes>
+      </MemoryRouter>
+    </AuthContext.Provider>,
+  );
+
+  test('no origin: "Back to Episode", to the episode, as before', async () => {
+    open();
+    const back = await screen.findByTestId('evaluate-back');
+    expect(back.getAttribute('href')).toBe('/episodes/ep-1');
+    expect(back.textContent).toBe('← Back to Episode');
+  });
+
+  test('opened from the Checklist: "Back to Checklist"; a click lands on that tab', async () => {
+    open(q('/episodes/ep-1?tab=checklist', 'Checklist'));
+    const back = await screen.findByTestId('evaluate-back');
+    expect(back.getAttribute('href')).toBe('/episodes/ep-1?tab=checklist');
+    expect(back.textContent).toBe('← Back to Checklist');
+    fireEvent.click(back);
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/episodes/ep-1?tab=checklist'));
+  });
+
+  test('opened from other tabs: each returns to its own', async () => {
+    for (const tab of ['scripts', 'summary', 'money']) {
+      const view = open(q(`/episodes/ep-1?tab=${tab}`));
+      expect((await screen.findByTestId('evaluate-back')).getAttribute('href')).toBe(`/episodes/ep-1?tab=${tab}`);
+      view.unmount();
+    }
+  });
+
+  test('another episode\'s tab, an outside address and a malformed one fall back to the episode', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const from of [`/episodes/${OTHER}?tab=checklist`, '/episodes/ep-2?tab=checklist', 'https://evil.example/x', '//evil.example', '/\\evil.example', 'javascript:alert(1)', '/episodes/%E0%A4%A']) {
+      const view = open(q(from, 'Checklist'));
+      const back = await screen.findByTestId('evaluate-back');
+      expect(back.getAttribute('href')).toBe('/episodes/ep-1');
+      expect(back.textContent).toBe('← Back to Episode');
+      view.unmount();
+    }
+  });
+
+  test('completing still lands on Results, whatever the origin', async () => {
+    open(q('/episodes/ep-1?tab=checklist', 'Checklist'));
+    fireEvent.click(await screen.findByTestId('evaluate-complete'));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/episodes/ep-1?tab=results'));
+  });
+
+  test('"View the stored result" still opens Results', async () => {
+    episode = { ...episode, evaluation_status: 'accepted' };
+    open(q('/episodes/ep-1?tab=checklist', 'Checklist'));
+    await screen.findByTestId('evaluate-back');
+    const links = [...document.querySelectorAll('a')].filter((a) => a.textContent === 'View the stored result');
+    expect(links.length).toBeGreaterThan(0);
+    for (const a of links) expect(a.getAttribute('href')).toBe('/episodes/ep-1?tab=results');
+  });
+});

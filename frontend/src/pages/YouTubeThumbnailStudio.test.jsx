@@ -10,8 +10,8 @@
  * older one deleted. The canvas itself is stubbed (ThumbnailCanvas.test).
  */
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, fireEvent, waitFor, within, act, cleanup } from '@testing-library/react';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 vi.mock('../lib/youtubeThumbnailsApi', async () => {
   const actual = await vi.importActual('../lib/youtubeThumbnailsApi');
@@ -61,6 +61,8 @@ import {
 } from '../lib/youtubeThumbnailsApi';
 import { presetLayers, layerOf } from '../lib/thumbnailLayers';
 import YouTubeThumbnailStudio from './YouTubeThumbnailStudio';
+import { readReturn, tabOrigin } from '../utils/returnPath';
+import { resolveEpisodeTab } from '../utils/episodeTabs';
 
 const SOURCES = {
   episode: { id: 'ep-1', title: 'Studio by Sable', episode_number: 1 },
@@ -459,6 +461,11 @@ describe('YouTubeThumbnailStudio', () => {
     expect(layerOf(youtubeThumbnailsApi.save.mock.calls[0][1], 'title').text).toBe('Studio by Sable');
     expect(await screen.findByText("Saved as the episode's thumbnail.")).toBeTruthy();
     expect(within(await screen.findByTestId('yts-saved-7')).getByText('Episode thumbnail')).toBeTruthy();
+    // The way back names where it lands (Evoni, 2026-11-15): Production opens on Scenes, and it read "Back to Production".
+    const back = await screen.findByTestId('yts-back-scenes');
+    expect(back.textContent).toBe('Back to Scenes');
+    expect(back.getAttribute('href')).toBe('/episodes/ep-1?tab=scenes');
+    expect(screen.queryByRole('link', { name: 'Back to Production' })).toBeNull();
   });
 
   test('arranging: Shift-click picks several in the layers list; line them up; spread three; one lines up with the canvas', async () => {
@@ -1680,5 +1687,180 @@ describe('YouTubeThumbnailStudio on a phone', () => {
     expect(stage.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
     act(() => seen([{ intersectionRatio: 1, boundingClientRect: { top: 80 } }]));
     expect(screen.queryByTestId('yts-mini')).toBeNull();
+  });
+});
+
+// ── The way back to where the editor was opened from (PR-06) ──────────────
+describe('YouTubeThumbnailStudio: the way back (PR-06)', () => {
+  const Where = () => { const l = useLocation(); return <p data-testid="where">{l.pathname + l.search}</p>; };
+  const open = (entry) => render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route path="/template-studio/youtube" element={<><YouTubeThumbnailStudio /><Where /></>} />
+        <Route path="*" element={<Where />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const where = () => screen.getByTestId('where').textContent;
+  const fromTab = (episodeId, tab) => thumbnailStudioHref({ showId: 'show-1', episodeId, ...tabOrigin(episodeId, tab) });
+  const header = () => screen.getByTestId('yts-back-episode');
+  const save = async () => {
+    youtubeThumbnailsApi.save.mockResolvedValue({ id: 7, url: 'https://b.s3.amazonaws.com/t.png' });
+    youtubeThumbnailsApi.saved.mockResolvedValue([{ id: 7, url: 'https://b.s3.amazonaws.com/t.png', isPrimary: true }]);
+    fireEvent.click(screen.getByTestId('yts-save'));
+    return screen.findByTestId('yts-back-scenes');
+  };
+
+  beforeEach(() => {
+    Object.values(youtubeThumbnailsApi).forEach((fn) => fn.mockReset());
+    youtubeThumbnailsApi.shows.mockResolvedValue([{ id: 'show-1', name: 'Styling Adventures' }]);
+    youtubeThumbnailsApi.episodes.mockResolvedValue([
+      { id: 'ep-1', episode_number: 1, title: 'Studio by Sable' }, { id: 'ep-2', episode_number: 2, title: 'Gala' },
+    ]);
+    youtubeThumbnailsApi.sources.mockResolvedValue(SOURCES);
+    youtubeThumbnailsApi.render.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+    youtubeThumbnailsApi.saved.mockResolvedValue([]);
+    youtubeThumbnailsApi.saveDraft.mockResolvedValue({});
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:exact');
+    globalThis.URL.revokeObjectURL = vi.fn();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  // The page is taken down before the mocks lose their answers.
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+  test('thumbnailStudioHref: an origin is added; with none, every address is what it was', () => {
+    expect(thumbnailStudioHref({ showId: 's1', episodeId: 'e1', from: '/episodes/e1?tab=distribution', fromLabel: 'Distribution' }))
+      .toBe('/template-studio/youtube?show=s1&episode=e1&from=%2Fepisodes%2Fe1%3Ftab%3Ddistribution&fromLabel=Distribution');
+    expect(thumbnailStudioHref({ episodeId: 'e1', from: '/episodes/e1?tab=scenes' })).toBe('/template-studio/youtube?episode=e1&from=%2Fepisodes%2Fe1%3Ftab%3Dscenes');
+    // A label alone is not an origin.
+    expect(thumbnailStudioHref({ episodeId: 'e1', fromLabel: 'Distribution' })).toBe('/template-studio/youtube?episode=e1');
+    for (const empty of [{ from: null }, { from: undefined }, { from: '' }, tabOrigin('e1', 'overview') || {}, {}]) {
+      expect(thumbnailStudioHref({ showId: 's1', episodeId: 'e1', ...empty })).toBe('/template-studio/youtube?show=s1&episode=e1');
+    }
+    expect(thumbnailStudioHref()).toBe('/template-studio/youtube');
+    expect(thumbnailStudioHref({ showId: 's1', templateId: 't1' })).toBe('/template-studio/youtube?show=s1&template=t1');
+    // What it writes is what the editor reads.
+    const q = new URLSearchParams(fromTab('e1', 'lookbook').split('?')[1]);
+    expect(readReturn(q, { episodeId: 'e1', fallback: { href: 'x', text: 'x' } })).toEqual({ href: '/episodes/e1?tab=lookbook', text: 'Back to Style Page', origin: true });
+  });
+
+  test('no origin: the header link and the "Saved." link are as before', async () => {
+    open('/template-studio/youtube?show=show-1&episode=ep-1');
+    await opened();
+    expect(header().getAttribute('href')).toBe('/episodes/ep-1');
+    await waitFor(() => expect(header().textContent).toContain('Studio by Sable'));
+    expect(header().getAttribute('title')).toBe('Back to Studio by Sable');
+    const saved = await save();
+    expect(saved.textContent).toBe('Back to Scenes');
+    expect(saved.getAttribute('href')).toBe('/episodes/ep-1?tab=scenes');
+  });
+
+  test('opened from a tab: both links return to it and say so', async () => {
+    for (const [tab, label] of [['distribution', 'Distribution'], ['scenes', 'Scenes'], ['wardrobe', 'Wardrobe'], ['checklist', 'Checklist']]) {
+      const view = open(fromTab('ep-1', tab));
+      await opened();
+      expect(header().getAttribute('href')).toBe(`/episodes/ep-1?tab=${tab}`);
+      expect(header().textContent.trim()).toBe(`Back to ${label}`);
+      expect(header().getAttribute('title')).toBe(`Back to ${label}`);
+      const saved = await save();
+      expect(saved.textContent).toBe(`Back to ${label}`);
+      expect(saved.getAttribute('href')).toBe(`/episodes/ep-1?tab=${tab}`);
+      view.unmount();
+    }
+  });
+
+  test('saving keeps the origin: the address still carries it, and following the link lands there', async () => {
+    const entry = fromTab('ep-1', 'distribution');
+    open(entry);
+    await opened();
+    const saved = await save();
+    expect(youtubeThumbnailsApi.save).toHaveBeenCalledWith('ep-1', expect.anything());
+    expect(where()).toBe(entry);
+    expect(header().getAttribute('href')).toBe('/episodes/ep-1?tab=distribution');
+    fireEvent.click(saved);
+    await waitFor(() => expect(where()).toBe('/episodes/ep-1?tab=distribution'));
+  });
+
+  test('the header link is followed to the origin', async () => {
+    open(fromTab('ep-1', 'wardrobe'));
+    await opened();
+    fireEvent.click(header());
+    await waitFor(() => expect(where()).toBe('/episodes/ep-1?tab=wardrobe'));
+  });
+
+  test('switching episode with the arrow clears a stale origin: the links are the new episode\'s own', async () => {
+    open(fromTab('ep-1', 'distribution'));
+    await opened();
+    expect(header().getAttribute('href')).toBe('/episodes/ep-1?tab=distribution');
+    fireEvent.click(screen.getByTestId('yts-next-episode'));
+    await waitFor(() => expect(header().getAttribute('href')).toBe('/episodes/ep-2'));
+    expect(where()).toBe('/template-studio/youtube?show=show-1&episode=ep-2');
+    await waitFor(() => expect(header().textContent).toContain('Gala'));
+    expect(header().getAttribute('title')).toBe('Back to Gala');
+    await opened();
+    const saved = await save();
+    expect(saved.textContent).toBe('Back to Scenes');
+    expect(saved.getAttribute('href')).toBe('/episodes/ep-2?tab=scenes');
+  });
+
+  test('an address that names one episode and an origin for another: the origin is not followed', async () => {
+    // As a stale or hand-edited address would be: episode ep-2, origin ep-1's tab.
+    open(thumbnailStudioHref({ showId: 'show-1', episodeId: 'ep-2', ...tabOrigin('ep-1', 'distribution') }));
+    await opened();
+    expect(header().getAttribute('href')).toBe('/episodes/ep-2');
+    await waitFor(() => expect(header().textContent).toContain('Gala'));
+    const saved = await save();
+    expect(saved.getAttribute('href')).toBe('/episodes/ep-2?tab=scenes');
+    expect(saved.textContent).toBe('Back to Scenes');
+  });
+
+  test('an outside, protocol-relative or malformed origin is not followed', async () => {
+    for (const from of ['https://evil.example/x', '//evil.example', '/\\evil.example', 'javascript:alert(1)', '/episodes/%E0%A4%A', '/episodes/']) {
+      const view = open(`/template-studio/youtube?show=show-1&episode=ep-1&from=${encodeURIComponent(from)}&fromLabel=Distribution`);
+      await opened();
+      expect(header().getAttribute('href')).toBe('/episodes/ep-1');
+      expect(header().textContent).not.toContain('Distribution');
+      view.unmount();
+    }
+  });
+
+  test('a tab that does not exist is not something a caller can send, and an address naming one still stays in this episode', async () => {
+    expect(tabOrigin('ep-1', 'nope')).toBeNull();
+    open(`/template-studio/youtube?show=show-1&episode=ep-1&from=${encodeURIComponent('/episodes/ep-1?tab=nope')}`);
+    await opened();
+    // The Episode page opens its Overview for a tab it does not know (utils/episodeTabs).
+    expect(header().getAttribute('href')).toBe('/episodes/ep-1?tab=nope');
+    expect(resolveEpisodeTab('nope').main).toBe('overview');
+  });
+
+  test('the label is text only, one line and capped', async () => {
+    open(`/template-studio/youtube?show=show-1&episode=ep-1&from=${encodeURIComponent('/episodes/ep-1?tab=scenes')}&fromLabel=${encodeURIComponent('<b>//evil.example</b>' + 'x'.repeat(80))}`);
+    await opened();
+    expect(header().getAttribute('href')).toBe('/episodes/ep-1?tab=scenes');
+    expect(header().querySelector('b')).toBeNull();
+    expect(header().textContent.trim()).toBe(`Back to ${('<b>//evil.example</b>' + 'x'.repeat(80)).slice(0, 40)}`);
+  });
+
+  test('with no episode open there is no way back, origin or not', async () => {
+    open(`/template-studio/youtube?show=show-1&from=${encodeURIComponent('/episodes/ep-1?tab=scenes')}`);
+    expect(await screen.findByText(/Drag, resize and turn anything/)).toBeTruthy();
+    expect(screen.queryByTestId('yts-back-episode')).toBeNull();
+  });
+
+  test('the origin adds no read and no write', async () => {
+    const READS = ['shows', 'episodes', 'sources', 'saved'];
+    const settledReads = async () => {
+      await opened();
+      for (const k of READS) await waitFor(() => expect(youtubeThumbnailsApi[k]).toHaveBeenCalled());
+      // Every function of the client, by how often it was called.
+      return Object.fromEntries(Object.entries(youtubeThumbnailsApi).map(([k, fn]) => [k, fn.mock.calls.length]));
+    };
+    const a = open('/template-studio/youtube?show=show-1&episode=ep-1');
+    const plain = await settledReads();
+    a.unmount();
+    Object.values(youtubeThumbnailsApi).forEach((fn) => fn.mockClear());
+    open(fromTab('ep-1', 'distribution'));
+    expect(await settledReads()).toEqual(plain);
+    for (const k of ['save', 'saveDraft']) expect(youtubeThumbnailsApi[k]).not.toHaveBeenCalled();
   });
 });

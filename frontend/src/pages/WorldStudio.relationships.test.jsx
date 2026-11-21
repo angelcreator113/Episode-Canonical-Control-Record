@@ -41,12 +41,14 @@ const json = (data) => ({ ok: true, status: 200, json: async () => data });
 
 beforeEach(() => {
   Object.values(apiClient).forEach((fn) => fn.mockReset());
-  vi.stubGlobal('fetch', vi.fn(async (url) => {
-    if (String(url).includes('/world/characters?')) return json({ characters: [SABLE, NIA] });
-    if (String(url).endsWith('/world/characters/w-sable')) return json({ character: SABLE });
-    return json({});
-  }));
-  vi.mocked(apiClient.get).mockImplementation(async (url) => (url === '/api/v1/world/characters/w-sable/relationships' ? { data: RELS } : { data: {} }));
+  // The character-depth panel still uses fetch; the world reads go through apiClient (an ADMIN's since 2026-11-16).
+  vi.stubGlobal('fetch', vi.fn(async () => json({})));
+  vi.mocked(apiClient.get).mockImplementation(async (url) => {
+    if (url === '/api/v1/world/characters/w-sable/relationships') return { data: RELS };
+    if (String(url).includes('/world/characters?')) return { data: { characters: [SABLE, NIA] } };
+    if (String(url).endsWith('/world/characters/w-sable')) return { data: { character: SABLE } };
+    return { data: {} };
+  });
 });
 afterEach(() => vi.unstubAllGlobals());
 

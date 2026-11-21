@@ -73,24 +73,36 @@ beforeEach(() => {
 });
 
 describe('defaultSeasonTab', () => {
-  test('the Roadmap once any slot is pencilled, in production or done; else the Overview', () => {
-    expect(defaultSeasonTab({ phases: phases(EMPTY) })).toBe('overview');
-    expect(defaultSeasonTab({ phases: phases([slot(1, 1, { state: 'event_ready' }), slot(2, 1)]) })).toBe('roadmap');
-    expect(defaultSeasonTab({ phases: phases([slot(1, 1, { state: 'in_production' })]) })).toBe('roadmap');
-    expect(defaultSeasonTab({ phases: phases([slot(1, 1, { state: 'done' })]) })).toBe('roadmap');
+  const q = (text) => new URLSearchParams(text);
+  test('the Overview, whatever the season\'s progress (it was the Roadmap once the season was under way)', () => {
+    expect(defaultSeasonTab()).toBe('overview');
     expect(defaultSeasonTab(null)).toBe('overview');
-    expect(defaultSeasonTab({})).toBe('overview');
-    expect(defaultSeasonTab({ phases: [{ slots: [{ state: 'something_new' }, null] }] })).toBe('overview');
+    expect(defaultSeasonTab(q(''))).toBe('overview');
+    // A roadmap is no longer what decides it: one handed in by an older caller changes nothing.
+    expect(defaultSeasonTab({ phases: phases(UNDER_WAY) })).toBe('overview');
+    expect(defaultSeasonTab({ phases: phases([slot(1, 1, { state: 'done' })]) })).toBe('overview');
+    // Values that belong to no one tab do not choose one.
+    expect(defaultSeasonTab(q('season=2'))).toBe('overview');
+    expect(defaultSeasonTab(q('seasons=all'))).toBe('overview');
+    expect(defaultSeasonTab(q('from=home'))).toBe('overview');
+  });
+
+  test('an address that carries a tab\'s own value and names no tab is that tab', () => {
+    for (const k of ['slot=3', 'view=timeline', 'part=2', 'status=open']) expect(defaultSeasonTab(q(k))).toBe('roadmap');
+    for (const k of ['event=ev-1', 'show=unplaced', 'evpage=2', 'evq=gala', 'evstate=ready', 'evdeal=paid', 'evsort=cost']) expect(defaultSeasonTab(q(k))).toBe('events');
+    expect(defaultSeasonTab(q('deal_with=co-1'))).toBe('opportunities');
+    expect(defaultSeasonTab(q('season=2&slot=3'))).toBe('roadmap');
   });
 
   test('a tab named in the address always wins; an unknown one is the Overview, as before', () => {
-    const under = { phases: phases(UNDER_WAY) };
-    expect(tabForAddress(null, under)).toBe('roadmap');
-    expect(tabForAddress('', under)).toBe('roadmap');
-    for (const t of SEASON_TABS) expect(tabForAddress(t.key, under)).toBe(t.key);
-    expect(tabForAddress('overview', under)).toBe('overview');
-    expect(tabForAddress('production', under)).toBe('episodes');
-    expect(tabForAddress('nonsense', under)).toBe('overview');
+    const slotInAddress = q('slot=3');
+    expect(tabForAddress(null)).toBe('overview');
+    expect(tabForAddress('')).toBe('overview');
+    expect(tabForAddress(null, slotInAddress)).toBe('roadmap');
+    for (const t of SEASON_TABS) expect(tabForAddress(t.key, slotInAddress)).toBe(t.key);
+    expect(tabForAddress('overview', slotInAddress)).toBe('overview');
+    expect(tabForAddress('production', slotInAddress)).toBe('episodes');
+    expect(tabForAddress('nonsense', slotInAddress)).toBe('overview');
   });
 
   test('every link the app builds to the Overview names it', () => {
@@ -100,10 +112,11 @@ describe('defaultSeasonTab', () => {
 });
 
 describe('the Season page with no tab in its address', () => {
-  test('a season with planned or started slots opens on the Roadmap, and the address is left alone', async () => {
+  test('a season under way opens on the Overview, and the address is left alone', async () => {
     renderAt('/shows/show-1/season');
-    expect(await screen.findByTestId('szn-roadmap')).toBeTruthy();
-    expect(openTab()).toBe('Roadmap');
+    expect(await screen.findByTestId('szn-panel-overview')).toBeTruthy();
+    expect(openTab()).toBe('Overview');
+    expect(screen.queryByTestId('szn-roadmap')).toBeNull();
     expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season');
   });
 
@@ -123,9 +136,40 @@ describe('the Season page with no tab in its address', () => {
     expect(document.body.textContent).toMatch(/three phases/);
   });
 
-  test('other values in the address (a season, a filter) do not count as choosing a tab', async () => {
+  test('a season, or every season, in the address does not choose a tab', async () => {
+    renderAt('/shows/show-1/season?seasons=all');
+    expect(await screen.findByTestId('szn-panel-overview')).toBeTruthy();
+    expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?seasons=all');
+  });
+});
+
+describe('an address with a tab\'s own value and no tab (links into a piece of work)', () => {
+  test('?slot=2 opens the Roadmap with that slot\'s panel, and stays there once the slot is used up', async () => {
+    renderAt('/shows/show-1/season?slot=2');
+    await screen.findByTestId('szn-roadmap');
+    await waitFor(() => expect(screen.getByTestId('season-slot-package-2')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season?tab=roadmap'));
+    expect(openTab()).toBe('Roadmap');
+  });
+
+  test('a Roadmap filter (?view=grid) opens the Roadmap, as before', async () => {
     renderAt('/shows/show-1/season?view=grid');
     expect(await screen.findByTestId('szn-roadmap')).toBeTruthy();
+    expect(openTab()).toBe('Roadmap');
+  });
+
+  test('?event=… and ?show=… open the Events tab', async () => {
+    renderAt('/shows/show-1/season?show=unplaced');
+    await waitFor(() => expect(openTab()).toBe('Events'));
+    expect(screen.getByTestId('where').textContent).toContain('tab=events');
+    expect(screen.getByTestId('where').textContent).toContain('show=unplaced');
+  });
+
+  test('?deal_with=… opens Opportunities and keeps the value', async () => {
+    renderAt('/shows/show-1/season?deal_with=co-1');
+    await waitFor(() => expect(openTab()).toBe('Opportunities'));
+    expect(screen.getByTestId('where').textContent).toContain('tab=opportunities');
+    expect(screen.getByTestId('where').textContent).toContain('deal_with=co-1');
   });
 });
 
@@ -136,14 +180,29 @@ describe('a tab named in the address', () => {
     expect(openTab()).toBe('Overview');
   });
 
-  test.each(['roadmap', 'episodes', 'events', 'story', 'cast', 'plants', 'goals', 'results'])('?tab=%s opens that tab', async (key) => {
+  test.each(['roadmap', 'episodes', 'events', 'opportunities', 'story', 'cast', 'plants', 'goals', 'results'])('?tab=%s opens that tab', async (key) => {
     renderAt(`/shows/show-1/season?tab=${key}`);
     const label = SEASON_TABS.find((t) => t.key === key).label;
     await waitFor(() => expect(openTab()).toBe(label));
   });
 
-  test('the Overview tab\'s own link names it, so a click from the default Roadmap really leaves the Roadmap', async () => {
-    renderAt('/shows/show-1/season');
+  test('an older name (?tab=production) opens Episodes; a tab that is not one opens the Overview', async () => {
+    const first = renderAt('/shows/show-1/season?tab=production');
+    await waitFor(() => expect(openTab()).toBe('Episodes'));
+    first.unmount();
+    renderAt('/shows/show-1/season?tab=nonsense&slot=2');
+    expect(await screen.findByTestId('szn-panel-overview')).toBeTruthy();
+    expect(openTab()).toBe('Overview');
+  });
+
+  test('a named tab wins over a value in the address: ?tab=goals&slot=2 is Goals', async () => {
+    renderAt('/shows/show-1/season?tab=goals&slot=2');
+    await waitFor(() => expect(openTab()).toBe('Goals'));
+    expect(screen.queryByTestId('szn-roadmap')).toBeNull();
+  });
+
+  test('the Overview tab\'s own link names it, so a click from the Roadmap really leaves the Roadmap', async () => {
+    renderAt('/shows/show-1/season?tab=roadmap');
     await screen.findByTestId('szn-roadmap');
     const overview = screen.getAllByRole('tab').find((t) => t.querySelector('.szn-tab-label').textContent === 'Overview');
     fireEvent.click(overview);
@@ -153,16 +212,16 @@ describe('a tab named in the address', () => {
 
   test('browser Back returns through the tabs that were open, ending on the default', async () => {
     renderAt('/shows/show-1/season');
-    await screen.findByTestId('szn-roadmap');
-    const tabNamed = (name) => screen.getAllByRole('tab').find((t) => t.querySelector('.szn-tab-label').textContent === name);
-    fireEvent.click(tabNamed('Overview'));
     await screen.findByTestId('szn-panel-overview');
+    const tabNamed = (name) => screen.getAllByRole('tab').find((t) => t.querySelector('.szn-tab-label').textContent === name);
+    fireEvent.click(tabNamed('Roadmap'));
+    await screen.findByTestId('szn-roadmap');
     fireEvent.click(tabNamed('Goals'));
     await waitFor(() => expect(openTab()).toBe('Goals'));
     fireEvent.click(screen.getByTestId('go-back'));
-    await waitFor(() => expect(openTab()).toBe('Overview'));
-    fireEvent.click(screen.getByTestId('go-back'));
     await waitFor(() => expect(openTab()).toBe('Roadmap'));
+    fireEvent.click(screen.getByTestId('go-back'));
+    await waitFor(() => expect(openTab()).toBe('Overview'));
     expect(screen.getByTestId('where').textContent).toBe('/shows/show-1/season');
   });
 
@@ -230,7 +289,8 @@ describe('a started slot\'s links', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Open the episode' }).getAttribute('href')).toBe('/episodes/ep-2');
     const pkg = within(menu).getByTestId('szn-slot-package-2');
     expect(pkg.textContent).toBe('Open the event package');
-    expect(pkg.getAttribute('href')).toMatch(/^\/shows\/show-1\/events\/ev-2\?/);
+    // Back from the package returns to this slot in this season (2026-11-15).
+    expect(pkg.getAttribute('href')).toBe('/shows/show-1/events/ev-2?from=roadmap:2@1');
     expect(within(menu).queryByTestId('szn-slot-no-event-2')).toBeNull();
   });
 
@@ -415,6 +475,9 @@ describe('at a phone width (the stylesheet\'s rules)', () => {
 describe('nothing is written', () => {
   test('opening the page, the Roadmap, a started slot\'s menu and its panel sends no write for any slot, Episode 1 included', async () => {
     renderAt('/shows/show-1/season');
+    await screen.findByTestId('szn-panel-overview');
+    for (const m of ['post', 'put', 'patch', 'delete']) expect(vi.mocked(api[m])).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('szn-tab-roadmap'));
     await screen.findByTestId('szn-roadmap');
     fireEvent.click(await screen.findByTestId('szn-slot-menu-1'));
     fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Open the slot' }));

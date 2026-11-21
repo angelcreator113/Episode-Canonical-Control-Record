@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Component } from 're
 import { Sparkles, Loader, Upload, Trash2, Download, RefreshCw, X, Eraser, Maximize, Copy, Info, Monitor, Undo2, ChevronDown, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import api from '../services/api';
 import { createPortal } from 'react-dom';
+import { Link, useInRouterContext } from 'react-router-dom';
 import PhoneHub from '../components/PhoneHub';
 import PhoneHubSectionTabs from '../components/PhoneHubSectionTabs';
 import { phoneHubTiles, screenCaption, screenCardStatus, homeScreenOf, incomingById, phoneFlowMap } from '../lib/phoneHubSummary';
@@ -180,6 +181,21 @@ function auditPhoneFlow(editableScreens, startId) {
     reached: visited.size,
     ranAt: new Date().toLocaleTimeString(),
   };
+}
+
+/**
+ * A mission's episode, opened on its Phone tool (Production › Phone). The
+ * label names the tool (Evoni, 2026-11-15: "Open its episode" opened the
+ * Phone, not the episode's Overview). In the app it is a router link, so
+ * the page is not reloaded; rendered with no router around it (this tab is
+ * also mounted on its own), it is the plain link it was.
+ */
+export function EpisodePhoneLink({ episodeId }) {
+  const to = `/episodes/${episodeId}?tab=phone`;
+  const inRouter = useInRouterContext();
+  return inRouter
+    ? <Link className="ph-mission-health__link" to={to}>Open its phone in the episode</Link>
+    : <a className="ph-mission-health__link" href={to}>Open its phone in the episode</a>;
 }
 
 export default function UIOverlaysTab({ showId: propShowId }) {
@@ -1844,7 +1860,7 @@ export default function UIOverlaysTab({ showId: propShowId }) {
                 {mission.episode_id && (
                   <>
                     {' '}
-                    <a className="ph-mission-health__link" href={`/episodes/${mission.episode_id}?tab=phone`}>Open its episode</a>
+                    <EpisodePhoneLink episodeId={mission.episode_id} />
                   </>
                 )}
               </li>

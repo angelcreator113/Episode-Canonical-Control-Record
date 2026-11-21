@@ -108,13 +108,18 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
     await run('DELETE FROM character_relationships WHERE id IN (:ids)', { ids: Object.values(legacy) });
   });
 
-  test('every write is ADMIN only; reads are signed-in', async () => {
+  test('every write is ADMIN only, and so is every read', async () => {
     const asViewer = as(viewer);
     expect((await asViewer(request(app).post('/api/v1/families').send({ name: 'No' }))).status).toBe(403);
     expect((await asViewer(request(app).post('/api/v1/families/ties').send({ character_id: c.dre, other_character_id: c.jade, role: 'sister' }))).status).toBe(403);
     expect((await asViewer(request(app).post('/api/v1/families/make-character').send({ character_id: c.nia, tree_index: 1 }))).status).toBe(403);
     expect((await asViewer(request(app).post(`/api/v1/families/import/${c.nia}`))).status).toBe(403);
-    expect((await asViewer(request(app).get(`/api/v1/families/character/${c.dre}`))).status).toBe(200);
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    for (const read of ['/api/v1/families', '/api/v1/families/people', `/api/v1/families/character/${c.dre}`, '/api/v1/families/heritage']) {
+      const refused = await asViewer(request(app).get(read));
+      expect([read, refused.status]).toEqual([read, 403]);
+      expect((await as(admin)(request(app).get(read))).status).toBe(200);
+    }
     expect((await request(app).get('/api/v1/families')).status).toBe(401);
   });
 

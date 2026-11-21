@@ -15,10 +15,11 @@ import { Check, CircleCheck, Film } from 'lucide-react';
 import { rawClipsApi } from '../../lib/rawClipsApi';
 import { currentThumbnail } from '../../lib/youtubeThumbnailsApi';
 import { productionSteps, sectionSummary, canMarkReady } from '../../lib/productionSteps';
+import { withReturn, tabOrigin } from '../../utils/returnPath';
 import { STATUS_LABEL } from '../../lib/episodePipeline';
 import './EpisodeProductionHeader.css';
 
-export default function EpisodeProductionHeader({ episode, checks = null, sections = null, onOpenTab, onMarkReady, statusSaving = false }) {
+export default function EpisodeProductionHeader({ episode, checks = null, sections = null, onOpenTab, onMarkReady, statusSaving = false, returnTab = null }) {
   const episodeId = episode?.id;
   const [clips, setClips] = useState([]);
   const [savedThumbnail, setSavedThumbnail] = useState(false);
@@ -72,7 +73,7 @@ export default function EpisodeProductionHeader({ episode, checks = null, sectio
           return (
             <li key={s.key} className={cls} data-testid={`eph-step-${s.key}`} aria-current={s.current ? 'step' : undefined}>
               {s.open.href
-                ? <Link className="eph-step-btn" to={s.open.href} title={tip}>{inner}</Link>
+                ? <Link className="eph-step-btn" to={withReturn(s.open.href, tabOrigin(episode?.id, returnTab) || {})} title={tip}>{inner}</Link>
                 : <button type="button" className="eph-step-btn" title={tip} onClick={() => onOpenTab?.(s.open.tab)}>{inner}</button>}
             </li>
           );

@@ -18,8 +18,13 @@ const shouldSkip =
 
 (shouldSkip ? describe.skip : describe)('Entanglements read the stored follower count (Task #3053)', () => {
   test("a character's entanglements answer (before the fix: 500, column profile.follower_count does not exist)", async () => {
-    const token = TokenService.generateTokenPair({ id: 'test-user-entangle', email: 'ed@entangle.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    const token = TokenService.generateTokenPair({ id: 'test-admin-entangle', email: 'evoni@entangle.dev', name: 'Evoni', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+    const editor = TokenService.generateTokenPair({ id: 'test-user-entangle', email: 'ed@entangle.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
     jest.spyOn(console, 'error').mockImplementation(() => {});
+    const refused = await request(app).get(`/api/v1/entanglements/characters/${crypto.randomUUID()}/entanglements`).set('Authorization', `Bearer ${editor}`);
+    expect(refused.status).toBe(403);
+    expect(refused.body.entanglements).toBeUndefined();
     const res = await request(app).get(`/api/v1/entanglements/characters/${crypto.randomUUID()}/entanglements`).set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ entanglements: [] });

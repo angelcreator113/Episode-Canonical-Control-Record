@@ -10,6 +10,8 @@ const request = require('supertest');
 
 const mockEpisodes = [];
 const mockShowCreate = jest.fn(async (row) => row);
+const ADMIN_USER = { id: 'u1', groups: ['ADMIN'] };
+const mockReader = { user: ADMIN_USER };
 
 const mockMatches = (ep, where) => Object.entries(where).every(([k, v]) => {
   if (Array.isArray(v)) return v.includes(ep[k]);
@@ -36,7 +38,8 @@ jest.mock('../../../src/models', () => ({
 }));
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
-  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
+  // The reader is whoever the test says (mockReader): an ADMIN unless a test sets another.
+  return { ...actual, requireAuth: (req, _res, next) => { req.user = mockReader.user; next(); } };
 });
 
 const router = require('../../../src/routes/shows');
@@ -87,10 +90,25 @@ describe('GET /api/v1/shows/:id — auto-create from episodes', () => {
     expect(mockShowCreate).not.toHaveBeenCalled();
   });
 
-  it('still recreates a missing show that has a live episode', async () => {
+  it('still recreates a missing show that has a live episode, on an ADMIN\'s read', async () => {
     mockEpisodes.push({ id: 'e1', show_id: 'live-show-0001', deleted_at: null });
     const res = await request(app).get('/api/v1/shows/live-show-0001');
     expect(res.status).toBe(200);
     expect(mockShowCreate).toHaveBeenCalledTimes(1);
+  });
+
+  // A read must not write for a reader who may not write (Evoni, 2026-11-16).
+  it.each([
+    ['a viewer', { id: 'v1', groups: ['viewer'] }],
+    ['an editor', { id: 'e1', groups: ['USER', 'EDITOR'] }],
+    ['an account with no group', { id: 'n1' }],
+  ])('does not recreate it on the read of %s: 404, and nothing is created', async (who, user) => {
+    mockReader.user = user;
+    try {
+      mockEpisodes.push({ id: 'e1', show_id: 'live-show-0001', deleted_at: null });
+      const res = await request(app).get('/api/v1/shows/live-show-0001');
+      expect(res.status).toBe(404);
+      expect(mockShowCreate).not.toHaveBeenCalled();
+    } finally { mockReader.user = ADMIN_USER; }
   });
 });

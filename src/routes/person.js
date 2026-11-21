@@ -13,10 +13,10 @@
 
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { personPage } = require('../services/personPage');
 
-router.get('/:id', requireAuth, async (req, res) => {
+router.get('/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { sequelize } = require('../models');
     const person = await personPage(sequelize, req.params.id);

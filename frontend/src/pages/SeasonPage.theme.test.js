@@ -58,6 +58,20 @@ describe('Season page theme', () => {
     expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
   });
 
+  test('the header\'s title: two lines at most on a wide screen, the whole title on a tablet and a phone, no picture on a phone', () => {
+    const wide = css.slice(0, css.indexOf('@media (max-width: 1180px)'));
+    expect(wide).toMatch(/\.szn-hero-title \{[^}]*-webkit-line-clamp: 2;[^}]*overflow: hidden;/);
+    // A tablet too (1180px and below): touch, no hover, so the title is not cut there either.
+    const tablet = css.slice(css.indexOf('@media (max-width: 1180px)'), css.indexOf('@media (max-width: 640px)'));
+    expect(tablet).toMatch(/\.szn-hero-title \{[^}]*display: block;[^}]*-webkit-line-clamp: unset;[^}]*overflow: visible;/);
+    const phone = css.slice(css.indexOf('@media (max-width: 640px)'));
+    // A phone has no hover to read a cut title by, and the Overview does not repeat it (S2).
+    expect(phone).toMatch(/\.szn-hero-title \{[^}]*display: block;[^}]*-webkit-line-clamp: unset;[^}]*overflow: visible;/);
+    expect(phone).toMatch(/\.szn-hero-thumb \{ display: none; \}/);
+    // The actions keep to the right edge, so the menu under ⋯ opens inside the screen.
+    expect(phone).toMatch(/\.szn-hero-actions \{ margin-left: auto; \}/);
+  });
+
   test('the Goals tab: --sp-* colours only, 44px targets, 12px text, one column on a phone', () => {
     const strip = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '');
     expect(strip(goalsCss)).not.toMatch(/#[0-9a-f]{3,8}\b/i);

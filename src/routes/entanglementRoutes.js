@@ -52,7 +52,7 @@ function getModels(req) {
 // ────────────────────────────────────────────────────────────────────────────
 
 // GET /characters/:characterId/entanglements
-router.get('/characters/:characterId/entanglements', async (req, res) => {
+router.get('/characters/:characterId/entanglements', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { CharacterEntanglement, SocialProfile } = models;
   try {
@@ -70,7 +70,7 @@ router.get('/characters/:characterId/entanglements', async (req, res) => {
 });
 
 // GET /profiles/:profileId/orbit
-router.get('/profiles/:profileId/orbit', async (req, res) => {
+router.get('/profiles/:profileId/orbit', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { CharacterEntanglement, RegistryCharacter } = models;
   try {
@@ -214,7 +214,7 @@ router.patch('/profiles/:profileId/state', async (req, res) => {
 // ────────────────────────────────────────────────────────────────────────────
 
 // GET /events  — unresolved events for the dashboard
-router.get('/events', async (req, res) => {
+router.get('/events', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { EntanglementEvent, SocialProfile } = models;
   const { resolved = 'false' } = req.query;
@@ -235,7 +235,7 @@ router.get('/events', async (req, res) => {
 });
 
 // GET /events/:id
-router.get('/events/:id', async (req, res) => {
+router.get('/events/:id', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { EntanglementEvent, SocialProfile } = models;
 
@@ -315,7 +315,7 @@ router.post('/events/:eventId/proposals/:characterId/approve', authorize(['ADMIN
 // ────────────────────────────────────────────────────────────────────────────
 
 // GET /characters/:characterId/unfollows
-router.get('/characters/:characterId/unfollows', async (req, res) => {
+router.get('/characters/:characterId/unfollows', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { EntanglementUnfollow, SocialProfile } = models;
 

@@ -37,7 +37,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   let token;
 
   beforeAll(async () => {
-    token = TokenService.generateTokenPair({ id: 'test-user-lala-stats', email: 'ed@lala-stats.dev', name: 'Ed', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    // These reads name story moments, later ones and none (the director's view): an ADMIN's since 2026-11-15, when the
+    // server began deciding the moment anyone else reads at (tests/integration/pulseReaderStoryMoment).
+    token = TokenService.generateTokenPair({ id: 'test-user-lala-stats', email: 'ed@lala-stats.dev', name: 'Ed', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     for (const [id, name] of [[ids.show, 'Stats'], [ids.bare, 'Bare']]) {
       await run('INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :name, :slug, NOW(), NOW())',
         { id, name: `${name} ${tag}`, slug: `${name.toLowerCase()}-${tag}` });

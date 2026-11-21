@@ -5,6 +5,7 @@
  */
 
 const request = require('supertest');
+const { writeStatus } = require('../helpers/writeGuard');
 
 // POST /login now calls Cognito's InitiateAuth (Task #1456). Mocked here so
 // this integration file makes no Cognito, AWS, or host contact regardless of
@@ -397,8 +398,21 @@ const shouldSkip = !process.env.DATABASE_URL || process.env.DATABASE_URL?.includ
         role: 'ADMIN',
       });
 
-      expect(res.status).toBe(404);
+      // Signed out: the route is not there (404), or the ADMIN write guard refuses first (401). No token either way.
+      expect(res.status).toBe(writeStatus(null, 404));
       expect(res.body).not.toHaveProperty('data.accessToken');
+      expect(JSON.stringify(res.body)).not.toMatch(/accessToken|refreshToken/);
+    });
+
+    it('is not mounted for anyone: an ADMIN reaches the app\'s own 404, a signed-in account gets no token', async () => {
+      const mint = (groups, role) => require('../../src/services/tokenService')
+        .generateTokenPair({ id: `fd65-${role}`, email: `${role}@fd65.dev`, name: role, groups, role }).accessToken;
+      const post = (token) => request(app).post('/api/v1/auth/test-token').set('Authorization', `Bearer ${token}`).send({ email: 'custom@test.dev', role: 'ADMIN' });
+      const admin = await post(mint(['ADMIN'], 'ADMIN'));
+      expect(admin.status).toBe(404);
+      const user = await post(mint(['USER', 'EDITOR'], 'USER'));
+      expect(user.status).toBe(writeStatus('user', 404));
+      for (const res of [admin, user]) expect(JSON.stringify(res.body)).not.toMatch(/accessToken|refreshToken/);
     });
   });
 

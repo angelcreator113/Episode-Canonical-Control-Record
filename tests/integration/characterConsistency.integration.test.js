@@ -51,7 +51,15 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await sequelize.close();
   });
 
-  const check = () => request(app).get(`/api/v1/cast/characters/${ids.char}/check`).set('Authorization', `Bearer ${editor}`);
+  // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+  const check = (token = admin) => request(app).get(`/api/v1/cast/characters/${ids.char}/check`).set('Authorization', `Bearer ${token}`);
+
+  it('the check is an ADMIN\'s to read: an editor is refused and sees no finding', async () => {
+    const res = await check(editor);
+    expect(res.status).toBe(403);
+    expect(res.body.flags).toBeUndefined();
+    expect((await request(app).get(`/api/v1/cast/characters/${ids.char}/check`)).status).toBe(401);
+  });
 
   it('flags the description, not the vibe that agrees or the persona that is the mask', async () => {
     const res = await check();

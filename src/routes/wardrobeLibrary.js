@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const multer = require('multer');
 const controller = require('../controllers/wardrobeLibraryController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const notifications = require('../services/notifications');
 const { priceGuideText } = require('../utils/wardrobePriceGuide');
@@ -70,19 +70,19 @@ router.use((req, res, next) => {
 });
 
 // Advanced search and analytics (must be before :id routes)
-router.get('/stats', requireAuth, controller.getStats);
-router.get('/advanced-search', requireAuth, controller.advancedSearch);
-router.get('/suggestions', requireAuth, controller.getSuggestions);
-router.get('/check-duplicates', requireAuth, controller.duplicateDetection);
-router.get('/analytics/most-used', requireAuth, controller.getMostUsedItems);
-router.get('/analytics/never-used', requireAuth, controller.getNeverUsedItems);
+router.get('/stats', requireAuth, authorize(['ADMIN']), controller.getStats);
+router.get('/advanced-search', requireAuth, authorize(['ADMIN']), controller.advancedSearch);
+router.get('/suggestions', requireAuth, authorize(['ADMIN']), controller.getSuggestions);
+router.get('/check-duplicates', requireAuth, authorize(['ADMIN']), controller.duplicateDetection);
+router.get('/analytics/most-used', requireAuth, authorize(['ADMIN']), controller.getMostUsedItems);
+router.get('/analytics/never-used', requireAuth, authorize(['ADMIN']), controller.getNeverUsedItems);
 
 // Bulk operations
 router.post('/bulk-assign', requireAuth, controller.bulkAssign);
 
 // ── GET /for-chapter/:chapterId ───────────────────────────────────────
 // All wardrobe pieces in a chapter — for NI, Continuity Guard, Chapter Brief
-router.get('/for-chapter/:chapterId', requireAuth, async (req, res) => {
+router.get('/for-chapter/:chapterId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { chapterId } = req.params;
     const models        = req.app.get('models') || require('../models');
@@ -363,13 +363,13 @@ Return ONLY the JSON.`;
 
 // Library CRUD operations
 router.post('/', requireAuth, upload.single('image'), controller.uploadToLibrary);
-router.get('/', requireAuth, controller.listLibrary);
-router.get('/:id', requireAuth, controller.getLibraryItem);
+router.get('/', requireAuth, authorize(['ADMIN']), controller.listLibrary);
+router.get('/:id', requireAuth, authorize(['ADMIN']), controller.getLibraryItem);
 router.put('/:id', requireAuth, upload.single('image'), controller.updateLibraryItem);
 router.delete('/:id', requireAuth, controller.deleteLibraryItem);
 
 // Outfit set management (Phase 3)
-router.get('/:id/items', requireAuth, controller.getOutfitItems);
+router.get('/:id/items', requireAuth, authorize(['ADMIN']), controller.getOutfitItems);
 router.post('/:id/items', requireAuth, controller.addItemsToOutfit);
 router.delete('/:setId/items/:itemId', requireAuth, controller.removeItemFromOutfit);
 
@@ -377,9 +377,9 @@ router.delete('/:setId/items/:itemId', requireAuth, controller.removeItemFromOut
 router.post('/:id/assign', requireAuth, controller.assignToEpisode);
 
 // Usage tracking and analytics (Phase 5)
-router.get('/:id/usage', requireAuth, controller.getUsageHistory);
-router.get('/:id/usage/shows', requireAuth, controller.getCrossShowUsage);
-router.get('/:id/usage/timeline', requireAuth, controller.getUsageTimeline);
+router.get('/:id/usage', requireAuth, authorize(['ADMIN']), controller.getUsageHistory);
+router.get('/:id/usage/shows', requireAuth, authorize(['ADMIN']), controller.getCrossShowUsage);
+router.get('/:id/usage/timeline', requireAuth, authorize(['ADMIN']), controller.getUsageTimeline);
 router.post('/:id/track-view', requireAuth, controller.trackView);
 router.post('/:id/track-selection', requireAuth, controller.trackSelection);
 
@@ -461,7 +461,7 @@ router.post('/:id/assign-content', requireAuth, async (req, res) => {
 
 // ── GET /:id/assignments ──────────────────────────────────────────────
 // All places this library item has been assigned — across all content types
-router.get('/:id/assignments', requireAuth, async (req, res) => {
+router.get('/:id/assignments', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const library_item_id = parseInt(req.params.id, 10);
     const models          = req.app.get('models') || require('../models');

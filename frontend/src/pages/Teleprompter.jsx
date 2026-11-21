@@ -16,6 +16,7 @@ import api from '../services/api';
 import { fetchAllEpisodes } from '../lib/fetchAllPages';
 import TeleprompterReader from '../components/Teleprompter/TeleprompterReader';
 import { teleprompterScript, pastedParagraphs } from '../lib/teleprompterLines';
+import { readReturn } from '../utils/returnPath';
 import './Teleprompter.css';
 
 export const PASTE_KEY = 'teleprompter.pastedText';
@@ -120,6 +121,12 @@ export default function Teleprompter() {
   };
 
   const canStart = sourceKind === 'paste' ? hasText : hasScript;
+  // The way back to the episode this script is from (PR-06): where the
+  // address says it was opened from, else the episode's Script tab, which is
+  // where its two buttons are. Only on this screen; the reader has its own Exit.
+  const back = sourceKind === 'script' && episode?.id && !loading
+    ? readReturn(params, { episodeId: episode.id, fallback: { href: `/episodes/${encodeURIComponent(episode.id)}?tab=scripts`, text: 'Back to Script' } })
+    : null;
   const title = episode ? episodeLabel(episode) : '';
   const source = sourceKind === 'paste'
     ? { kind: 'text', text: pasted }
@@ -144,6 +151,7 @@ export default function Teleprompter() {
       <header className="stp-head">
         <h1 className="stp-h1"><ScrollText size={24} aria-hidden="true" /> Teleprompter</h1>
         <p className="stp-sub">Big words, a steady scroll, and a camera when you want to record yourself reading.</p>
+        {back && <Link className="stp-back" to={back.href} data-testid="stp-back">← {back.text}</Link>}
       </header>
 
       <section className="stp-card" aria-label="What to read">

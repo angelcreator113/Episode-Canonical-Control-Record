@@ -124,7 +124,8 @@ describe('Season Arc roadmap on the Season page (§8(ff) PR 1)', () => {
     expect(within(second).getByText('Slot S1 · E2')).toBeTruthy();
     expect(within(second).getByText('Rooftop Launch', { selector: 'dd' })).toBeTruthy();
     // ?from= brings the Event Package back to this slot (2026-10-25).
-    expect(within(second).getByText('Open the event package').getAttribute('href')).toBe('/shows/show-1/events/ev-2?from=roadmap:2');
+    // And to this season: the way back names the season it was opened from (2026-11-15).
+    expect(within(second).getByText('Open the event package').getAttribute('href')).toBe('/shows/show-1/events/ev-2?from=roadmap:2@1');
     expect(within(second).getByTestId('season-pencil-2')).toBeTruthy();
 
     openSlot(9);
