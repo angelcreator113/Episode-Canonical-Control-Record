@@ -56,7 +56,7 @@ function sendKnown(res, err) {
   return false;
 }
 
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return badShow(res);
@@ -92,7 +92,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/history', requireAuth, async (req, res) => {
+router.get('/history', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return badShow(res);
@@ -113,7 +113,7 @@ router.get('/history', requireAuth, async (req, res) => {
 // GET /growth?show_id= (Task #2957): Admin › The Pulse › Growth, read only
 // (services/pulseGrowth.js): Lala's follower line, projection, best and
 // worst posts and biggest jumps; Lala's Influence, read only (Task #3066).
-router.get('/growth', requireAuth, async (req, res) => {
+router.get('/growth', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return badShow(res);

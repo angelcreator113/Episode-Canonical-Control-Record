@@ -61,7 +61,7 @@ const shape = (r, storyOrder = r.story_order) => {
 
 const badShow = (res) => res.status(400).json({ success: false, error: 'show_id must be a show id (UUID).' });
 
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return badShow(res);
@@ -77,7 +77,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/met', requireAuth, async (req, res) => {
+router.get('/met', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const showId = String(req.query.show_id || '');
     if (!UUID_RE.test(showId)) return badShow(res);
@@ -116,11 +116,9 @@ router.get('/cities', requireAuth, async (req, res) => {
     if (!UUID_RE.test(showId)) return badShow(res);
     const db = getModels();
     let at;
-    if (req.query.at !== undefined) {
-      try { at = await require('../services/storyClock').resolveAt(db, showId, req.query.at); } catch (err) {
-        if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
-        throw err;
-      }
+    try { at = await require('../services/readerMoment').momentFor(req, db, showId, req.query.at); } catch (err) {
+      if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
+      throw err;
     }
     const { cities, states } = await require('../services/pulseTeasers').citiesAt(db, showId, at);
     return res.json({ success: true, at: at ?? null, cities, states });

@@ -11,20 +11,31 @@ const path = require('path');
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'amberSessionRoutes.js'), 'utf8');
 
 describe('Step 3 CP10 — amberSessionRoutes.js', () => {
-  test('requireAuth import', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+  // authorize joined the import on 2026-11-16: the greeting, a paid AI call on a read, is an ADMIN's (Evoni).
+  test('requireAuth + authorize import', () => {
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
   });
 
   test('speakLimiter preserved on POST /speak', () => {
     expect(SRC).toMatch(/router\.post\('\/speak',\s*requireAuth,\s*speakLimiter,/);
   });
 
-  test('readStoryLimiter preserved on POST /read-story', () => {
-    expect(SRC).toMatch(/router\.post\('\/read-story',\s*requireAuth,\s*readStoryLimiter,/);
+  // Since 2026-11-16 /read-story is an ADMIN's (Evoni); its own limiter stays, after the ADMIN check.
+  test('readStoryLimiter preserved on POST /read-story, which is an ADMIN\'s', () => {
+    expect(SRC).toMatch(/router\.post\('\/read-story',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*readStoryLimiter,/);
   });
 
-  test('no aiRateLimiter (Q12 — speakLimiter is AI-rate-limit equivalent)', () => {
-    expect(SRC).not.toMatch(/aiRateLimiter/);
+  // Q12 stands for the two routes it was about: /speak and /read-story keep their own limiter and are not
+  // limited twice. The greeting had no limiter at all; since 2026-11-16 it carries aiRateLimiter and ADMIN.
+  test('no aiRateLimiter on /speak or /read-story (Q12 — their own limiters are the AI-rate-limit equivalent)', () => {
+    expect(SRC).not.toMatch(/router\.post\('\/speak'[^\n]*aiRateLimiter/);
+    expect(SRC).not.toMatch(/router\.post\('\/read-story'[^\n]*aiRateLimiter/);
+  });
+
+  test('GET /greeting is an ADMIN\'s and rate limited: every read is a paid AI call', () => {
+    expect(SRC).toMatch(/router\.get\('\/greeting',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/);
+    // And on that one route only.
+    expect(SRC.match(/,\s*aiRateLimiter,/g)).toHaveLength(1);
   });
 
   test('no optionalAuth references', () => {

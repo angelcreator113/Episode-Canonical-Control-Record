@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const outfitSetController = require('../controllers/outfitSetController');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 // List all outfit sets
-router.get('/', requireAuth, outfitSetController.listOutfitSets);
+router.get('/', requireAuth, authorize(['ADMIN']), outfitSetController.listOutfitSets);
 
 // Get a specific outfit set
-router.get('/:id', requireAuth, outfitSetController.getOutfitSet);
+router.get('/:id', requireAuth, authorize(['ADMIN']), outfitSetController.getOutfitSet);
 
 // Create a new outfit set
 router.post('/', requireAuth, outfitSetController.createOutfitSet);

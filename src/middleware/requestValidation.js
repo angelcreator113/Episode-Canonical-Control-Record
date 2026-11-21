@@ -343,7 +343,47 @@ const validateAssetUpload = (req, res, next) => {
   }
 };
 
+/**
+ * A request's asset ids are what the route means them to be (V2-2a-1,
+ * Evoni 2026-11-20): a list of ids is a list of strings, each shaped like
+ * a uuid, and one id is one such string. A list inside the list, an
+ * object, a number or any other shape is refused here (400), before the
+ * handler and before anything is written. The database layer would read
+ * some of those shapes as ids the route never meant to accept.
+ */
+const isAssetIdString = (value) => typeof value === 'string'
+  && require('../utils/documentPresentationAssets').normalizeAssetId(value) !== null;
+const refuseShape = (res, message) => res.status(400).json({ error: 'Validation failed', message });
+
+/** body[field] is a non-empty list of asset id strings. */
+const validateBodyAssetIds = (field = 'assetIds') => (req, res, next) => {
+  const ids = req.body ? req.body[field] : undefined;
+  if (!Array.isArray(ids) || ids.length === 0) return refuseShape(res, `${field} array is required`);
+  if (!ids.every(isAssetIdString)) return refuseShape(res, `${field} must be a list of asset ids`);
+  return next();
+};
+
+/** body[field], when sent, is one asset id string (the handler says so when it is missing, as before). */
+const validateBodyAssetId = (field) => (req, res, next) => {
+  const id = req.body ? req.body[field] : undefined;
+  if (id === undefined || id === null || id === '') return next();
+  if (!isAssetIdString(id)) return refuseShape(res, `${field} must be an asset id`);
+  return next();
+};
+
+/** body[field], when it is a list, is a list of objects whose `key` is one asset id string. */
+const validateBodyAssetIdItems = (field, key) => (req, res, next) => {
+  const items = req.body ? req.body[field] : undefined;
+  if (!Array.isArray(items)) return next();
+  const ok = items.every((item) => item && typeof item === 'object' && !Array.isArray(item) && isAssetIdString(item[key]));
+  if (!ok) return refuseShape(res, `each of ${field} needs ${key}, an asset id`);
+  return next();
+};
+
 module.exports = {
+  validateBodyAssetIds,
+  validateBodyAssetId,
+  validateBodyAssetIdItems,
   validateEmail,
   validateUUID,
   sanitizeString,

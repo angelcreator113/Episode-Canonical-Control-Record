@@ -376,6 +376,327 @@ function renderDocument(type, data) {
   return canvas.toBuffer('image/png');
 }
 
+// ── The document presented for video (V1, Evoni 2026-11-19) ─────────────
+// The same document, drawn by the same function from the same data, placed
+// in a transparent 1920×1080 frame: one canonical document, and what is
+// shown on video derived from it. Nothing here stores, names or places
+// anything, and renderDocument above is unchanged.
+//
+//   floating  the whole page, scaled to fit: an object in the scene.
+//   reading   the page large enough to read, as consecutive panels that
+//             cover all of it, top to bottom.
+//
+// The frame and Prime's picture-in-picture window are the editor's own
+// (utils/editTimeline). The paper and its shadow stay in the column to the
+// left of that window, inside the frame's 5% safe area.
+const { FRAME_W, FRAME_H, DEFAULT_LAYOUT } = require('../utils/editTimeline');
+
+const PRESENTATIONS = Object.freeze(['floating', 'reading']);
+/** Body text is readable on video from this size, in frame pixels at 1080p. */
+const MIN_READABLE_PX = 28;
+/** How far a panel repeats the one before it when no gap between lines can end it, in page pixels. */
+const PANEL_OVERLAP = 80;
+/** The space aimed for between a reading panel's cut edge and the nearest writing or mark, in frame pixels. */
+const EDGE_PADDING_PX = 32;
+/** A drawn rectangle up to this tall (page pixels) is a mark kept whole: a checkbox, a stamp, a name box. Taller ones are the page's own frame. */
+const MARK_MAX_HEIGHT = 160;
+const SAFE_X = Math.round(FRAME_W * 0.05);
+const SAFE_Y = Math.round(FRAME_H * 0.05);
+/** Prime's window, whole: it reaches past the safe area, so all of it is kept clear. */
+const PRIME_WINDOW = Object.freeze({ x: DEFAULT_LAYOUT.x, y: DEFAULT_LAYOUT.y, w: DEFAULT_LAYOUT.w, h: DEFAULT_LAYOUT.h });
+/** The gap kept between the column and Prime's window: the window's own margin from the frame's edge. */
+const WINDOW_GAP = FRAME_W - (DEFAULT_LAYOUT.x + DEFAULT_LAYOUT.w);
+/** Where a document may be: the safe area to the left of Prime's window. */
+const COLUMN = Object.freeze({ x: SAFE_X, y: SAFE_Y, w: PRIME_WINDOW.x - WINDOW_GAP - SAFE_X, h: FRAME_H - 2 * SAFE_Y });
+/** The room kept inside the column for the paper's shadow. */
+const SHADOW = Object.freeze({ pad: 24, blur: 10, offsetY: 4, color: 'rgba(0, 0, 0, 0.3)' });
+const PAPER_AREA = Object.freeze({ x: COLUMN.x + SHADOW.pad, y: COLUMN.y + SHADOW.pad, w: COLUMN.w - 2 * SHADOW.pad, h: COLUMN.h - 2 * SHADOW.pad });
+
+/** A document that cannot be presented as asked. `code` says why; nothing is drawn clipped instead. */
+class DocumentPresentationError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'DocumentPresentationError';
+    this.code = code;
+  }
+}
+
+/** The height renderDocument gave the page, read from its PNG (IHDR), so the two never disagree. */
+function pngHeight(buffer) {
+  return buffer.readUInt32BE(20);
+}
+
+/**
+ * A drawing context that draws as `ctx` does and notes where each line of
+ * text lands: { top, bottom } on the page and the font's size, weighted by
+ * the line's width. The text itself is not kept. With `marks`, it also
+ * notes the small rectangles drawn (a checkbox, a stamp's box, a name box:
+ * MARK_MAX_HEIGHT or less), which a panel must not slice either.
+ */
+function recordingContext(ctx, lines, marks = null) {
+  const transform = () => ctx.currentTransform || (ctx.getTransform ? ctx.getTransform() : { b: 0, d: 1, f: 0 });
+  const noteRect = (x, y, w, h, grow) => {
+    if (!marks) return;
+    const t = transform();
+    const xs = [x - grow, x + w + grow];
+    const ys = [y - grow, y + h + grow];
+    const mapped = [];
+    for (const cx of xs) for (const cy of ys) mapped.push(t.b * cx + t.d * cy + t.f);
+    const top = Math.min(...mapped);
+    const bottom = Math.max(...mapped);
+    if (bottom > top && bottom - top <= MARK_MAX_HEIGHT) marks.push({ top, bottom });
+  };
+  const note = (text, x, y) => {
+    const m = ctx.measureText(String(text));
+    if (!(m.width > 0)) return;
+    const px = Number((/(\d+(?:\.\d+)?)px/.exec(ctx.font) || [])[1]) || 0;
+    const t = transform();
+    const xs = [x - (m.actualBoundingBoxLeft || 0), x + (m.actualBoundingBoxRight || m.width)];
+    const ys = [y - (m.actualBoundingBoxAscent || px), y + (m.actualBoundingBoxDescent || 0)];
+    const mapped = [];
+    for (const cx of xs) for (const cy of ys) mapped.push(t.b * cx + t.d * cy + t.f);
+    lines.push({ top: Math.min(...mapped), bottom: Math.max(...mapped), px, width: m.width });
+  };
+  return new Proxy(ctx, {
+    get(target, prop) {
+      if (prop === 'fillText' || prop === 'strokeText') {
+        return (text, x, y, ...rest) => { note(text, x, y); return target[prop](text, x, y, ...rest); };
+      }
+      if (prop === 'strokeRect') {
+        return (x, y, w, h) => { noteRect(x, y, w, h, (Number(target.lineWidth) || 1) / 2); return target.strokeRect(x, y, w, h); };
+      }
+      if (prop === 'fillRect') {
+        return (x, y, w, h) => { noteRect(x, y, w, h, 0); return target.fillRect(x, y, w, h); };
+      }
+      const value = target[prop];
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+    set(target, prop, value) { target[prop] = value; return true; },
+  });
+}
+
+/**
+ * The sizes the page's text is drawn at, from what was drawn: `body` is the
+ * size that carries the most text (by width; the smaller size on a tie),
+ * `min` the smallest.
+ */
+function textSizes(lines) {
+  const byPx = new Map();
+  for (const l of lines) if (l.px > 0) byPx.set(l.px, (byPx.get(l.px) || 0) + l.width);
+  if (!byPx.size) return { body: 0, min: 0 };
+  const body = [...byPx.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+  return { body, min: Math.min(...byPx.keys()) };
+}
+
+/**
+ * The page cut into panels of at most `capacity` page pixels, top to bottom:
+ * [{ y0, y1, overlap }]. `lines` is everything a panel must show whole
+ * (lines of text, and small marks). A panel ends in a gap between them:
+ * one with `pad` clear page pixels on both sides when its lower half has
+ * such a gap (the one nearest an even share of the page that is left),
+ * otherwise the gap with the most room, which both panels then show in
+ * full. Where the lower half has no gap at
+ * all, the panel ends at its full height and the next starts PANEL_OVERLAP
+ * higher (or at the top of what was cut, when that is higher still), so
+ * everything is whole in at least one panel. Something no panel can hold,
+ * or a cut that would make no progress, is an error, never a clipped line.
+ */
+function panelSlices(height, capacity, lines, { pad = 0 } = {}) {
+  const tallest = lines.reduce((n, l) => Math.max(n, l.bottom - l.top), 0);
+  if (tallest > capacity) {
+    throw new DocumentPresentationError('TEXT_TALLER_THAN_PANEL', `A line of text is ${Math.ceil(tallest)} pixels tall and a panel holds ${Math.floor(capacity)}.`);
+  }
+  const cuts = (y) => lines.filter((l) => l.top < y && l.bottom > y);
+  /** The room around a cut at y: to the nearest line above or below; -1 when it goes through one. */
+  const room = (y) => {
+    let least = Infinity;
+    for (const l of lines) {
+      if (l.top < y && l.bottom > y) return -1;
+      const d = l.bottom <= y ? y - l.bottom : l.top - y;
+      if (d < least) least = d;
+    }
+    return least;
+  };
+  const slices = [];
+  let y0 = 0;
+  let overlap = 0;
+  while (y0 < height) {
+    const limit = y0 + capacity;
+    if (limit >= height) { slices.push({ y0, y1: height, overlap }); break; }
+    const even = y0 + (height - y0) / Math.ceil((height - y0) / capacity);
+    let padded = null; // the gap with `pad` clear on both sides, nearest the even share
+    let widest = null; // else the gap with the most room
+    let widestRoom = -1;
+    for (let y = Math.floor(limit); y > y0 + capacity / 2; y -= 1) {
+      const r = room(y);
+      if (r < 0) continue;
+      if (r >= pad && (padded == null || Math.abs(y - even) < Math.abs(padded - even))) padded = y;
+      if (r > widestRoom || (r === widestRoom && Math.abs(y - even) < Math.abs(widest - even))) { widest = y; widestRoom = r; }
+    }
+    if (padded != null) {
+      slices.push({ y0, y1: padded, overlap });
+      y0 = padded;
+      overlap = 0;
+      continue;
+    }
+    if (widest != null) {
+      // A gap narrower than the padding asks for: both panels show the
+      // whole gap (this one to the line below it, the next from the line
+      // above it), so each has all the room the page has there. Only
+      // blank page is repeated.
+      const above = Math.max(y0, ...lines.filter((l) => l.bottom <= widest).map((l) => l.bottom));
+      const below = Math.min(limit, height, ...lines.filter((l) => l.top >= widest).map((l) => l.top));
+      const next = Math.ceil(above);
+      const y1 = Math.max(widest, Math.floor(below));
+      if (next > y0) {
+        slices.push({ y0, y1, overlap });
+        overlap = y1 - next;
+        y0 = next;
+        continue;
+      }
+      slices.push({ y0, y1: widest, overlap });
+      y0 = widest;
+      overlap = 0;
+      continue;
+    }
+    const cut = cuts(limit);
+    const next = Math.floor(Math.min(limit - PANEL_OVERLAP, ...cut.map((l) => l.top)));
+    if (next <= y0) {
+      throw new DocumentPresentationError('NO_SAFE_PANEL_BOUNDARY', 'No panel boundary keeps every line of text whole.');
+    }
+    slices.push({ y0, y1: limit, overlap });
+    overlap = limit - next;
+    y0 = next;
+  }
+  return slices;
+}
+
+/**
+ * Where the page's text and small marks land, from the drawing itself at
+ * the page's own size: { height, lines: [{ top, bottom, px, width }],
+ * marks: [{ top, bottom }] }, or null when drawing is unavailable.
+ * Geometry only; the words are not kept.
+ */
+function measureDocumentText(type, data) {
+  const draw = DRAW[type];
+  const page = draw ? renderDocument(type, data) : null;
+  if (!page) return null;
+  const height = pngHeight(page);
+  const lines = [];
+  const marks = [];
+  draw(recordingContext(createCanvas(WIDTH, height).getContext('2d'), lines, marks), height, data);
+  return { height, lines, marks };
+}
+
+/** One frame: the page's rows y0..y1 at `scale`, its paper at `rect`, on a transparent frame. */
+function drawFrame(draw, pageHeight, data, { scale, rect, y0 }) {
+  const canvas = createCanvas(FRAME_W, FRAME_H);
+  const ctx = canvas.getContext('2d');
+  // The paper's shadow, from a filled rectangle the page then covers.
+  ctx.save();
+  ctx.shadowColor = SHADOW.color;
+  ctx.shadowBlur = SHADOW.blur;
+  ctx.shadowOffsetY = SHADOW.offsetY;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.x, rect.y, rect.w, rect.h);
+  ctx.clip();
+  ctx.translate(rect.x, rect.y - y0 * scale);
+  ctx.scale(scale, scale);
+  draw(ctx, pageHeight, data);
+  ctx.restore();
+  return canvas.toBuffer('image/png');
+}
+
+/**
+ * The document presented for video, or null when drawing is unavailable
+ * (as renderDocument). `data` is what renderDocument takes. Returns
+ *   { type, presentation, frame, column, clear_of, page, scale, text,
+ *     readable, panels: [{ index, of, source: { y0, y1 }, overlap, padding, rect, buffer }] }
+ * where each buffer is a FRAME_W×FRAME_H PNG, transparent outside the
+ * paper and its shadow; `text` is the body and smallest text sizes on the
+ * page and on screen, and `past_page`, how many lines the page itself cuts
+ * at its edge (they are shown as the page shows them); `readable` says the body text is MIN_READABLE_PX or
+ * more on screen. It holds geometry and images only, never the document's
+ * words. Throws DocumentPresentationError for a presentation that is not
+ * one, or a document whose text cannot be kept whole.
+ */
+function presentDocument(type, data, { presentation = 'floating' } = {}) {
+  if (!PRESENTATIONS.includes(presentation)) {
+    throw new DocumentPresentationError('UNKNOWN_PRESENTATION', `"${presentation}" is not a presentation (${PRESENTATIONS.join(', ')}).`);
+  }
+  const draw = DRAW[type];
+  const measured = measureDocumentText(type, data);
+  if (!measured) return null;
+  const { height: pageHeight } = measured;
+  // A line the page itself cuts at its edge (renderDocument stops at the
+  // type's maximum height) cannot be shown whole here either: this shows
+  // the page as it is. It is counted and said (text.past_page), and the
+  // panels are worked out from the part of it that is on the page.
+  const pastPage = measured.lines.filter((l) => l.top < 0 || l.bottom > pageHeight).length;
+  const onPage = (l) => ({ ...l, top: Math.max(0, l.top), bottom: Math.min(pageHeight, l.bottom) });
+  const lines = measured.lines.map(onPage);
+  // What a panel must show whole: the lines of text and the small marks.
+  const whole = [...lines, ...measured.marks.map(onPage).filter((m) => m.bottom > m.top)];
+  const sizes = textSizes(lines);
+
+  let scale;
+  let slices;
+  if (presentation === 'floating') {
+    const fit = Math.min(PAPER_AREA.w / WIDTH, PAPER_AREA.h / pageHeight);
+    scale = Math.floor(WIDTH * fit) / WIDTH;
+    slices = [{ y0: 0, y1: pageHeight, overlap: 0 }];
+  } else {
+    scale = PAPER_AREA.w / WIDTH;
+    slices = panelSlices(pageHeight, PAPER_AREA.h / scale, whole, { pad: EDGE_PADDING_PX / scale });
+  }
+  const w = Math.round(WIDTH * scale);
+  const panels = slices.map((slice, i) => {
+    const h = Math.min(PAPER_AREA.h, Math.round((slice.y1 - slice.y0) * scale));
+    const rect = {
+      x: PAPER_AREA.x + Math.floor((PAPER_AREA.w - w) / 2),
+      // A floating page sits in the middle of the column; a reading panel hangs from its top.
+      y: presentation === 'floating' ? PAPER_AREA.y + Math.floor((PAPER_AREA.h - h) / 2) : PAPER_AREA.y,
+      w,
+      h,
+    };
+    // The room between each of the panel's edges and the nearest writing
+    // or mark it shows, in frame pixels: at a cut edge EDGE_PADDING_PX is
+    // aimed for, and what the page allows is what is said.
+    const shown = whole.filter((l) => l.top >= slice.y0 && l.bottom <= slice.y1);
+    const edge = (distance) => (shown.length ? Math.round(distance * scale) : null);
+    const padding = {
+      top: edge(Math.min(...shown.map((l) => l.top)) - slice.y0),
+      bottom: edge(slice.y1 - Math.max(...shown.map((l) => l.bottom))),
+    };
+    return {
+      index: i + 1,
+      of: slices.length,
+      source: { y0: slice.y0, y1: slice.y1 },
+      overlap: slice.overlap,
+      padding,
+      rect,
+      buffer: drawFrame(draw, pageHeight, data, { scale, rect, y0: slice.y0 }),
+    };
+  });
+  const onScreen = (px) => Math.round(px * scale * 10) / 10;
+  return {
+    type,
+    presentation,
+    frame: { width: FRAME_W, height: FRAME_H },
+    column: { ...COLUMN },
+    clear_of: { ...PRIME_WINDOW },
+    page: { width: WIDTH, height: pageHeight },
+    scale,
+    text: { body_px: sizes.body, min_px: sizes.min, body_px_on_screen: onScreen(sizes.body), min_px_on_screen: onScreen(sizes.min), past_page: pastPage },
+    readable: sizes.body > 0 && sizes.body * scale >= MIN_READABLE_PX,
+    panels,
+  };
+}
+
 function storageBucket() {
   return process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || null;
 }
@@ -395,6 +716,224 @@ async function storePng(buffer, eventId, type) {
 
 const LABELS = { shopping_list: 'Shopping list', offer_letter: 'Offer letter' };
 
+const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
+
+/**
+ * What the page is drawn from, as it stands now: the document, its event,
+ * and for a shopping list the look and Lala's coins, for an offer letter
+ * the deal's terms. { data, pieces } where `data` is what renderDocument
+ * and presentDocument take. One reading of it for the canonical drawing
+ * and for the presentations' check against it.
+ */
+async function documentDrawData(sequelize, { event, type, doc, terms = null }) {
+  let balance = null;
+  let look = null;
+  if (type === 'shopping_list') {
+    ({ look, balance } = await shoppingListContext(sequelize, event));
+  }
+  const pieces = look ? look.pieces : null;
+  return { data: { doc, event, balance, pieces, terms: terms || [] }, pieces };
+}
+
+// ─── The presentations, stored (V2-2a-2, Evoni 2026-11-20) ──────────────────
+//
+// presentDocument draws the panels; this keeps them. A panel's file is
+// named by its own bytes and written only where no file is: the same
+// panel made twice is one file, and a file once written is never written
+// over. Where the store cannot promise that, nothing is stored.
+
+/** Raised when the panels' drawing changes: a set made under another revision is not this one. */
+const PRESENTATION_REVISION = 1;
+/** The namespace the sets' and panels' ids are derived in (any fixed uuid). */
+const PRESENTATION_NAMESPACE = '6f1d1b0e-5a0e-4a53-9c0e-2f7d3f1a8b21';
+
+class PresentationStorageError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'PresentationStorageError';
+    this.code = code;
+  }
+}
+
+/** The key in our bucket of one of our own file addresses, or null for anything else. */
+function ownStorageKey(url) {
+  const bucket = storageBucket();
+  if (!bucket || typeof url !== 'string') return null;
+  let parsed;
+  try { parsed = new URL(url); } catch (err) { return null; }
+  if (parsed.protocol !== 'https:' || !parsed.hostname.startsWith(`${bucket}.s3.`) || !parsed.hostname.endsWith('.amazonaws.com')) return null;
+  return decodeURIComponent(parsed.pathname.slice(1)) || null;
+}
+
+function storageClient() {
+  const { S3Client } = require('@aws-sdk/client-s3');
+  return new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
+}
+
+async function readOwnObject(key) {
+  const { GetObjectCommand } = require('@aws-sdk/client-s3');
+  const got = await storageClient().send(new GetObjectCommand({ Bucket: storageBucket(), Key: key }));
+  return Buffer.from(await got.Body.transformToByteArray());
+}
+
+/**
+ * The bytes of a stored document image, read with the app's own
+ * credentials (never by its open address): a file in our bucket, or the
+ * data: address used where there is no bucket. Null when it is neither or
+ * cannot be read.
+ */
+async function readStoredImage(url) {
+  if (typeof url === 'string' && url.startsWith('data:image/png;base64,')) {
+    return Buffer.from(url.slice('data:image/png;base64,'.length), 'base64');
+  }
+  const key = ownStorageKey(url);
+  if (!key) return null;
+  try {
+    return await readOwnObject(key);
+  } catch (err) {
+    console.error('[DocumentPresentation] a stored image could not be read:', err.name || err.message);
+    return null;
+  }
+}
+
+/** Whether panels can be kept at all: only in a bucket (a 1920x1080 frame is not kept as a data: address). */
+function presentationStorageAvailable() {
+  return Boolean(storageBucket());
+}
+
+/**
+ * Keep one panel. The key carries the panel's own hash. What is already
+ * there is read first: these very bytes are reused, anything else is
+ * PresentationStorageError('STORAGE_CONFLICT') and is not written over.
+ * Where nothing is there the write is "only if nothing is there"
+ * (If-None-Match: *), and what it left is read back. A store that does not
+ * know the condition is refused ('STORAGE_NOT_IMMUTABLE'). Returns
+ * { url, key, sha256, reused }.
+ */
+async function storePresentationPanel(buffer, { eventId, type, version, presentation, index, count }) {
+  const bucket = storageBucket();
+  if (!bucket) throw new PresentationStorageError('STORAGE_NOT_CONFIGURED', 'No storage is configured for presentation panels.');
+  const { PutObjectCommand } = require('@aws-sdk/client-s3');
+  const region = process.env.AWS_REGION || 'us-east-1';
+  const hash = sha256(buffer);
+  const key = `overlays/event-documents/${eventId}/presentations/${type}-v${version}-${presentation}-${index}of${count}-${hash}.png`;
+  const url = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+  const missing = (err) => {
+    const status = err && err.$metadata ? err.$metadata.httpStatusCode : null;
+    return status === 404 || err.name === 'NoSuchKey' || err.name === 'NotFound';
+  };
+  // What is there already is looked at first and never written over: the
+  // very same panel is reused, anything else is a conflict.
+  let stored = null;
+  try {
+    stored = await readOwnObject(key);
+  } catch (err) {
+    if (!missing(err)) throw new PresentationStorageError('STORAGE_UNREADABLE', `The storage could not be read to see whether this panel is kept (${err.name || 'error'}).`);
+  }
+  let reused = stored !== null;
+  if (!stored) {
+    try {
+      await storageClient().send(new PutObjectCommand({
+        Bucket: bucket, Key: key, Body: buffer, ContentType: 'image/png', CacheControl: 'max-age=31536000, immutable', IfNoneMatch: '*',
+      }));
+    } catch (err) {
+      const status = err && err.$metadata ? err.$metadata.httpStatusCode : null;
+      const taken = status === 412 || err.name === 'PreconditionFailed';
+      if (!taken) {
+        // 501: the store does not know the condition, so it cannot promise
+        // a file is written once. Anything else is simply not written.
+        if (status === 501 || err.name === 'NotImplemented') throw new PresentationStorageError('STORAGE_NOT_IMMUTABLE', 'This storage cannot promise a file is written only once.');
+        throw new PresentationStorageError('STORAGE_WRITE_FAILED', `A presentation panel could not be stored (${err.name || 'error'}).`);
+      }
+      // Another request wrote it between the look and the write.
+      reused = true;
+    }
+    // Read back what is there now, written here or by that other request.
+    try {
+      stored = await readOwnObject(key);
+    } catch (err) {
+      throw new PresentationStorageError('STORAGE_UNREADABLE', `A stored presentation panel could not be read back (${err.name || 'error'}).`);
+    }
+  }
+  if (sha256(stored) !== hash) {
+    throw new PresentationStorageError('STORAGE_CONFLICT', 'A different file is already stored where this panel belongs. It was not replaced.');
+  }
+  return { url, key, sha256: hash, reused };
+}
+
+/**
+ * A name-based uuid (version 5, RFC 4122: SHA-1 of the namespace's bytes
+ * and the name): the same names always give the same id.
+ */
+function derivedId(...names) {
+  const namespace = Buffer.from(PRESENTATION_NAMESPACE.replace(/-/g, ''), 'hex');
+  const hash = crypto.createHash('sha1').update(namespace).update(names.join('|')).digest();
+  hash[6] = (hash[6] & 0x0f) | 0x50;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/**
+ * Who a set of panels is: the event's document at a version, drawn from
+ * the inputs `renderKey` stands for, in one presentation. And each of its
+ * panels. The same set made again has the same ids.
+ */
+function presentationSetId({ eventId, type, version, renderKey, presentation }) {
+  return derivedId('set', eventId, type, version, renderKey, presentation);
+}
+function presentationPanelId(setId, index, count) {
+  return derivedId('panel', setId, index, count);
+}
+
+/**
+ * The one string a set is made under: the document's version, the look's
+ * total or the terms it was drawn with, the canonical page's own bytes and
+ * the panels' revision. Any of them changing makes another set.
+ */
+function presentationRenderKey({ version, lookTotal = null, termsKey = null, canonicalSha256, revision = PRESENTATION_REVISION }) {
+  return sha256(Buffer.from(JSON.stringify([version, lookTotal, termsKey, canonicalSha256, revision])));
+}
+
+/**
+ * Both presentations of a page, drawn (not stored). For each:
+ *   { presentation, ok: true, readable, body_px_on_screen, past_page, panels: [{ index, count, buffer, sha256, rect, source }] }
+ * or { presentation, ok: false, code, message } when it cannot be shown
+ * whole or, for reading, not at a size to read (READING_NOT_READABLE: a
+ * reading set that cannot be read is not kept). A floating page too small
+ * to read is kept, with readable: false. Null when drawing is unavailable.
+ * `present` is presentDocument (a test may stand in for it).
+ */
+function drawPresentations(type, data, present = presentDocument) {
+  const out = [];
+  for (const presentation of PRESENTATIONS) {
+    let drawn;
+    try {
+      drawn = present(type, data, { presentation });
+    } catch (err) {
+      if (!(err instanceof DocumentPresentationError)) throw err;
+      out.push({ presentation, ok: false, code: err.code, message: err.message });
+      continue;
+    }
+    if (!drawn) return null;
+    if (presentation === 'reading' && !drawn.readable) {
+      out.push({ presentation, ok: false, code: 'READING_NOT_READABLE', message: `The reading panels' text would be ${drawn.text.body_px_on_screen} px on screen; ${MIN_READABLE_PX} px is the least that reads.` });
+      continue;
+    }
+    out.push({
+      presentation,
+      ok: true,
+      readable: drawn.readable,
+      body_px_on_screen: drawn.text.body_px_on_screen,
+      past_page: drawn.text.past_page,
+      panels: drawn.panels.map((panel) => ({
+        index: panel.index, count: panel.of, buffer: panel.buffer, sha256: sha256(panel.buffer), rect: panel.rect, source: panel.source,
+      })),
+    });
+  }
+  return out;
+}
+
 /**
  * Draw an approved document as its overlay and record it on the document.
  * Returns the overlay { asset_id, url, version, made_at }, or null when it
@@ -403,18 +942,16 @@ const LABELS = { shopping_list: 'Shopping list', offer_letter: 'Offer letter' };
 async function makeDocumentOverlay(models, { event, type, doc, terms = null }) {
   const { sequelize } = models;
   if (!doc || doc.status !== 'approved') return null;
-  let balance = null;
-  let look = null;
-  if (type === 'shopping_list') {
-    ({ look, balance } = await shoppingListContext(sequelize, event));
-  }
-  const pieces = look ? look.pieces : null;
-  const buffer = renderDocument(type, { doc, event, balance, pieces, terms: terms || [] });
+  const { data, pieces } = await documentDrawData(sequelize, { event, type, doc, terms });
+  const buffer = renderDocument(type, data);
   if (!buffer) return null;
   const url = await storePng(buffer, event.id, type);
   const assetId = crypto.randomUUID();
   const madeAt = new Date().toISOString();
-  const metadata = { source: 'event_document', event_id: event.id, document_type: type, document_version: doc.version };
+  // What was drawn, by its bytes: the presentations are made only beside
+  // the very image they match (V2-2a-2).
+  const contentSha256 = sha256(buffer);
+  const metadata = { source: 'event_document', event_id: event.id, document_type: type, document_version: doc.version, content_sha256: contentSha256 };
   await sequelize.transaction(async (transaction) => {
     await sequelize.query(
       `INSERT INTO assets (id, name, asset_type, asset_role, asset_group, asset_scope, purpose, category, entity_type,
@@ -432,7 +969,7 @@ async function makeDocumentOverlay(models, { event, type, doc, terms = null }) {
           AND metadata->>'event_id' = :eventId AND metadata->>'document_type' = :type`,
       { replacements: { assetId, eventId: event.id, type }, transaction });
   });
-  const drawn = { asset_id: assetId, url, version: doc.version, made_at: madeAt };
+  const drawn = { asset_id: assetId, url, version: doc.version, made_at: madeAt, content_sha256: contentSha256 };
   // The total it was drawn with: a look that changes after approval leaves
   // the image out of date (overlayState), and Approve draws it again.
   if (type === 'shopping_list') drawn.look_total = shoppingLines(doc, pieces || event?.outfit_pieces).total;
@@ -482,9 +1019,29 @@ function overlayState(doc, lookTotal = null, termsKey = null) {
 module.exports = {
   drawingAvailable,
   renderDocument,
+  presentDocument,
+  measureDocumentText,
+  panelSlices,
+  DocumentPresentationError,
+  PRESENTATIONS,
+  MIN_READABLE_PX,
+  PANEL_OVERLAP,
+  EDGE_PADDING_PX,
   shoppingLines,
   shoppingListContext,
   documentByline,
   makeDocumentOverlay,
   overlayState,
+  sha256,
+  documentDrawData,
+  PRESENTATION_REVISION,
+  PresentationStorageError,
+  readStoredImage,
+  presentationStorageAvailable,
+  storePresentationPanel,
+  presentationSetId,
+  presentationPanelId,
+  presentationRenderKey,
+  drawPresentations,
+  LABELS,
 };

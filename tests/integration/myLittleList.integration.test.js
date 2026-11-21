@@ -29,6 +29,10 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
 
 (shouldSkip ? describe.skip : describe)('My Little List ♡ (Phase 1)', () => {
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-myLittleList', email: 'admin@myLittleList.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const shows = [];
 
   beforeAll(() => {
@@ -79,7 +83,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
   }
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
-  const listAt = (ids, beat, line = 0) => auth(request(app).get(`/api/v1/episodes/${ids.ep}/my-little-list?beat=${beat}&line=${line}`));
+  const listAt = (ids, beat, line = 0) => asAdmin(request(app).get(`/api/v1/episodes/${ids.ep}/my-little-list?beat=${beat}&line=${line}`));
 
   it('the migration added personal_list, NOT NULL with {} for existing rows', async () => {
     const [col] = await q(`SELECT is_nullable, column_default FROM information_schema.columns
@@ -132,5 +136,9 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     expect(asJson(row.personal_list).reminders).toEqual([]);
     const [{ status }] = await q('SELECT status FROM event_deliverables WHERE id = :reel', ids);
     expect(status).toBe('pending');
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/my-little-list`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

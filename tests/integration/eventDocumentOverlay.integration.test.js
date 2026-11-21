@@ -53,7 +53,7 @@ const PNG = 'data:image/png;base64,iVBORw0KGgo';
     delete process.env.S3_PRIMARY_BUCKET;
     delete process.env.AWS_S3_BUCKET;
     token = TokenService.generateTokenPair({
-      id: 'test-user-doc-overlays', email: 'test@docoverlays.dev', name: 'Doc Overlays', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-doc-overlays', email: 'test@docoverlays.dev', name: 'Doc Overlays', groups: ['USER', 'ADMIN'], role: 'ADMIN', // approving is an admin's (V2-1, 2026-11-19)
     }).accessToken;
   });
 

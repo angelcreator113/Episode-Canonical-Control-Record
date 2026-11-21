@@ -18,11 +18,17 @@
  *             person double-booked that day, and the affordability check
  *             (financialPressureService.checkAffordability against the
  *             ledger balance, as GET …/affordability answers it).
+ *   schedule  scheduleCheck (utils/eventFlowChecks; continuity PR 1,
+ *             Evoni 2026-11-13): when the event runs, and who at it is at
+ *             another event whose time overlaps or leaves too little time
+ *             to travel. Warnings only: nothing is refused or saved.
  */
 
-const { smartDefaults, clashes } = require('../utils/eventFlowChecks');
+const {
+  smartDefaults, clashes, scheduleCheck, participantsOf, travelMinutesOf, venueIdOf,
+} = require('../utils/eventFlowChecks');
 
-const FLOW_PARTS = Object.freeze(['beat14', 'defaults', 'clashes']);
+const FLOW_PARTS = Object.freeze(['beat14', 'defaults', 'clashes', 'schedule']);
 const OPEN_STATUSES = ['offered', 'considering', 'negotiating'];
 
 const plain = (o) => (o && typeof o.get === 'function' ? o.get({ plain: true }) : o);
@@ -35,6 +41,7 @@ const slim = (o) => (o ? {
 async function otherEvents(sequelize, { showId, eventId }) {
   return sequelize.query(
     `SELECT id, name, host_brand, dress_code, prestige, deal_type, venue_location_id, event_date,
+            event_time, status, used_in_episode_id, invitation_asset_id, opportunity_id,
             source_profile_id, canon_consequences
        FROM world_events
       WHERE show_id = :showId AND deleted_at IS NULL AND id <> :eventId
@@ -112,6 +119,81 @@ async function affordabilityOf(models, { showId, event }) {
 }
 
 /**
+ * How Lala is linked to each event, by its id (Evoni, 2026-11-13): an
+ * approved invitation is 'invited', a season slot 'planned', an accepted
+ * offer 'confirmed', a linked episode 'committed'. The strongest wins; an
+ * event she is not linked to is left out, and she is not checked for it.
+ */
+async function lalaLinks(sequelize, events) {
+  const { ACCEPTED_STATUSES } = require('./startOfferDecision');
+  const ids = events.map((e) => e.id);
+  const links = {};
+  if (!ids.length) return links;
+  const slotted = new Set((await sequelize.query(
+    'SELECT DISTINCT event_id FROM season_slots WHERE event_id IN (:ids) AND deleted_at IS NULL',
+    { replacements: { ids }, type: sequelize.QueryTypes.SELECT }
+  )).map((r) => String(r.event_id)));
+  const oppIds = [...new Set(events.map((e) => e.opportunity_id).filter(Boolean))];
+  const accepted = new Set(oppIds.length ? (await sequelize.query(
+    'SELECT id FROM opportunities WHERE id IN (:oppIds) AND status IN (:statuses) AND deleted_at IS NULL',
+    { replacements: { oppIds, statuses: ACCEPTED_STATUSES }, type: sequelize.QueryTypes.SELECT }
+  )).map((r) => String(r.id)) : []);
+  for (const e of events) {
+    let level = null;
+    if (e.used_in_episode_id) level = 'committed';
+    else if (e.opportunity_id && accepted.has(String(e.opportunity_id))) level = 'confirmed';
+    else if (slotted.has(String(e.id))) level = 'planned';
+    else if (e.invitation_asset_id) level = 'invited';
+    if (level) links[e.id] = { level };
+  }
+  return links;
+}
+
+/** Each event's place for travel: { [eventId]: { venue_id, city, dream } }. A district stands in where no city is known. */
+async function placesOf(sequelize, events) {
+  const { locationPlace, isDreamCity } = require('../utils/lalaHome');
+  const byVenue = new Map();
+  const places = {};
+  for (const e of events) {
+    const venueId = venueIdOf(e);
+    if (!venueId) { places[e.id] = { venue_id: null, city: null, dream: false }; continue; }
+    if (!byVenue.has(String(venueId))) byVenue.set(String(venueId), await locationPlace(sequelize, venueId));
+    const { city, district } = byVenue.get(String(venueId));
+    const where = city || district || null;
+    places[e.id] = { venue_id: venueId, city: where, dream: Boolean(where) && isDreamCity(where) };
+  }
+  return places;
+}
+
+/** The schedule part: this event against the others that share someone with it. */
+async function scheduleOfEvent(models, { showId, event, others }) {
+  const { sequelize } = models;
+  const lalaProfileId = await require('./lalaFeedProfile').lalaProfileId(sequelize).catch((err) => {
+    console.error('[EventFlow] Lala\'s profile could not be read (she is checked by her links only):', err.message);
+    return null;
+  });
+  const all = [event, ...others];
+  const lala = await lalaLinks(sequelize, all);
+  // Only the events that share someone with this one need a place read.
+  const mine = new Set(participantsOf(event, { lala: lala[event.id], lalaProfileId }).map((p) => p.key));
+  const sharing = others.filter((o) => participantsOf(o, { lala: lala[o.id], lalaProfileId }).some((p) => mine.has(p.key)));
+  const places = await placesOf(sequelize, [event, ...sharing]);
+  // The names of this event's people, from their profiles: a host set by its id alone has no name on the event.
+  const profileIds = [...mine].filter((k) => k.startsWith('profile:')).map((k) => Number(k.slice('profile:'.length)));
+  const names = {};
+  if (profileIds.length) {
+    const rows = await sequelize.query('SELECT id, display_name, handle FROM social_profiles WHERE id IN (:profileIds)',
+      { replacements: { profileIds }, type: sequelize.QueryTypes.SELECT });
+    for (const r of rows) names[r.id] = r.display_name || r.handle || undefined;
+  }
+  const [show] = await sequelize.query('SELECT metadata FROM shows WHERE id = :showId LIMIT 1',
+    { replacements: { showId }, type: sequelize.QueryTypes.SELECT });
+  const travelMinutes = travelMinutesOf(show?.metadata);
+  const result = scheduleCheck({ event, others: sharing, places, lala, lalaProfileId, names, travelMinutes });
+  return { ...result, place: places[event.id] || null, travel_minutes: travelMinutes, lala: lala[event.id] || null };
+}
+
+/**
  * The flow parts for an event row already read in this show. `loaders`
  * replaces part loaders (tests). Returns { beat14, defaults, clashes, errors? }.
  */
@@ -131,6 +213,7 @@ async function loadEventFlow(models, { showId, event, loaders = {} }) {
       ]);
       return clashes({ event, others: rows, affordability });
     },
+    schedule: async () => scheduleOfEvent(models, { showId, event, others: await others() }),
   };
   const settled = await Promise.all(FLOW_PARTS.map(async (part) => {
     try {
@@ -151,4 +234,4 @@ async function loadEventFlow(models, { showId, event, loaders = {} }) {
   return out;
 }
 
-module.exports = { FLOW_PARTS, loadEventFlow, beat14Preview, otherEvents };
+module.exports = { FLOW_PARTS, loadEventFlow, beat14Preview, otherEvents, lalaLinks, placesOf, scheduleOfEvent };

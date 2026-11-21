@@ -11,7 +11,7 @@ const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'route
 
 describe('Step 3 CP6 — characterFollowRoutes.js PROMOTE shape', () => {
   test('imports requireAuth from middleware/auth (3-level nested fallback removed)', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
   });
 
   describe('All 7 handlers carry requireAuth', () => {
@@ -24,9 +24,11 @@ describe('Step 3 CP6 — characterFollowRoutes.js PROMOTE shape', () => {
       ['patch', '/:characterKey'],
       ['get', '/:characterKey/influence-context'],
     ].forEach(([verb, route]) => {
-      test(`${verb.toUpperCase()} ${route} → requireAuth`, () => {
+      // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+      test(`${verb.toUpperCase()} ${route} → requireAuth${verb === 'get' ? ' + ADMIN' : ''}`, () => {
         const escaped = route.replace(/\//g, '\\/');
-        const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*requireAuth,\\s*async`);
+        const admin = verb === 'get' ? "\\s*authorize\\(\\['ADMIN'\\]\\)," : '';
+        const re = new RegExp(`router\\.${verb}\\('${escaped}',\\s*requireAuth,${admin}\\s*async`);
         expect(SRC).toMatch(re);
       });
     });

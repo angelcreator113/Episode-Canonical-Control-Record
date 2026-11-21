@@ -64,6 +64,10 @@ async function madeUpCutout() {
 (shouldSkip ? describe.skip : describe)('Character poses (Files tab)', () => {
   const show = uuid();
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; an editor is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-episodePoses', email: 'admin@episodePoses.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   let postSpy;
   const ORIGINAL_ENV = { ...process.env };
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
@@ -92,8 +96,10 @@ async function madeUpCutout() {
 
   beforeAll(async () => {
     await posesMigration.up(sequelize.getQueryInterface(), Sequelize);
+    // Evoni, 2026-11-16: the routes that start a pose's processing are an ADMIN's (an editor could until
+    // then; the refusals are in processingAdminOnly.integration.test.js). The same checks, by the account that may.
     token = TokenService.generateTokenPair({
-      id: 'test-user-poses', email: 'user@poses.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-poses', email: 'user@poses.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :slug, '{}', NOW(), NOW())`,
       { show, name: `Poses ${show.slice(0, 8)}`, slug: `poses-${show.slice(0, 8)}` });
@@ -160,7 +166,7 @@ async function madeUpCutout() {
     expect(res.body.data).toMatchObject({ character_key: 'justawoman', pose: 'front', is_default: true, status: 'queued', original_filename: 'sort-me.jpg', width: 900, height: 1200 });
     const [done] = await settled(ep);
     expect(done).toMatchObject({ status: 'ready', steps: { background: 'kept' } });
-    const after = await auth(request(app).get(`/api/v1/episodes/${ep}/lookbook`));
+    const after = await asAdmin(request(app).get(`/api/v1/episodes/${ep}/lookbook`));
     expect(after.body.data.images.unsorted).toEqual([]);
     // Filed once: a second try finds nothing.
     expect((await auth(request(app).post(from)).send({ image_id: imageId, character_key: 'lala', pose: 'side' })).status).toBe(404);
@@ -268,5 +274,15 @@ async function madeUpCutout() {
     expect((await request(app).get(url(ep))).status).toBe(401);
     await expect(run(`INSERT INTO episode_character_poses (episode_id, character_key, pose, original_key) VALUES (:ep, 'lala', 'sitting', 'k')`, { ep }))
       .rejects.toThrow(/episode_character_poses_pose/);
+  });
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    // This suite's own account is an ADMIN since 2026-11-16 (#3866), so the refusal is checked with an editor of its own
+    // (the groups processingAdminOnly.integration.test.js gives its editor).
+    const editorToken = TokenService.generateTokenPair({ id: 'test-editor-episodePoses', email: 'editor@episodePoses.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/lookbook`).set('Authorization', `Bearer ${editorToken}`);
+    expect(res.status).toBe(403);
+    // And the ADMIN this suite acts as is not: the route answers for itself (no such episode).
+    const asAdminRes = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/lookbook`).set('Authorization', `Bearer ${token}`);
+    expect([401, 403]).not.toContain(asAdminRes.status);
   });
 });

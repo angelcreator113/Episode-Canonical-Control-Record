@@ -7,8 +7,10 @@ describe('CP12 — worldStudio.js zero-edit ratification', () => {
   test('the ecosystem preview (the §5.45 factory until SEC-5, 2026-10-29) is admin only', () => {
     expect(SRC).toMatch(/router\.post\('\/world\/generate-ecosystem-preview', requireAuth, authorize\(\['ADMIN'\]\),/);
   });
-  test('worldStudio imports optionalAuth, requireAuth and authorize', () => {
-    expect(SRC).toMatch(/const \{ optionalAuth, requireAuth, authorize \} = require\(['"]\.\.\/middleware\/auth['"]\)/);
+  // optionalAuth left the file on 2026-11-16: its 18 open reads are production material, an ADMIN's (Evoni).
+  test('worldStudio imports requireAuth and authorize, and no longer optionalAuth', () => {
+    expect(SRC).toMatch(/const \{ requireAuth, authorize \} = require\(['"]\.\.\/middleware\/auth['"]\)/);
+    expect(SRC).not.toMatch(/\boptionalAuth\b/);
   });
   test('worldStudio writes (Tier 1 since CP3) carry requireAuth', () => {
     expect(SRC).toMatch(/router\.post\('\/world\/generate-ecosystem', requireAuth,/);

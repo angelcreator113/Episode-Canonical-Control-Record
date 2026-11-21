@@ -33,8 +33,9 @@ const DevTokenCarrier = import.meta.env.DEV
 // dead-code elimination — same mechanism as DevTokenCarrier above.
 // /teleprompter/remote: the teleprompter's phone remote, public (token in the
 // URL's fragment), reached only from the desktop's QR code.
-const REMOTE_PATH = '/teleprompter/remote';
-const PRE_AUTH_PATHS = ['/login', '/', REMOTE_PATH, ...(import.meta.env.DEV ? ['/__dev-token-carrier'] : [])];
+// The pages a signed-out visitor may open: lib/preAuthPaths (the public recap and Shop the Look pages among them).
+import { REMOTE_PATH, isPreAuthPath } from './lib/preAuthPaths';
+const DEV_PRE_AUTH_PATHS = import.meta.env.DEV ? ['/__dev-token-carrier'] : [];
 
 // Lazy-loaded: all other pages (code-split into separate chunks)
 const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail'));
@@ -263,7 +264,7 @@ function AppContent() {
   // Also check localStorage directly to survive React state races on refresh
   useEffect(() => {
     const hasToken = !!localStorage.getItem('authToken');
-    if (!loading && !isAuthenticated && !hasToken && !PRE_AUTH_PATHS.includes(location.pathname) && !isNavigatingRef.current) {
+    if (!loading && !isAuthenticated && !hasToken && !isPreAuthPath(location.pathname) && !DEV_PRE_AUTH_PATHS.includes(location.pathname) && !isNavigatingRef.current) {
       console.log('[AppContent] User not authenticated, redirecting to landing...');
       isNavigatingRef.current = true;
       navigate('/', { replace: true });
@@ -403,8 +404,10 @@ function AppContent() {
           <Route path="/shows/:showId/season" element={<SeasonPage />} />
           <Route path="/shows/:showId/season/plan" element={<SeasonPlanPrint />} />
           <Route path="/shows/:showId/quick-episode" element={<NewEpisodeRedirect />} />
-          <Route path="/shows/:showId/new-episode" element={<NewEpisodeStarter />} />
-          <Route path="/shows/:showId/events/:eventId" element={<EventPackagePage />} />
+          {/* Production screens (Evoni, 2026-11-15): an ADMIN's. AdminOnly explains it to anyone else; the
+              server decides what each request may do. */}
+          <Route path="/shows/:showId/new-episode" element={<AdminOnly><NewEpisodeStarter /></AdminOnly>} />
+          <Route path="/shows/:showId/events/:eventId" element={<AdminOnly><EventPackagePage /></AdminOnly>} />
           <Route path="/shows/:id/settings" element={<ShowSettingsRedirect />} />
           {/* Studio — universe-level entry points */}
           {/* The old Timeline Editor was deleted (Evoni, 2026-11-03): its links land on the editor. */}
@@ -479,8 +482,10 @@ function AppContent() {
           <Route path="/chapter-structure/:bookId/:chapterId" element={<ChapterStructureEditor />} />
           
           {/* PNOS Character Registry */}
-          <Route path="/character-registry" element={<CharacterRegistryPage />} />
-          <Route path="/character/:id" element={<CharacterProfile />} />
+          {/* Character production screens (character privacy, Evoni, 2026-11-16): their reads are an ADMIN's on
+              the server, so AdminOnly explains that to anyone else instead of an empty or failed page. */}
+          <Route path="/character-registry" element={<AdminOnly><CharacterRegistryPage /></AdminOnly>} />
+          <Route path="/character/:id" element={<AdminOnly><CharacterProfile /></AdminOnly>} />
           <Route path="/your-voice" element={<YourVoicePage />} />
           <Route path="/brands" element={<Navigate to="/universe?tab=brands" replace />} />
           <Route path="/brands/:slug" element={<BrandProfilePage />} />
@@ -491,7 +496,7 @@ function AppContent() {
           <Route path="/continuity" element={<ContinuityEnginePage />} />
           
           {/* PNOS Relationships — Unified Tree + Web + Candidates + List */}
-          <Route path="/relationships" element={<RelationshipEngine />} />
+          <Route path="/relationships" element={<AdminOnly><RelationshipEngine /></AdminOnly>} />
 
           {/* The duplicate world editors' routes open their owner's page on
               the matching tab (audit IA-04; docs/WORLD_ROUTE_OWNERSHIP.md). */}
@@ -556,8 +561,8 @@ function AppContent() {
           <Route path="/feed" element={<PulseRedirect />} />
 
           {/* Narrative Pressure Dashboard — Feed Nervous System */}
-          <Route path="/pressure" element={<NarrativePressureDashboard />} />
-          <Route path="/feed-relationships" element={<FeedRelationshipMap />} />
+          <Route path="/pressure" element={<AdminOnly><NarrativePressureDashboard /></AdminOnly>} />
+          <Route path="/feed-relationships" element={<AdminOnly><FeedRelationshipMap /></AdminOnly>} />
           
           {/* PNOS Social Import Pipeline — redirects to Universe page */}
           <Route path="/social-import" element={<Navigate to="/universe/social-import" replace />} />
@@ -583,8 +588,8 @@ function AppContent() {
           <Route path="/design-agent" element={<AdminOnly><DesignAgent /></AdminOnly>} />
           
           {/* Admin */}
-          <Route path="/admin" element={<AdminPanel />} />
-          <Route path="/admin/audit" element={<AuditLog />} />
+          <Route path="/admin" element={<AdminOnly><AdminPanel /></AdminOnly>} />
+          <Route path="/admin/audit" element={<AdminOnly><AuditLog /></AdminOnly>} />
           
           {/* Diagnostics */}
 

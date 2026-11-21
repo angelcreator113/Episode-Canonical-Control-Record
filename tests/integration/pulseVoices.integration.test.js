@@ -74,8 +74,8 @@ const reply = (obj) => ({ content: [{ type: 'text', text: `Here you go:\n${JSON.
 
   test('the posting characters: active or alive, with a Feed profile, not hidden; reads need a sign-in', async () => {
     expect((await request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`)).status).toBe(401);
-    expect((await as(editor, request(app).get('/api/v1/pulse-voices?show_id=x'))).status).toBe(400);
-    const res = await as(editor, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
+    expect((await as(admin, request(app).get('/api/v1/pulse-voices?show_id=x'))).status).toBe(400);
+    const res = await as(admin, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
     expect(res.status).toBe(200);
     expect(res.body.characters.map((x) => x.display_name)).toEqual(['marcus', 'nia']);
     expect(res.body.characters[0]).toMatchObject({ depth_level: 'active', handle: `marcus-${tag}`, voice: null, needs_rebuild: true });
@@ -92,7 +92,7 @@ const reply = (obj) => ({ content: [{ type: 'text', text: `Here you go:\n${JSON.
       sentence_length: 'short', topics: ['linen'], never_says: [], signature_phrases: [] }));
     const res = await as(admin, request(app).post(`/api/v1/pulse-voices/${c.hidden}/build`));
     expect(res.status).toBe(200);
-    const listed = await as(editor, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
+    const listed = await as(admin, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
     expect(listed.body.not_met[0]).toMatchObject({ display_name: 'hidden', voice: { id: res.body.voice.id } });
     const { eligible } = require('../../src/services/pulseVoices');
     expect((await eligible(models, ids.show)).map((r) => r.character.display_name)).toEqual(['hidden', 'marcus', 'nia']);
@@ -117,11 +117,11 @@ const reply = (obj) => ({ content: [{ type: 'text', text: `Here you go:\n${JSON.
     expect(prompt).not.toContain(`PRIVATE-WOUND-${tag}`);
     expect(res.body.voice).toMatchObject({ status: 'built', social_profile_id: p.marcus, habits: { case: 'lowercase', signature_phrases: ['ok but why'] } });
 
-    const listed = await as(editor, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
+    const listed = await as(admin, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
     expect(listed.body.characters[0]).toMatchObject({ needs_rebuild: false, voice: { id: res.body.voice.id } });
     // A changed public face shows the voice needs a rebuild.
     await run(`UPDATE registry_characters SET the_mask = CAST('{"face":"guarded"}' AS jsonb) WHERE id = :id`, { id: c.marcus });
-    const after = await as(editor, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
+    const after = await as(admin, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
     expect(after.body.characters[0].needs_rebuild).toBe(true);
   });
 
@@ -188,8 +188,12 @@ const reply = (obj) => ({ content: [{ type: 'text', text: `Here you go:\n${JSON.
   test('Make Active (the registry edit) moves one up from not posting to the posting characters', async () => {
     const put = await as(admin, request(app).put(`/api/v1/character-registry/characters/${c.sparked}`)).send({ depth_level: 'active' });
     expect(put.status).toBe(200);
-    const res = await as(editor, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
+    const res = await as(admin, request(app).get(`/api/v1/pulse-voices?show_id=${ids.show}`));
     expect(res.body.not_posting).toEqual([]);
     expect(res.body.characters.map((x) => x.display_name)).toContain('sparked');
+  });
+  test("The Pulse's production reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/pulse-voices?show_id=00000000-0000-4000-8000-000000000000`).set('Authorization', `Bearer ${editor}`);
+    expect(res.status).toBe(403);
   });
 });

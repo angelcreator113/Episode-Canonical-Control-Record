@@ -227,6 +227,12 @@ router.post('/world/:showId/events/:eventId/approve-overlay', requireAuth, async
       { replacements: { assetId }, type: sequelize.QueryTypes.SELECT }
     );
     if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
+    // Before the asset or the event is touched: a document presentation is
+    // not one of this workflow's overlays.
+    {
+      const { anyDocumentPresentation, refuseDocumentPresentation } = require('../../utils/documentPresentationAssets');
+      if (await anyDocumentPresentation(assetId, { sequelize })) return refuseDocumentPresentation(res);
+    }
 
     const meta = typeof asset.metadata === 'string' ? JSON.parse(asset.metadata) : (asset.metadata || {});
     const startedEpisode = await startedEpisodeFor(sequelize, eventId);
@@ -308,7 +314,9 @@ router.post('/world/:showId/events/:eventId/approve-overlay', requireAuth, async
 });
 
 // POST /world/:showId/events/:eventId/reject-overlay
-router.post('/world/:showId/events/:eventId/reject-overlay', requireAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/reject-overlay', requireAuth,
+  require('../../middleware/requestValidation').validateBodyAssetId('assetId'),
+  require('../../utils/documentPresentationAssets').protectDocumentPresentations((req) => req.body?.assetId), async (req, res) => {
   try {
     const { assetId } = req.body;
     if (!assetId) return res.status(400).json({ success: false, error: 'assetId required' });

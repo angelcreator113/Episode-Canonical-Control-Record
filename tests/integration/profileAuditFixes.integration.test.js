@@ -127,8 +127,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(row).toMatchObject({ subtitle: null, status: 'accepted', cast_review: null, deleted_at: null });
     const [[gone]] = await run('SELECT deleted_at FROM registry_characters WHERE id = :gone', ids);
     expect(gone.deleted_at).not.toBeNull();
-    // Reading stays open to anyone signed in.
-    expect((await asEditor(request(app).get(`/api/v1/character-registry/characters/${ids.maren}`))).status).toBe(200);
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    expect((await asEditor(request(app).get(`/api/v1/character-registry/characters/${ids.maren}`))).status).toBe(403);
+    expect((await asAdmin(request(app).get(`/api/v1/character-registry/characters/${ids.maren}`))).status).toBe(200);
   });
 
   it('8: a confidential professional is never matched, never a voice, never drafted posts', async () => {
@@ -152,12 +153,15 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     }
   });
 
-  it('9: an archived character\'s link: flagged for an ADMIN, still 404 for anyone else', async () => {
+  it('9: an archived character\'s link: flagged for an ADMIN, refused for anyone else', async () => {
     const admin = await asAdmin(request(app).get(`/api/v1/character-registry/characters/${ids.gone}`));
     expect(admin.status).toBe(200);
     expect(admin.body).toMatchObject({ archived: true, character: { id: ids.gone } });
     const editor = await asEditor(request(app).get(`/api/v1/character-registry/characters/${ids.gone}`));
-    expect(editor.status).toBe(404);
+    // Refused before the character is looked up, so the answer does not tell an archived one from a live one.
+    expect(editor.status).toBe(403);
+    expect(editor.body.character).toBeUndefined();
+    expect((await asEditor(request(app).get(`/api/v1/character-registry/characters/${ids.maren}`))).status).toBe(403);
     const live = await asAdmin(request(app).get(`/api/v1/character-registry/characters/${ids.maren}`));
     expect(live.body.archived).toBeUndefined();
   });

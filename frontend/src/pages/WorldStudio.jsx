@@ -775,8 +775,8 @@ export default function WorldStudio() {
       const url = effectiveTag === 'all'
         ? `${API}/world/characters`
         : `${API}/world/characters?world_tag=${encodeURIComponent(effectiveTag)}`;
-      const r = await fetch(url);
-      const d = await r.json();
+      // Through apiClient, which sends the session's token: the world reads are an ADMIN's (2026-11-16).
+      const { data: d } = await apiClient.get(url);
       setCharacters(d.characters || []);
     } catch (e) { console.error(e); }
   }, [worldTag]);
@@ -800,8 +800,7 @@ export default function WorldStudio() {
 
   const loadCharDetail = useCallback(async (id) => {
     try {
-      const r = await fetch(`${API}/world/characters/${id}`);
-      const d = await r.json();
+      const { data: d } = await apiClient.get(`${API}/world/characters/${id}`);
       setCharDetail(d.character || null);
       setEditMode(false);
     } catch (e) { console.error(e); }
@@ -961,8 +960,7 @@ export default function WorldStudio() {
   /* ── Scene loaders & actions ──────────────────────────────────────── */
   const loadCharScenes = useCallback(async (charId) => {
     try {
-      const r = await fetch(`${API}/world/scenes?character_id=${charId}`);
-      const d = await r.json();
+      const { data: d } = await apiClient.get(`${API}/world/scenes?character_id=${charId}`);
       setCharScenes(d.scenes || []);
     } catch { setCharScenes([]); }
   }, []);
@@ -1009,24 +1007,21 @@ export default function WorldStudio() {
   /* ── Batch & Saved Preview loaders ────────────────────────────────── */
   const loadBatches = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/world/batches`);
-      const d = await r.json();
+      const { data: d } = await apiClient.get(`${API}/world/batches`);
       setBatches(d.batches || []);
     } catch { setBatches([]); }
   }, []);
 
   const loadSavedPreviews = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/world/previews`);
-      const d = await r.json();
+      const { data: d } = await apiClient.get(`${API}/world/previews`);
       setSavedPreviews((d.previews || []).filter(p => p.status === 'pending'));
     } catch { setSavedPreviews([]); }
   }, []);
 
   const restorePreview = async (pid) => {
     try {
-      const r = await fetch(`${API}/world/preview/${pid}`);
-      const d = await r.json();
+      const { data: d } = await apiClient.get(`${API}/world/preview/${pid}`);
       if (d.characters?.length) {
         setPreviewChars(d.characters);
         setPreviewNotes(d.generation_notes || '');
@@ -1048,7 +1043,7 @@ export default function WorldStudio() {
   /* ── Compare loader ──────────────────────────────────────────────── */
   useEffect(() => {
     if (!compareChar) { setCompareDetail(null); return; }
-    fetch(`${API}/world/characters/${compareChar}`).then(r => r.json()).then(d => setCompareDetail(d.character || null)).catch(() => setCompareDetail(null));
+    apiClient.get(`${API}/world/characters/${compareChar}`).then(({ data: d }) => setCompareDetail(d.character || null)).catch(() => setCompareDetail(null));
   }, [compareChar]);
 
   /* ── AI Deepen ───────────────────────────────────────────────────── */

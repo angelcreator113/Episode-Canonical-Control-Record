@@ -41,15 +41,31 @@ function OneLook({ look }) {
       {look.published_at && <p className="site-shop__date">{publishedLabel(look.published_at)}</p>}
       {look.image?.url && <img className="site-shop__image" src={look.image.url} alt={look.image.alt || ''} data-testid="site-shop-image" />}
       {look.disclosure && <p className="site-shop__disclosure" data-testid="site-shop-disclosure">{look.disclosure}</p>}
-      {look.caption && <p className="site-shop__caption">{look.caption}</p>}
+      {/* The caption is the story's own words (an episode, an event, its host in the Dream Cities); the list under
+          it is real products. Each says which it is (Evoni, 2026-11-15). */}
+      {look.caption && (
+        <div className="site-shop__story" data-testid="site-shop-story">
+          <p className="site-shop__label">From the story</p>
+          <p className="site-shop__caption">{look.caption}</p>
+        </div>
+      )}
+      <p className="site-shop__label" data-testid="site-shop-real">Real pieces you can shop</p>
+      {look.archive && <p className="site-shop__archive" data-testid="site-shop-archive">These pieces are no longer available to buy.</p>}
       <ul className="site-shop__links">
-        {look.links.map((l, i) => (
-          <li key={i} className="site-shop__link" data-testid="site-shop-link">
-            <a href={l.url} target="_blank" rel={relFor(l)}>{l.label}</a>
-            {l.retailer && <span> · {l.retailer}</span>}
-            {l.affiliate && <span className="site-shop__badge">Affiliate link</span>}
-          </li>
-        ))}
+        {look.links.map((l, i) => {
+          // A link only for a product that can be bought and has an https address; anything else is text.
+          const buyable = l.available !== false && typeof l.url === 'string' && l.url.startsWith('https://');
+          return (
+            <li key={i} className={`site-shop__link${buyable ? '' : ' site-shop__link--gone'}`} data-testid="site-shop-link">
+              {buyable ? <a href={l.url} target="_blank" rel={relFor(l)}>{l.label}</a> : <span className="site-shop__gone">{l.label}</span>}
+              {buyable && l.retailer && <span> · {l.retailer}</span>}
+              {l.match === 'similar' && <span className="site-shop__badge">Similar piece</span>}
+              {buyable && l.affiliate && <span className="site-shop__badge">Affiliate link</span>}
+              {/* A product she confirmed that has since gone, or a piece that never had one to buy. */}
+              {!buyable && <span className="site-shop__badge">{l.match ? 'No longer available' : 'Not available to shop'}</span>}
+            </li>
+          );
+        })}
       </ul>
       <p><Link to="/shop-the-look">Every look</Link></p>
     </article>

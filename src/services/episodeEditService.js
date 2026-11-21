@@ -392,6 +392,9 @@ function editFrom(live, voiceTakes = {}) {
  * length. { [approval_id]: { playable, state, reason, association_id,
  * beat_number, line_index, in_ms, out_ms, source_duration_ms, gain_db,
  * fade_in_ms, fade_out_ms, normalise, source_asset_id, s3_key } }.
+ * Each also carries its source's identity and where it came from, for the
+ * render manifest (Evoni, 2026-11-16): sha256, source_kind, content_type and,
+ * for an extract of a raw take, source_raw_clip_id, source_in_ms, source_out_ms.
  */
 async function voiceTakesFor(sequelize, episodeId, live, t = null) {
   const { summary } = require('./voiceStudioService');
@@ -402,7 +405,8 @@ async function voiceTakesFor(sequelize, episodeId, live, t = null) {
   if (!ids.length) return {};
   const found = await rows(sequelize, `SELECT a.id, a.association_id, a.beat_number, a.line_index, a.superseded_at,
       r.in_ms, r.out_ms, r.gain_db::float8 AS gain_db, r.fade_in_ms, r.fade_out_ms, r.normalise,
-      s.id AS source_asset_id, s.s3_key, s.duration_ms AS source_duration_ms
+      s.id AS source_asset_id, s.s3_key, s.duration_ms AS source_duration_ms,
+      s.sha256, s.source_kind, s.content_type, s.source_raw_clip_id, s.source_in_ms, s.source_out_ms
     FROM line_voice_approvals a
     JOIN line_voice_candidate_revisions r ON r.id = a.candidate_revision_id
     JOIN line_voice_candidates c ON c.id = a.candidate_id
@@ -419,6 +423,8 @@ async function voiceTakesFor(sequelize, episodeId, live, t = null) {
       in_ms: r.in_ms, out_ms: r.out_ms, source_duration_ms: r.source_duration_ms,
       gain_db: r.gain_db, fade_in_ms: r.fade_in_ms, fade_out_ms: r.fade_out_ms, normalise: r.normalise,
       source_asset_id: r.source_asset_id, s3_key: r.s3_key,
+      sha256: r.sha256, source_kind: r.source_kind, content_type: r.content_type,
+      source_raw_clip_id: r.source_raw_clip_id, source_in_ms: r.source_in_ms, source_out_ms: r.source_out_ms,
     };
   }
   return out;
@@ -1565,7 +1571,7 @@ async function batchOps(sequelize, { episodeId, editRevision, userId, steps }) {
 }
 
 module.exports = {
-  EditError, setMedia, readVideoProbe, stableJson, ITEM_KINDS, MAX_CLIP_MS, PROBE_TIMEOUT_MS,
+  EditError, setMedia, readVideoProbe, stableJson, sha256, ITEM_KINDS, MAX_CLIP_MS, PROBE_TIMEOUT_MS,
   C1B_ITEM_KINDS, CAPTION_STYLES, VISUAL_MODES, c1bReady,
   loadEdit, setBeatMode, setBeatDuration, lockBeatTiming, placeSceneClip, updateSceneClip,
   placeDialogue, moveDialogue,
@@ -1575,4 +1581,6 @@ module.exports = {
   createVersion, listVersions, getVersion, restoreVersion,
   lockEdit, rawClipUses, snapshotRawClipIds,
   reviewReadiness, layoutAtTime, mixPlanOf,
+  // For the render manifest (Evoni, 2026-11-16), which reads a saved version as the edit is read.
+  liveRows, editFrom, voiceTakesFor, versionRow,
 };

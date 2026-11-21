@@ -35,7 +35,10 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
 const uuid = () => crypto.randomUUID();
 
 (shouldSkip ? describe.skip : describe)('relationships: character_relationships is the one store', () => {
+  // World Studio and Show Bible reads are an ADMIN's (Evoni, 2026-11-16): the reads below are made as an ADMIN.
+  // The editor token is kept for what this suite writes, and for the refusal check.
   let token;
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-world-reads', email: 'admin@world-reads.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   const registry = uuid();
   // World Studio characters and their registry twins; "loner" has no twin.
   const w = { sable: uuid(), nia: uuid(), rex: uuid(), mira: uuid(), loner: uuid() };
@@ -44,7 +47,8 @@ const uuid = () => crypto.randomUUID();
   const rel = { volatile: uuid(), calm: uuid(), candidate: uuid() };
 
   const auth = (req) => req.set('Authorization', `Bearer ${token}`);
-  const scan = () => auth(request(app).get('/api/v1/world/tension-scanner'));
+  const read = (req) => req.set('Authorization', `Bearer ${adminToken}`);
+  const scan = () => read(request(app).get('/api/v1/world/tension-scanner'));
   const ourPairs = (body) => body.pairs.filter((p) => Object.values(r).includes(p.char_a.id));
 
   beforeAll(async () => {
@@ -89,6 +93,14 @@ const uuid = () => crypto.randomUUID();
     await run(`DELETE FROM world_characters WHERE id IN (:ws)`, { ws: Object.values(w) });
   });
 
+  it('an editor is refused the reads (403): the scanner, the summary, the list and a character\'s relationships', async () => {
+    for (const url of ['/api/v1/world/tension-scanner', '/api/v1/world/context-summary', '/api/v1/world/characters?world_tag=lalaverse', `/api/v1/world/characters/${w.nia}/relationships`]) {
+      const res = await auth(request(app).get(url));
+      expect([url, res.status]).toEqual([url, 403]);
+      expect(JSON.stringify(res.body)).not.toMatch(/pairs|relationships|characters/);
+    }
+  });
+
   it('the scanner reads confirmed table rows: volatile is high, calm and candidates are not, and the old graph is not read', async () => {
     const res = await scan();
     expect(res.status).toBe(200);
@@ -107,7 +119,7 @@ const uuid = () => crypto.randomUUID();
   });
 
   it('the context summary counts the same pairs', async () => {
-    const [scanRes, summary] = await Promise.all([scan(), auth(request(app).get('/api/v1/world/context-summary'))]);
+    const [scanRes, summary] = await Promise.all([scan(), read(request(app).get('/api/v1/world/context-summary'))]);
     expect(summary.status).toBe(200);
     expect(summary.body.tensionCount).toBe(scanRes.body.count);
   });
@@ -147,19 +159,19 @@ const uuid = () => crypto.randomUUID();
   });
 
   it("a character's relationships: the table's, candidates marked, then the old graph's, marked legacy", async () => {
-    const nia = await auth(request(app).get(`/api/v1/world/characters/${w.nia}/relationships`));
+    const nia = await read(request(app).get(`/api/v1/world/characters/${w.nia}/relationships`));
     expect(nia.status).toBe(200);
     expect(nia.body.in_registry).toBe(true);
     expect(nia.body.relationships.map((x) => [x.character_name, x.confirmed])).toEqual([['Sable Vale', true], ['Rel Test Rex', false]]);
     expect(nia.body.legacy).toEqual([]);
-    const mira = await auth(request(app).get(`/api/v1/world/characters/${w.mira}/relationships`));
+    const mira = await read(request(app).get(`/api/v1/world/characters/${w.mira}/relationships`));
     expect(mira.body.legacy).toEqual([expect.objectContaining({ rel_id: legacyRel, character_name: 'Rel Test Rex', legacy: true })]);
-    const loner = await auth(request(app).get(`/api/v1/world/characters/${w.loner}/relationships`));
+    const loner = await read(request(app).get(`/api/v1/world/characters/${w.loner}/relationships`));
     expect(loner.body).toEqual({ relationships: [], legacy: [], in_registry: false });
   });
 
   it('the character list carries each character its table relationships', async () => {
-    const res = await auth(request(app).get('/api/v1/world/characters?world_tag=lalaverse'));
+    const res = await read(request(app).get('/api/v1/world/characters?world_tag=lalaverse'));
     expect(res.status).toBe(200);
     const sable = res.body.characters.find((c) => c.id === w.sable);
     expect(sable.relationships).toEqual([

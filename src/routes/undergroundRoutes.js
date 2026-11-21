@@ -19,7 +19,7 @@
 const express = require('express');
 const router  = express.Router();
 const { Op }  = require('sequelize');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 router.use(requireAuth);
 
@@ -67,7 +67,7 @@ router.put('/:id/visibility', async (req, res) => {
 // ?author_mode=true  → returns ALL tiers, with visibility_tier field exposed
 // ?character_id=UUID → also includes underground profiles entangled with this character
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/feed', async (req, res) => {
+router.get('/feed', authorize(['ADMIN']), async (req, res) => {
   const models = getModels(req);
   const { SocialProfile, CharacterEntanglement } = models;
   try {
@@ -125,7 +125,7 @@ router.get('/feed', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /underground — list underground-only profiles (Author Layer view)
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/underground', async (req, res) => {
+router.get('/underground', authorize(['ADMIN']), async (req, res) => {
   const { SocialProfile } = getModels(req);
   try {
     const where = { visibility_tier: 'underground' };

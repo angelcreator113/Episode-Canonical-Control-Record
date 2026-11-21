@@ -292,7 +292,7 @@ async function addMember(familyId, { registry_character_id = null, social_profil
    Named families
    ════════════════════════════════════════════════════════════════════ */
 
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     res.json({ families: await loadFamilies() });
   } catch (err) { fail(res, 'GET /families', err); }
@@ -408,7 +408,7 @@ router.delete('/:id/members/:memberId', ...ADMIN, async (req, res) => {
 // Who "+ Add family" can pick: characters (their registry's and the cast's,
 // anyone with a Pulse profile) and live LalaVerse Pulse profiles, each
 // profile with the character it belongs to, if any.
-router.get('/people', requireAuth, async (req, res) => {
+router.get('/people', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const c = req.query.character_id ? await characterRow(req.query.character_id) : null;
     const characters = await q(
@@ -428,7 +428,7 @@ router.get('/people', requireAuth, async (req, res) => {
   } catch (err) { fail(res, 'GET /families/people', err); }
 });
 
-router.get('/character/:charId', requireAuth, async (req, res) => {
+router.get('/character/:charId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     res.json(await readout(req.params.charId));
   } catch (err) { fail(res, 'GET /families/character/:charId', err); }
@@ -502,7 +502,7 @@ router.delete('/ties/:relId', ...ADMIN, async (req, res) => {
 // The heritage "Make them a character" offers for a new blood relative,
 // from their blood parents (services/familyHeritage suggestForRelative):
 // shown in the dialog, editable, never saved by itself.
-router.get('/make-character/suggestion', requireAuth, async (req, res) => {
+router.get('/make-character/suggestion', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const c = await characterRow(req.query.character_id);
     if (!c) throw bad(404, 'Character not found');
@@ -643,7 +643,7 @@ router.post('/import/:charId', ...ADMIN, async (req, res) => {
  * have one, and the people in the named families it (or its character) is in.
  * [{ name, role, kind, profile_id, character_id, family }]
  */
-router.get('/profile/:profileId', requireAuth, async (req, res) => {
+router.get('/profile/:profileId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const pid = intOrNull(req.params.profileId);
     if (!pid) throw bad(404, 'Pulse profile not found');
@@ -694,7 +694,7 @@ router.get('/profile/:profileId', requireAuth, async (req, res) => {
    heritage on its own (services/familyHeritage).
    ════════════════════════════════════════════════════════════════════ */
 
-router.get('/heritage', requireAuth, async (req, res) => {
+router.get('/heritage', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const familyId = UUID_RE.test(String(req.query.family_id || '')) ? req.query.family_id : null;
     const characterId = UUID_RE.test(String(req.query.character_id || '')) ? req.query.character_id : null;

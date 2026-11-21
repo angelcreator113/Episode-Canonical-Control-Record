@@ -12,7 +12,7 @@
  */
 const express = require('express');
 const router  = express.Router();
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 router.use(requireAuth);
@@ -114,7 +114,7 @@ router.post('/:id/mirror/confirm', async (req, res) => {
 });
 
 // GET /mirror/self-portrait
-router.get('/mirror/self-portrait', async (req, res) => {
+router.get('/mirror/self-portrait', authorize(['ADMIN']), async (req, res) => {
   const { SocialProfile } = getModels(req);
   try {
     const profiles = await SocialProfile.findAll({

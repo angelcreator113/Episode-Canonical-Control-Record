@@ -131,7 +131,11 @@ const generatePrompt = () => mockCreate.mock.calls.map(([arg]) => arg.messages[0
   });
 
   it('ideas come from their own story, with no AI call, and say when they cannot post yet', async () => {
-    const ideas = (id) => request(app).get(`/api/v1/cast/characters/${id}/posts/ideas`).set('Authorization', `Bearer ${editor}`);
+    // Production reads are an ADMIN's since 2026-11-15 (character privacy; tests/integration/characterReadPrivacy).
+    const ideas = (id, token = admin) => request(app).get(`/api/v1/cast/characters/${id}/posts/ideas`).set('Authorization', `Bearer ${token}`);
+    const refused = await ideas(ids.char, editor);
+    expect(refused.status).toBe(403);
+    expect(refused.body.ideas).toBeUndefined();
     const res = await ideas(ids.char);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ ready: true, blocker: null, next: null });

@@ -66,7 +66,10 @@ jest.mock('@anthropic-ai/sdk', () => {
 jest.mock('../../../src/middleware/auth', () => {
   const passUser = (req, res, next) => {
     if (req && typeof req === 'object' && req.headers !== undefined && typeof next === 'function') {
-      req.user = { id: 'test-user', email: 'test@test.com', source: 'local-hs256' };
+      // An ADMIN: the handler-body tests here are of the production list (its filters, counts and
+      // registry links), which is an ADMIN's since 2026-11-15; anyone else gets the public columns
+      // (tests/integration/characterReadPrivacy).
+      req.user = { id: 'test-user', email: 'test@test.com', source: 'local-hs256', groups: ['ADMIN'] };
       return next();
     }
     // Factory mode: returned a middleware

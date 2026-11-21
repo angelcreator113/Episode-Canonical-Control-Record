@@ -26,3 +26,13 @@
 @media (max-width: 640px) {
   .snext-p { font-size: 14px; }
 }
+
+/* On the Overview's light ground (inside the health details, 2026-11-20):
+   the button in the page's quiet style, the answer on a soft purple card. */
+.shl.is-details .snext-btn { border-color: var(--sp-line, #F3CFE0); background: var(--sp-card, #fff); color: var(--sp-pink-deep, #A3155E); }
+.shl.is-details .snext-btn:hover { background: var(--sp-pink-soft, #FCE4EF); }
+.shl.is-details .snext-btn:focus-visible, .shl.is-details .snext-close:focus-visible { outline-color: var(--sp-purple, #6A2C91); }
+.shl.is-details .snext-card { background: var(--sp-purple-soft, #F1E6F8); border-color: var(--sp-line, #F3CFE0); color: var(--sp-ink, #3A1236); }
+.shl.is-details .snext-card.is-error { border-color: var(--sp-gold-text, #8A5A00); }
+.shl.is-details .snext-close { color: var(--sp-ink, #3A1236); }
+.shl.is-details .snext-close:hover { background: var(--sp-pink-soft, #FCE4EF); }

@@ -72,11 +72,17 @@ export function summarize(raw, now = new Date()) {
   };
 }
 
-/** Reads everything summarize() needs for one show. A read that fails counts as empty. */
+/**
+ * Reads everything summarize() needs for one show. A read that fails counts
+ * as empty in the numbers, and is named in `failed` so a screen can say
+ * "could not be loaded" instead of showing a zero.
+ */
 export async function loadPulseSummary(showId, now = new Date()) {
   const id = encodeURIComponent(showId);
+  const failed = [];
   const safe = (path, label) => api.get(path).catch((err) => {
     console.error(`[PulseSummary] ${label} could not be read:`, err?.response?.status || err?.message);
+    failed.push(label);
     return null;
   });
   const [wall, episode, pending, numbers, followers, closeness, dms, growth, live] = await Promise.all([
@@ -90,5 +96,5 @@ export async function loadPulseSummary(showId, now = new Date()) {
     safe(`/api/v1/pulse-followers/growth?show_id=${id}`, 'growth'),
     safe(`/api/v1/feed-posts?show_id=${id}&status=live&limit=5`, 'live posts'),
   ]);
-  return summarize({ wall, episode, pending, numbers, followers, closeness, dms, growth, live }, now);
+  return { ...summarize({ wall, episode, pending, numbers, followers, closeness, dms, growth, live }, now), failed };
 }

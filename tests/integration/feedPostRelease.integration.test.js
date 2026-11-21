@@ -39,6 +39,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('DELETE FROM shows WHERE id = :showId', { showId });
   });
 
+  // Reading drafts through the feed's read routes is an ADMIN's since 2026-11-15
+  // (tests/integration/feedPostReadAuthorization.integration.test.js).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-feed-release', email: 'admin@feed-release.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
 
   it('a shared draft has story time and no posted_at; it is not on the wall', async () => {
@@ -71,7 +75,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     const epId = crypto.randomUUID();
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:id, :showId, 'Ep', 1, 'draft', NOW(), NOW())`, { id: epId, showId });
     const fromEpisode = await models.FeedPost.create({ show_id: showId, episode_id: epId, poster_handle: 'rival', content_text: 'Some people peak early.', status: 'draft', timeline_position: 'after_episode' });
-    const ids = async (from) => (await auth(request(app).get(`/api/v1/feed-posts?show_id=${showId}&status=draft&from=${from}`))).body.data.map((p) => p.id);
+    const ids = async (from) => (await asAdmin(request(app).get(`/api/v1/feed-posts?show_id=${showId}&status=draft&from=${from}`))).body.data.map((p) => p.id);
     expect(await ids('episode')).toEqual([fromEpisode.id]);
     expect(await ids('wall')).not.toContain(fromEpisode.id);
     expect((await auth(request(app).get(`/api/v1/feed-posts?show_id=${showId}&from=nope`))).status).toBe(400);
@@ -85,12 +89,16 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     await run('DELETE FROM episodes WHERE id = :epId', { epId });
   });
 
-  it('a deleted post is kept, listed for the signed-in author only', async () => {
+  it('a deleted post is kept, listed for an ADMIN only', async () => {
     const draft = (await auth(request(app).post('/api/v1/feed-posts')).send({ show_id: showId, content_text: 'Never mind.', status: 'draft' })).body.data;
     expect((await auth(request(app).delete(`/api/v1/feed-posts/${draft.id}`))).status).toBe(200);
     const [[row]] = await run('SELECT deleted_at FROM feed_posts WHERE id = :id', { id: draft.id });
     expect(row.deleted_at).not.toBeNull();
-    expect((await auth(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`))).body.data.map((p) => p.id)).toContain(draft.id);
+    // An operational read of the studio's: an ADMIN's since 2026-11-15 (tests/integration/feedPostPublicFields).
+    expect((await asAdmin(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`))).body.data.map((p) => p.id)).toContain(draft.id);
+    const refused = await auth(request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`));
+    expect(refused.status).toBe(403);
+    expect(refused.body.data).toBeUndefined();
     expect((await request(app).get(`/api/v1/feed-posts/deleted?show_id=${showId}`)).status).toBe(401);
   });
 });
