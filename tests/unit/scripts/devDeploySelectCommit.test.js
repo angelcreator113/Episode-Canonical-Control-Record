@@ -272,6 +272,141 @@ describe('preflight-dev-deploy.sh: safe to install? (read-only)', () => {
     expect(r.out).toContain("schema: 2 applied; 1 of this commit's still to apply");
   });
 
+  // ── Name conventions, and the nine retired names (Evoni, 2026-11-21) ──
+  const EIGHT = '20260206-add-scene-footage-links.js';
+  const RETIRED = [
+    '20260208000000-create-lala-formula.js',
+    '20260306100000-create-episode-orchestration-tables.js',
+    '20260307140000-create-franchise-knowledge.js',
+    '20260311200000-create-story-calendar-system.js',
+    '20260315000000-add-relationship-engine-columns.js',
+    '20260315100000-add-expanded-world-character-columns.js',
+    '20260320000000-create-scene-sets-and-angles.js',
+    '20260627000000-add-base-still-url.js',
+    '20260710000000-create-generation-jobs.js',
+  ];
+  const repoMigrations = () => fs.readdirSync(path.join(ROOT, 'src/migrations')).filter((f) => f.endsWith('.js')).sort();
+
+  test('an applied migration with an 8-digit prefix is recognised when the commit has it', () => {
+    const r = run(setup({ applied: [...APPLIED, EIGHT], files: [...APPLIED, EIGHT] }));
+    expect(r.status).toBe(0);
+    expect(r.out).toContain("schema: 3 applied; 0 of this commit's still to apply");
+    expect(r.out).not.toContain('not recognised');
+  });
+
+  test('an older commit without that applied 8-digit migration is refused, by name', () => {
+    const r = run(setup({ applied: [...APPLIED, EIGHT], files: APPLIED }));
+    expect(r.status).toBe(1);
+    expect(r.out).toContain(`PREFLIGHT REFUSED: the database has 1 migration(s) that ${REF.slice(0, 12)} does not have.`);
+    expect(r.out).toContain(`applied, not in this commit: ${EIGHT}`);
+  });
+
+  test('pending migrations are counted in both conventions', () => {
+    const r = run(setup({ applied: APPLIED, files: [...APPLIED, EIGHT, '20991231235959-new.js'] }));
+    expect(r.status).toBe(0);
+    expect(r.out).toContain("schema: 2 applied; 2 of this commit's still to apply");
+  });
+
+  test.each([
+    ['a 13-digit prefix', '1739041800000-add-game-show-features.js'],
+    ['no prefix', '-create-lala-formula.js'],
+    ['a placeholder prefix', 'YYYYMMDDHHMMSS-update-assets-table.js'],
+    ['no .js', '20260201000000-b'],
+    ['a trailing space', '20260301000000-c.js '],
+    ['another extension', '20260301000000-c.cjs'],
+  ])('an applied name with %s cannot be compared, so it is refused, never skipped', (_, odd) => {
+    // The commit has every well-formed name, so only the odd one can refuse.
+    const r = run(setup({ applied: [...APPLIED, odd], files: APPLIED }));
+    expect(r.status).toBe(1);
+    expect(r.out).toContain('PREFLIGHT REFUSED: the database has 1 applied migration name(s) in neither naming convention');
+    expect(r.out).toContain(`applied, not recognised: ${odd.slice(0, 120)}`);
+    expect(r.out).not.toContain('PREFLIGHT OK');
+  });
+
+  test('a name without .js is not treated as its .js twin: the ledger is compared as it is', () => {
+    const r = run(setup({ applied: ['20260101000000-a.js', '20260201000000-b'], files: APPLIED }));
+    expect(r.status).toBe(1);
+    expect(r.out).toContain('applied, not recognised: 20260201000000-b');
+  });
+
+  test('a file name of the commit in neither convention is refused too', () => {
+    const r = run(setup({ applied: APPLIED, files: [...APPLIED, 'create-something.js'] }));
+    expect(r.status).toBe(1);
+    expect(r.out).toContain('migration file name(s) in neither naming convention');
+    expect(r.out).toContain('in this commit, not recognised: create-something.js');
+  });
+
+  test('the nine retired names, applied and in no commit, are each reported and set aside', () => {
+    const box = setup({ applied: [...APPLIED, ...RETIRED], files: APPLIED });
+    const before = snapshot(box.home);
+    const r = run(box);
+    expect(r.status).toBe(0);
+    expect(r.out).toContain('retired: 9 applied name(s) from before the selectable commits, set aside');
+    for (const name of RETIRED) expect(r.out).toContain(`retired, set aside: ${name}`);
+    expect(r.out).toContain(`PREFLIGHT OK for ${REF.slice(0, 12)}`);
+    const after = snapshot(box.home);
+    delete after['psql-calls'];
+    expect(after).toEqual(before);
+  });
+
+  test('the script lists exactly those nine, as whole names', () => {
+    const text = fs.readFileSync(PREFLIGHT, 'utf8');
+    const block = text.slice(text.indexOf('RETIRED_APPLIED=('), text.indexOf('\n)\n', text.indexOf('RETIRED_APPLIED=(')));
+    const listed = [...block.matchAll(/^\s+"([^"]+)"$/gm)].map((m) => m[1]);
+    expect(listed.sort()).toEqual([...RETIRED].sort());
+    expect(block).not.toMatch(/[*?[\]]/);
+  });
+
+  test.each([
+    ['a different timestamp, same description', '20260208000001-create-lala-formula.js'],
+    ['the same timestamp, another description', '20260710000000-create-generation-job.js'],
+    ['a retired name as a prefix', '20260627000000-add-base-still-url.js.js'],
+    ['one of the 16 retired names that are not on the list', '20260315200000-create-page-content.js'],
+  ])('a near match is not set aside (%s): refused as a migration the commit lacks', (_, near) => {
+    const r = run(setup({ applied: [...APPLIED, ...RETIRED, near], files: APPLIED }));
+    expect(r.status).toBe(1);
+    expect(r.out).toContain(`applied, not in this commit: ${near}`);
+    expect(r.out).not.toContain(`retired, set aside: ${near}`);
+  });
+
+  test('a retired name does not excuse another applied migration the commit lacks', () => {
+    const r = run(setup({ applied: [...APPLIED, ...RETIRED, '20261111230000-converge-activity-logs.js'], files: APPLIED }));
+    expect(r.status).toBe(1);
+    expect(r.out).toContain('applied, not in this commit: 20261111230000-converge-activity-logs.js');
+    expect(r.out).toContain(`PREFLIGHT REFUSED: the database has 1 migration(s) that ${REF.slice(0, 12)} does not have.`);
+  });
+
+  test('a commit that has a retired name as a file is refused for review, applied or not', () => {
+    const back = RETIRED[7];
+    for (const applied of [[...APPLIED, back], APPLIED]) {
+      fs.rmSync(path.join(tmp, 'box'), { recursive: true, force: true });
+      const r = run(setup({ applied, files: [...APPLIED, back] }));
+      expect(r.status).toBe(1);
+      expect(r.out).toContain('migration file(s) named on the retired list. The list must be reviewed');
+      expect(r.out).toContain(`retired name, present in this commit: ${back}`);
+    }
+  });
+
+  test('none of the nine is a migration file of this repository, and every file is in one of the two conventions', () => {
+    const files = repoMigrations();
+    expect(files.filter((f) => RETIRED.includes(f))).toEqual([]);
+    expect(files.filter((f) => !/^([0-9]{8}|[0-9]{14})-[A-Za-z0-9_.-]+\.js$/.test(f))).toEqual([]);
+    expect(files.filter((f) => /^[0-9]{8}-/.test(f)).length).toBeGreaterThan(0);
+  });
+
+  test("the dev ledger as measured on 2026-11-21 (this repository's files plus the nine) passes with nothing pending", () => {
+    const files = repoMigrations();
+    const home = path.join(tmp, 'box');
+    const box = setup({ applied: ['placeholder'], files });
+    // Too many names for a command line: the stand-in psql prints a file.
+    fs.writeFileSync(path.join(home, 'ledger.txt'), `${[...files, ...RETIRED].sort().join('\n')}\n`);
+    bin(box.b, 'psql', `cat "${home}/ledger.txt"`);
+    const r = run(box);
+    expect(r.status).toBe(0);
+    expect(r.out).toContain(`schema: ${files.length + 9} applied; 0 of this commit's still to apply`);
+    expect(r.out).toContain('retired: 9 applied name(s)');
+  });
+
   test('a ledger that cannot be read is never "compatible"', () => {
     const r = run(setup({ psql: 'fail' }));
     expect(r.status).toBe(1);

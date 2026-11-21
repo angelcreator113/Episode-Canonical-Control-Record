@@ -129,11 +129,31 @@ What does not change with the input: the instance (tag `Name=episode-dev-backend
 |---|---|
 | Disk | under `MIN_FREE_MIB` (2,048 MiB) free on `/` |
 | Memory | under `MIN_MEM_MIB` (2,800 MiB) of RAM + swap |
-| Schema | the local database has applied a migration that the commit does not have (a rollback across a migration), or its ledger cannot be read |
+| Schema | the local database has applied a migration that the commit does not have (a rollback across a migration); an applied name or a file name of the commit is in neither naming convention; the commit has a file named on the retired list; or the ledger cannot be read |
 
 Migrations the commit has and the database lacks are not a refusal: the installer applies them before the swap, as before.
 
 **Schema and rollback.** With no migration between the installed commit and the one selected, installing the earlier commit is a complete rollback of the code. Data the newer code wrote stays in the local database; older code ignores JSON keys it does not know. Across a migration the preflight refuses, because this workflow never runs a down-migration. The choices then are to fix forward, or to refresh the dev data (which replaces the whole local database and erases test records).
+
+**How names are compared** (`preflight-dev-deploy.sh`, `NAME_RE` and `RETIRED_APPLIED`). Exactly as the ledger and the commit give them: nothing is renamed, trimmed or given a missing `.js`, and the ledger is never written. Two conventions are recognised, the ones `src/migrations` uses: a 14-digit prefix (403 files on 2026-11-21) and an 8-digit prefix (3 files). A name in neither, applied or in the commit, is a refusal, never skipped.
+
+**The nine retired names.** The dev database is a copy of production's, so its ledger keeps names from before the first commit this workflow can install (2026-11-11, PR #3795). Read on 2026-11-21 with one read-only query (`SELECT name FROM "SequelizeMeta"`; Evoni's approval of that day): 415 rows, of which 406 are the files on `main` (nothing pending), and 9 are in no selectable commit. No row lacked `.js`, none had another prefix shape, and there were no duplicates. Without an exception those nine would refuse every deploy, so the preflight sets aside exactly these names, and prints each one when it does:
+
+| Applied name | Where it went |
+|---|---|
+| `20260208000000-create-lala-formula.js` | on `main` as `20260208000002-create-lala-formula.js` |
+| `20260307140000-create-franchise-knowledge.js` | on `main` as `20260307210000-create-franchise-knowledge.js` |
+| `20260315000000-add-relationship-engine-columns.js` | on `main` as `20260615000000-add-relationship-engine-columns.js` |
+| `20260315100000-add-expanded-world-character-columns.js` | on `main` as `20260615120000-add-expanded-world-character-columns.js` |
+| `20260320000000-create-scene-sets-and-angles.js` | on `main` as `20260625000000-create-scene-sets-and-angles.js` |
+| `20260710000000-create-generation-jobs.js` | on `main` as `20260323000000-create-generation-jobs.js` |
+| `20260311200000-create-story-calendar-system.js` | no file of that name on `main` |
+| `20260306100000-create-episode-orchestration-tables.js` | no file of that name on `main`, and none found in its history |
+| `20260627000000-add-base-still-url.js` | only in the root `migrations/` tree, which does not run |
+
+What that exception does and does not show: none of the nine is a file in any selectable commit, so setting them aside cannot hide a difference between two of those commits. It does not show that the schema those nine once made is what today's code expects; the preflight never could. The match is by whole name only. Any other applied name the commit lacks is refused, including the 16 other names that have left `src/migrations` and are not in the ledger. A commit that has one of the nine as a file is refused until the list is reviewed.
+
+**Known limit: a failed start after a migration.** The installer applies the new commit's migrations before the swap. If the new app then fails `deploy-dev-box.sh`'s verification, the previous tree is put back and started against the newer schema. Nothing undoes the migration, and the preflight cannot foresee it. Until that has had its own safety review, a commit that adds a migration is not deployed to dev (Evoni, 2026-11-21); the select step prints how many migration files `main` has that the commit lacks, and the preflight prints how many are still to apply.
 
 ### Rolling back
 
@@ -143,27 +163,21 @@ Migrations the commit has and the database lacks are not a refusal: the installe
 
 ## Disk
 
-Measured from the deploy logs of 2026-11-11 and 2026-11-12 (the root volume is about 8 GB):
+The root volume is 20 GB. Measured on 2026-11-20, after that day's deploy, with the live and rollback trees both present: about 12 GB free.
 
-| Moment | Free on `/` |
+One application tree is about 700 MiB (`node_modules` 550 M, `dist` 10 M), measured from the deploy logs of 2026-11-11 and 2026-11-12, when the volume was about 8 GB:
+
+| Moment, on the 8 GB volume | Free on `/` |
 |---|---|
 | Before a deploy, live and rollback trees present | 414 M, then 404 M (95% used) |
 | After the old rollback tree was removed | 1.1 G |
-| After the new tree was staged (`node_modules` 550 M, `dist` 10 M) | 414 M, then 404 M |
+| After the new tree was staged | 414 M, then 404 M |
 
-So one application tree is about 700 MiB, and the box ran with about 400 MiB free. It fitted only because the rollback tree was deleted first, which left a failed install with nothing to roll back to, and no room for an npm cache miss, a larger dependency or logs.
+It fitted then only because the rollback tree was deleted first, which left a failed install with nothing to roll back to.
 
-**Threshold: 2,048 MiB free before a deploy.** An install now keeps the rollback tree and adds one tree (about 700 MiB), leaving about 1.3 GiB of margin. The preflight and the installer both enforce it. At the 2026-11-12 level the preflight refuses.
+**Threshold: 2,048 MiB free before a deploy.** An install keeps the rollback tree and adds one tree (about 700 MiB), leaving about 1.3 GiB of margin. The preflight and the installer both enforce it. At about 12 GB free it passes; at the 2026-11-12 level it refused.
 
-**The 8 GB volume is too small for that.** Proposed, not done; each step is Evoni's to approve (an EBS and filesystem change):
-
-1. Snapshot the dev box's root volume, named so it can be found (`agent-dev-root-before-resize-<date>`), and wait for it to complete.
-2. Grow the volume to 20 GB, gp3, with the EC2 console's *Modify volume* or the CLI's volume-modify call. This is done online. A volume cannot be shrunk back; the way back is the snapshot.
-3. On the box: `lsblk` to read the device names, then `sudo growpart <disk> 1` and `sudo resize2fs <partition>`.
-4. Verify: `df -h /` shows about 20 G with more than 12 G free; `/health` is healthy; the swap file is still active (`swapon --show`).
-5. Keep the snapshot until one deploy and one rollback have succeeded, then decide whether to delete it.
-
-Until then, space can be freed instead (npm cache, logs, a leftover `.next` or `.failed` tree), each a delete to approve. Never remove: `episode-metadata`, `episode-metadata.prev`, `~/.config/episode-dev/`, `/home/ubuntu/dev-db/`, the PostgreSQL data directory, `/etc/letsencrypt`, the nginx site files, `~/.pm2/dump.pm2`, `/swapfile`.
+Up to four trees can be on disk: live, rollback (`.prev`), one being staged (`.next`), and one kept from a failed verification (`.failed`, replaced by the next failure). If space runs short, it can be freed (npm cache, logs, a leftover `.next` or `.failed` tree), each a delete for Evoni to approve. Never remove: `episode-metadata`, `episode-metadata.prev`, `~/.config/episode-dev/`, `/home/ubuntu/dev-db/`, the PostgreSQL data directory, `/etc/letsencrypt`, the nginx site files, `~/.pm2/dump.pm2`, `/swapfile`.
 
 ## The public dev site (Task #3781, 2026-11-10)
 
