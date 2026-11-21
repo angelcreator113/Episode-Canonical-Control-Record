@@ -13,8 +13,6 @@ v1.0. New register document. It edits no filed document and carries no banner on
 
 **Standings used:** RULED (her words in §1, and nothing else in this document); ATTESTED (§2: the session's description of each named item, which stays ATTESTED until an implementation exists and has been verified); MEASURED (§4, a snapshot).
 
-**Task:** none filed for this document.
-
 ---
 
 # §1. The decisions (RULED)
