@@ -18,6 +18,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { Readable } = require('stream');
 const { openSource, readRange, retryable } = require('../../../src/services/rawClipSource');
+const { trustTestServer } = require('../../networkGuard/registry');
 
 const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
@@ -54,8 +55,13 @@ function fakeS3(data, { failGet = [], dropAfter = [], chunk = 64 * 1024 } = {}) 
 const expired = () => Object.assign(new Error('The provided token has expired. (test)'), { name: 'ExpiredToken', $metadata: { httpStatusCode: 400 } });
 const denied = () => Object.assign(new Error('Access Denied (test)'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } });
 
-/** GET url with an optional Range; resolves { status, headers, body } or rejects when the response breaks. */
-function get(url, range, method = 'GET') {
+/**
+ * GET url with an optional Range; resolves { status, headers, body } or rejects when the response breaks.
+ * The link is openSource's own 127.0.0.1 server in this process: it is registered with the Jest network
+ * guard's endpoint registry first (trustTestServer checks it is a loopback listener this process opened).
+ */
+function get(url, range, method = 'GET', { closed = false } = {}) {
+  if (!closed) trustTestServer(Number(new URL(url).port));
   return new Promise((resolve, reject) => {
     const req = http.request(url, { method, headers: range ? { Range: range } : {} }, (res) => {
       const parts = [];
@@ -188,7 +194,8 @@ describe('openSource', () => {
   test('close() stops the server', async () => {
     const src = await openSource({ key: 'k', ...fakeS3(data) });
     await src.close();
-    await expect(get(src.url)).rejects.toThrow(/ECONNREFUSED/);
+    // The server is gone, so there is nothing to register: this one connection is refused, as intended.
+    await expect(get(src.url, null, 'GET', { closed: true })).rejects.toThrow(/ECONNREFUSED/);
   });
 });
 
