@@ -17,6 +17,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const { finalizeEpisodeFinancials, getCurrentBalance } = require('../../src/services/financialTransactionService');
 
 const { sequelize } = models;
@@ -29,14 +30,18 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('wardrobe spends go through the ledger (D1 PR 3)', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('wardrobe-ledger');
   const shows = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-wardrobe-ledger', email: 'test@wardrobe-ledger.dev', name: 'Wardrobe Ledger Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-wardrobe-ledger', email: 'admin@wardrobe-ledger.dev', name: 'Wardrobe Ledger Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
@@ -266,5 +271,24 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       expect(await purchaseRows(ids)).toEqual([]);
       expect(await ownedOf(ids.gown)).toBe(false);
     });
+  });
+
+  guardIt('signed out, a viewer and an editor cannot spend: no ledger row, no coins moved, nothing owned, no outfit', async () => {
+    const ids = await seed();
+    const state = async () => JSON.stringify({
+      ledger: await q('SELECT id FROM financial_transactions WHERE show_id = :show ORDER BY id', ids),
+      lala: await q('SELECT coins, updated_at FROM character_state WHERE show_id = :show', ids),
+      closet: await q('SELECT id, is_owned, updated_at FROM wardrobe WHERE show_id = :show ORDER BY id', ids),
+      outfit: await q('SELECT * FROM episode_wardrobe WHERE episode_id = :ep ORDER BY id', ids),
+    });
+    const before = await state();
+    const spend = (path, body) => () => request(app).post(`/api/v1/wardrobe${path}`).send(body);
+    await expectWriteRefused(spend('/select', { episode_id: ids.ep, wardrobe_id: ids.gown, show_id: ids.show }), readOnly);
+    await expectWriteRefused(spend('/purchase', { wardrobe_id: ids.gown, show_id: ids.show, episode_id: ids.ep }), readOnly);
+    await expectWriteRefused(spend('/lock-outfit-atomic', { episode_id: ids.ep, show_id: ids.show, wardrobe_ids: [ids.gown, ids.clutch] }), readOnly);
+    expect(await state()).toBe(before);
+    expect(await purchaseRows(ids)).toEqual([]);
+    expect(await cache(ids)).toBe(5000); // the stale cache, never synced by a refused spend
+    expect(await ledgerOf(ids)).toBe(1000);
   });
 });

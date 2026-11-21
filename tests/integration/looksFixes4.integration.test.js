@@ -18,6 +18,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const { episodeLooks } = require('../../src/services/dressedAngleService');
 const { listVariants } = require('../../src/services/locationLookVariantService');
 const { variantsForSets } = require('../../src/services/lookVariantPicking');
@@ -34,9 +35,13 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { replacements }))[0];
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Scene Sets looks fixes (fourth audit)', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('looks4');
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
 
   async function show(metadata = {}) {
@@ -79,7 +84,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-looks4', email: 'user@looks4.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-looks4', email: 'admin@looks4.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {
@@ -209,5 +214,19 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const proposal = await proposeLocations(sequelize, { showId, event: null });
     expect(proposal.missing).toContain('home');
     expect(proposal.removed).toEqual(['home']);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot delete a set or change the show\'s lead: both are as they were', async () => {
+    const showId = await show({ lead_character_id: uuid(), scene_defaults: { home_set_id: uuid() } });
+    const unused = await set(showId, { name: 'Unused hall' });
+    const state = async () => JSON.stringify({
+      set: await rows('SELECT id, name, deleted_at, updated_at FROM scene_sets WHERE id = :unused', { unused }),
+      show: await rows('SELECT metadata, updated_at FROM shows WHERE id = :showId', { showId }),
+    });
+    const before = await state();
+    await expectWriteRefused(() => request(app).delete(`/api/v1/scene-sets/${unused}`), readOnly);
+    await expectWriteRefused(() => request(app).put(`/api/v1/shows/${showId}/lead-character`).send({ character_id: null }), readOnly);
+    expect(await state()).toBe(before);
+    expect(JSON.parse(before).set[0].deleted_at).toBeNull();
   });
 });

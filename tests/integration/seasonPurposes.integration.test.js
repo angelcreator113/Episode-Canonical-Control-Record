@@ -19,6 +19,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const slotsMigration = require('../../src/migrations/20261001230000-create-season-slots');
 const contextMigration = require('../../src/migrations/20261001240000-add-episode-season-context');
 const threadsMigration = require('../../src/migrations/20261001250000-create-show-story-threads');
@@ -37,10 +38,14 @@ const shouldSkip =
 const uuid = () => crypto.randomUUID();
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { replacements }))[0];
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardTest = enforcing() ? test : test.skip;
 
 (shouldSkip ? describe.skip : describe)('Season slot purposes and started-slot edits (§8(ff) A9, A10)', () => {
   const shows = [];
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  const readOnly = readOnlyTokens('season-purposes');
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
 
   async function seedSeason() {
@@ -65,7 +70,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   beforeAll(async () => {
     for (const m of [slotsMigration, contextMigration, threadsMigration, purposesMigration]) await m.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-season-purposes', email: 'user@season-purposes.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-season-purposes', email: 'admin@season-purposes.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {
@@ -281,5 +286,26 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
         { text: 'The rival notices', primary: false, story_thread: 'The rival' },
       ],
     }));
+  });
+
+  guardTest('signed out, a viewer and an editor cannot save an intention, add a thread or pencil an event: the season is as it was', async () => {
+    const { show, arcId } = await seedSeason();
+    const rival = await thread(show, 'The rival');
+    const id = await slotId(arcId, 2);
+    expect((await save(show, id, { story_purposes: [{ text: 'Face her', primary: true, story_thread_id: rival.id }] })).status).toBe(200);
+    const event = uuid();
+    await run(`INSERT INTO world_events (id, show_id, name, event_type, status, created_at, updated_at)
+               VALUES (:event, :show, 'Rooftop Launch', 'invite', 'draft', NOW(), NOW())`, { event, show });
+    const state = async () => JSON.stringify({
+      slots: await rows('SELECT * FROM season_slots WHERE arc_id = :arcId ORDER BY slot_number', { arcId }),
+      threads: await rows('SELECT * FROM show_story_threads WHERE show_id = :show ORDER BY id', { show }),
+    });
+    const before = await state();
+    expect(JSON.parse(before).threads).toHaveLength(1);
+    const slot = `/api/v1/world/${show}/season/slots/${id}`;
+    await expectWriteRefused(() => request(app).put(`${slot}/intention`).send({ story_purpose: 'Changed', desired_pressure: 'Peak' }), readOnly);
+    await expectWriteRefused(() => request(app).put(`${slot}/event`).send({ event_id: event }), readOnly);
+    await expectWriteRefused(() => request(app).post(`/api/v1/world/${show}/season/threads`).send({ title: 'Not mine to add' }), readOnly);
+    expect(await state()).toBe(before);
   });
 });

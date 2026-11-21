@@ -23,4 +23,32 @@ function writeStatus(who, routeStatus) {
   return who ? 403 : 401;
 }
 
-module.exports = { enforcing, writeStatus };
+/**
+ * The two signed-in callers a production write refuses (Evoni, 2026-11-15:
+ * editor and viewer accounts are read-only), as access tokens.
+ */
+function readOnlyTokens(tag) {
+  const TokenService = require('../../src/services/tokenService');
+  const token = (who, groups) => TokenService.generateTokenPair({
+    id: `test-${who}-${tag}`, email: `${who}@${tag}.dev`, name: `${tag} ${who}`, groups, role: 'USER',
+  }).accessToken;
+  return { viewer: token('viewer', ['viewer']), editor: token('editor', ['USER', 'EDITOR']) };
+}
+
+/**
+ * One write, sent three times: signed out (401), as a viewer and as an
+ * editor (403, AUTH_GROUP_REQUIRED). build() returns a new supertest request
+ * each time, with its body or files and no Authorization header. Only
+ * meaningful with the guard enforcing: with it off the route would accept
+ * the editor, so the caller defines its test with enforcing().
+ */
+async function expectWriteRefused(build, tokens) {
+  const anon = await build();
+  expect(['signed out', anon.status]).toEqual(['signed out', 401]);
+  for (const who of ['viewer', 'editor']) {
+    const res = await build().set('Authorization', `Bearer ${tokens[who]}`);
+    expect([who, res.status, res.body.code]).toEqual([who, 403, 'AUTH_GROUP_REQUIRED']);
+  }
+}
+
+module.exports = { enforcing, writeStatus, readOnlyTokens, expectWriteRefused };
