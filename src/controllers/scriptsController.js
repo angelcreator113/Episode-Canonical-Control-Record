@@ -4,6 +4,8 @@
  */
 
 const scriptsService = require('../services/scriptsService');
+// What the four reads of routes/scripts.js answer with: named fields only.
+const { listScript, singleScript, historyEntry } = require('../services/scriptReadFields');
 const { ValidationError, asyncHandler } = require('../middleware/errorHandler');
 const Logger = require('../services/Logger');
 
@@ -37,11 +39,12 @@ module.exports = {
     const { scriptId } = req.params;
     const { includeContent } = req.query;
 
-    const script = await scriptsService.getScriptById(scriptId, includeContent === 'true');
+    const withContent = includeContent === 'true';
+    const script = await scriptsService.getScriptById(scriptId, withContent);
 
     res.json({
       success: true,
-      data: script,
+      data: singleScript(script, { content: withContent }),
     });
   }),
 
@@ -238,7 +241,7 @@ module.exports = {
       limit: parseInt(req.query.limit) || 50,
     };
 
-    const scripts = await scriptsService.searchScripts(filters);
+    const scripts = (await scriptsService.searchScripts(filters)).map(listScript);
 
     res.json({
       success: true,
@@ -263,7 +266,7 @@ module.exports = {
       searchText: req.query.search,
     };
 
-    const scripts = await scriptsService.searchScripts(filters);
+    const scripts = (await scriptsService.searchScripts(filters)).map(listScript);
 
     res.json({
       success: true,
@@ -279,7 +282,7 @@ module.exports = {
   getEditHistory: asyncHandler(async (req, res) => {
     const { scriptId } = req.params;
 
-    const history = await scriptsService.getEditHistory(scriptId);
+    const history = (await scriptsService.getEditHistory(scriptId)).map(historyEntry);
 
     res.json({
       success: true,
