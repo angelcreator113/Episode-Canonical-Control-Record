@@ -256,17 +256,36 @@ async function contextFor(db, character) {
       }
     }
   }
-  return { look: appearanceLines(character.appearance), places: places.slice(0, 8), profile, events: events.slice(0, 8) };
+  // Their facts (services/characterFacts), for what they do for work: null
+  // when they could not be read, which is not the same as a job not decided.
+  const facts = await require('./characterFacts').factsForCharacter(db, character);
+  return { look: appearanceLines(character.appearance), places: places.slice(0, 8), profile, events: events.slice(0, 8), facts };
+}
+
+/**
+ * What the plan may say of their work, from their facts alone: the decided
+ * occupation, exactly; else a rule that no job is named or invented. A job
+ * not decided yet and facts that could not be read are told apart. A saved
+ * place of work or an event stays a setting either way: those are theirs
+ * whatever the job is. The story role, the career section and an old list of
+ * job options are not what they do, and are not read here (the career
+ * section, an object, used to print as "[object Object]").
+ */
+function workFor(facts) {
+  const settings = 'A saved place above, their place of work included, or an event above can still be where a photo is taken.';
+  if (!facts) return { line: null, rule: `- Their job could not be read just now: name no job title, employer or work activity. ${settings}` };
+  if (require('./characterFacts').isDecided(facts, 'occupation')) return { line: `Work: ${text(facts.occupation, 120)}`, rule: null };
+  return { line: null, rule: `- Their job is not decided: do not name or invent a job title, employer or work activity. ${settings}` };
 }
 
 const placeName = (p) => text(p.label || p.scene_set_name, 80);
 
 function promptFor(character, ctx, { count, idea, existing }) {
   const a = character.appearance && typeof character.appearance === 'object' ? character.appearance : {};
-  const job = character.career_status || character.role_label || (Array.isArray(character.job_options) ? character.job_options[0] : null);
+  const work = workFor(ctx.facts);
   const about = [
     `Name: ${nameOf(character)}`,
-    job && `Work: ${text(job, 120)}`,
+    work.line,
     character.age && `Age: ${character.age}`,
     (character.current_city || ctx.profile?.city) && `City: ${character.current_city || ctx.profile?.city}`,
     character.description && `Who they are: ${text(character.description, 500)}`,
@@ -297,7 +316,7 @@ ${events}
 ${existing.length ? `\nALREADY IN THEIR CAMERA ROLL (do not repeat)\n${existing.map((m) => `- ${m}`).join('\n')}\n` : ''}${idea ? `\nEVONI'S IDEA FOR THESE: ${idea}\n` : ''}
 Plan ${count} photos. Rules:
 - Each is one specific moment from their routine, work, places, friends and the events above. Vary the times of day and the days.
-- purpose (why the photo exists): posted (they put it on The Pulse), private (kept for themselves), sent (sent to a friend), work (proof of work), memory, screenshot.
+${work.rule ? `${work.rule}\n` : ''}- purpose (why the photo exists): posted (they put it on The Pulse), private (kept for themselves), sent (sent to a friend), work (proof of work), memory, screenshot.
 - taken_by: selfie, mirror, friend, timer, or photographer (only for work or an event).
 - shows_face: true for at most a third of them. The rest are hands, food, a view, an object, their back, a page of notes.
 - outfit: at_home for private moments, going_out when they mean to be seen, work, event, or none when they are not in it.
@@ -1084,7 +1103,7 @@ async function rollFor(db, characterId, { audience = 'member' } = {}) {
 
 module.exports = {
   CameraRollError, PhotoOutcomeError, STATUSES, MAKEABLE, MAKE_STALE_MINUTES, AUTHORIZATION_HOURS, PURPOSES, TAKERS, OUTFITS, ALBUMS, ALBUM_LABELS, TARGETS, EDITABLE,
-  normalizeMoment, normalizePlan, photoPrompt, promptFor, parseMoments, refusalFor, targetFor,
+  normalizeMoment, normalizePlan, photoPrompt, promptFor, workFor, parseMoments, refusalFor, targetFor,
   rollFor, setHeadshot, headshotOf, plan, updateMoment, keep, drop, make, makeKept, resolve, reconcileStale, claimForMake, photoStorageKey,
   load, nameOf, momentOut, photoOut, IMAGE_MODEL, PHONE_SIZE,
 };
