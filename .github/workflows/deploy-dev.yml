@@ -33,6 +33,15 @@ name: Deploy to Development
 #     /health to report "environment":"production".
 #     --only episode-api,episode-worker stays as config hygiene (RF-1).
 #
+#   • Commit selection (2026-11-13): an optional `commit` input redeploys or
+#     rolls back to a commit already CI-verified on main
+#     (scripts/dev-db/select-deploy-commit.sh). The on-box scripts are always
+#     this workflow's own commit. Before the box stops the app,
+#     scripts/dev-db/preflight-dev-deploy.sh checks free disk, memory and
+#     that the local database is not ahead of the commit; a refusal changes
+#     nothing. Runbook: docs/runbooks/dev-environment.md, "Deploying a
+#     chosen commit, and rolling back".
+#
 # TRIGGER POSTURE:
 #   • NO push trigger exists anywhere in this file — deliberate, per the
 #     CauseClosed (2026-07-01) Sec 6 abort-precondition. Binary check
@@ -65,6 +74,18 @@ name: Deploy to Development
 
 on:
   workflow_dispatch:
+    inputs:
+      # Redeploy or roll back to a commit already verified on main
+      # (Evoni, 2026-11-13). Empty: the dispatched commit, as before. A value
+      # is checked by scripts/dev-db/select-deploy-commit.sh: a full sha, on
+      # main, with main's required CI checks green, from a run dispatched on
+      # main. The instance, environment, role and bucket prefix below are the
+      # same either way.
+      commit:
+        description: 'Optional: full 40-character sha of a CI-verified commit on main to deploy instead of the latest (redeploy or rollback). Leave empty for the latest.'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: deploy-dev
@@ -81,6 +102,36 @@ env:
   INSTANCE_TAG: episode-dev-backend
 
 jobs:
+  # Which commit is installed: the dispatched one, or the `commit` input once
+  # it is shown to be on main and CI-verified. Every later job uses its output,
+  # never the input: the input is read only here, through the environment.
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.select.outputs.sha }}
+      explicit: ${{ steps.select.outputs.explicit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - name: Choose and check the commit
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          COMMIT: ${{ inputs.commit }}
+          HEAD_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref }}
+        run: |
+          git fetch --no-tags --quiet origin main:refs/remotes/origin/main
+          bash scripts/dev-db/select-deploy-commit.sh | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
+
   # Has CI already passed the test suite for this exact commit? (Task #3790)
   # The Validate workflow runs on every push to main, and its "Tests" job runs
   # the same suite as the test job below, on the same Postgres. When that job
@@ -88,6 +139,7 @@ jobs:
   # 30-minute run. Anything else (no such run, still running, failed, a commit
   # that is not on main, or this lookup failing) means the tests run here.
   ci-tests:
+    needs: select
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -100,7 +152,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ needs.select.outputs.sha }}
         run: |
           passed=false
           run_ids="$(gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&branch=main&event=push&per_page=100" \
@@ -120,9 +172,10 @@ jobs:
           fi
 
   test:
-    needs: ci-tests
-    # always(): the tests also run when the lookup job itself failed.
-    if: ${{ always() && needs.ci-tests.outputs.passed != 'true' }}
+    needs: [select, ci-tests]
+    # always(): the tests also run when the lookup job itself failed. Never
+    # without a selected commit: a refused selection stops the run here.
+    if: ${{ always() && needs.select.result == 'success' && needs.ci-tests.outputs.passed != 'true' }}
     runs-on: ubuntu-latest
 
     services:
@@ -143,6 +196,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.select.outputs.sha }}
           token: ${{ github.token }}
 
       - name: Setup Node.js
@@ -174,17 +228,29 @@ jobs:
           NODE_ENV: test
 
   build:
-    needs: [ci-tests, test]
+    needs: [select, ci-tests, test]
     # Runs after the tests passed here, or after they were skipped because CI
-    # had passed them. A failed or cancelled test job stops the deploy.
-    if: ${{ !cancelled() && (needs.test.result == 'success' || (needs.test.result == 'skipped' && needs.ci-tests.outputs.passed == 'true')) }}
+    # had passed them. A failed or cancelled test job, or a refused commit
+    # selection, stops the deploy.
+    if: ${{ !cancelled() && needs.select.result == 'success' && (needs.test.result == 'success' || (needs.test.result == 'skipped' && needs.ci-tests.outputs.passed == 'true')) }}
     runs-on: ubuntu-latest
     outputs:
       dist_sha256: ${{ steps.pack.outputs.dist_sha256 }}
 
     steps:
+      # The application: the selected commit.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.select.outputs.sha }}
+          token: ${{ github.token }}
+
+      # The on-box scripts: always this workflow's own commit, so an older
+      # commit is installed by today's installer, preflight and verification.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+          sparse-checkout: scripts/dev-db
           token: ${{ github.token }}
 
       - name: Setup Node.js
@@ -207,22 +273,25 @@ jobs:
         run: |
           mkdir -p out
           tar -C frontend/dist -czf out/dist.tar.gz .
-          cp scripts/dev-db/install-dev-app.sh scripts/dev-db/deploy-dev-box.sh out/
-          ( cd out && sha256sum dist.tar.gz install-dev-app.sh deploy-dev-box.sh | tee SHA256SUMS )
+          cp tooling/scripts/dev-db/install-dev-app.sh tooling/scripts/dev-db/deploy-dev-box.sh tooling/scripts/dev-db/preflight-dev-deploy.sh out/
+          # The selected commit's migration files, for the on-box schema check.
+          ( cd src/migrations && ls -1 *.js | LC_ALL=C sort ) > out/migrations.txt
+          echo "migrations in this commit: $(wc -l < out/migrations.txt)"
+          ( cd out && sha256sum dist.tar.gz install-dev-app.sh deploy-dev-box.sh preflight-dev-deploy.sh migrations.txt | tee SHA256SUMS )
           echo "dist_sha256=$(sha256sum out/dist.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "dist.tar.gz: $(du -h out/dist.tar.gz | cut -f1)"
 
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: episode-metadata-dev-${{ github.sha }}
+          name: episode-metadata-dev-${{ needs.select.outputs.sha }}
           path: out/
           retention-days: 3
 
   deploy:
-    needs: build
+    needs: [select, build]
     # Explicit, because a job downstream of a skipped job is skipped by default.
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    if: ${{ !cancelled() && needs.select.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment:
@@ -232,7 +301,7 @@ jobs:
       - name: Download build
         uses: actions/download-artifact@v4
         with:
-          name: episode-metadata-dev-${{ github.sha }}
+          name: episode-metadata-dev-${{ needs.select.outputs.sha }}
           path: out
 
       - name: Verify the build's checksums
@@ -261,13 +330,15 @@ jobs:
 
       - name: Upload to S3, presign
         id: s3
+        env:
+          SHA: ${{ needs.select.outputs.sha }}
         run: |
-          BASE="${DEPLOY_PREFIX}/${{ github.sha }}"
-          for f in dist.tar.gz install-dev-app.sh deploy-dev-box.sh; do
+          BASE="${DEPLOY_PREFIX}/${SHA}"
+          for f in dist.tar.gz install-dev-app.sh deploy-dev-box.sh preflight-dev-deploy.sh migrations.txt; do
             aws s3 cp "out/$f" "s3://${DEPLOY_BUCKET}/${BASE}/$f" --only-show-errors
           done
           # Presigned URLs are capability tokens (30 min TTL): masked.
-          for k in dist:dist.tar.gz inst:install-dev-app.sh dep:deploy-dev-box.sh; do
+          for k in dist:dist.tar.gz inst:install-dev-app.sh dep:deploy-dev-box.sh pre:preflight-dev-deploy.sh mig:migrations.txt; do
             URL=$(aws s3 presign "s3://${DEPLOY_BUCKET}/${BASE}/${k#*:}" --expires-in 1800)
             echo "::add-mask::$URL"
             echo "${k%%:*}_url=$URL" >> "$GITHUB_OUTPUT"
@@ -275,6 +346,8 @@ jobs:
           cd out
           echo "inst_sha=$(sha256sum install-dev-app.sh | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           echo "dep_sha=$(sha256sum deploy-dev-box.sh | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "pre_sha=$(sha256sum preflight-dev-deploy.sh | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "mig_sha=$(sha256sum migrations.txt | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Deploy via SSM RunCommand
         env:
@@ -285,20 +358,31 @@ jobs:
           INST_SHA: ${{ steps.s3.outputs.inst_sha }}
           DEP_SHA: ${{ steps.s3.outputs.dep_sha }}
           INSTANCE_ID: ${{ steps.preflight.outputs.instance_id }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ needs.select.outputs.sha }}
+          PRE_URL: ${{ steps.s3.outputs.pre_url }}
+          MIG_URL: ${{ steps.s3.outputs.mig_url }}
+          PRE_SHA: ${{ steps.s3.outputs.pre_sha }}
+          MIG_SHA: ${{ steps.s3.outputs.mig_sha }}
         run: |
-          # The box fetches three files, checks each sha256, and runs
-          # deploy-dev-box.sh as root. No credentials cross.
+          # The selected sha was checked by the select job; checked again here
+          # because it is written into a shell command for the box.
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error title=Deploy refused::not a full commit sha"; exit 1; }
+          # The box fetches five files, checks each sha256, and runs
+          # deploy-dev-box.sh as root. No credentials cross. deploy-dev-box.sh
+          # runs the read-only preflight (disk, memory, schema) before it
+          # stops the app: a refusal leaves the installed app as it was.
           D="/home/ubuntu/dev-db/deploy-${SHA}"
           ONBOX="set -e
           install -d -m 700 '$D'
           curl -fsSL '$DIST_URL' -o '$D/dist.tar.gz'
           curl -fsSL '$INST_URL' -o '$D/install-dev-app.sh'
           curl -fsSL '$DEP_URL' -o '$D/deploy-dev-box.sh'
-          printf '%s  %s\n' '$DIST_SHA' '$D/dist.tar.gz' '$INST_SHA' '$D/install-dev-app.sh' '$DEP_SHA' '$D/deploy-dev-box.sh' | sha256sum -c -
+          curl -fsSL '$PRE_URL' -o '$D/preflight-dev-deploy.sh'
+          curl -fsSL '$MIG_URL' -o '$D/migrations.txt'
+          printf '%s  %s\n' '$DIST_SHA' '$D/dist.tar.gz' '$INST_SHA' '$D/install-dev-app.sh' '$DEP_SHA' '$D/deploy-dev-box.sh' '$PRE_SHA' '$D/preflight-dev-deploy.sh' '$MIG_SHA' '$D/migrations.txt' | sha256sum -c -
           chown -R ubuntu:ubuntu '$D'
           set +e
-          REF='$SHA' DIST_TARBALL='$D/dist.tar.gz' DIST_SHA256='$DIST_SHA' INSTALLER='$D/install-dev-app.sh' bash '$D/deploy-dev-box.sh'
+          REF='$SHA' DIST_TARBALL='$D/dist.tar.gz' DIST_SHA256='$DIST_SHA' MIGRATIONS_FILE='$D/migrations.txt' INSTALLER='$D/install-dev-app.sh' PREFLIGHT='$D/preflight-dev-deploy.sh' bash '$D/deploy-dev-box.sh'
           rc=\$?
           rm -rf '$D'
           exit \$rc"
@@ -336,13 +420,20 @@ jobs:
 
       - name: Cleanup S3 deploy objects
         if: always()
+        env:
+          SHA: ${{ needs.select.outputs.sha }}
         run: |
-          aws s3 rm "s3://${DEPLOY_BUCKET}/${DEPLOY_PREFIX}/${{ github.sha }}/" --recursive --only-show-errors || true
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || exit 0
+          aws s3 rm "s3://${DEPLOY_BUCKET}/${DEPLOY_PREFIX}/${SHA}/" --recursive --only-show-errors || true
 
       - name: Deployment summary
+        env:
+          SHA: ${{ needs.select.outputs.sha }}
+          EXPLICIT: ${{ needs.select.outputs.explicit }}
         run: |
           echo "## Dev Deployment" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${SHA}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "$EXPLICIT" = "true" ]; then echo "- Selected explicitly (redeploy or rollback); the workflow and on-box scripts are main's" >> $GITHUB_STEP_SUMMARY; fi
           echo "- Transport: SSM RunCommand (zero-inbound); on-box: scripts/dev-db/deploy-dev-box.sh" >> $GITHUB_STEP_SUMMARY
           echo "- Database: the dev box's local Postgres (no production credential on the box)" >> $GITHUB_STEP_SUMMARY
           echo "- Exposure: dev API on 127.0.0.1 only; nginx not touched" >> $GITHUB_STEP_SUMMARY
