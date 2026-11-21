@@ -4,7 +4,13 @@
 # deploy-dev.yml calls it through SSM; it can also be run by hand:
 #
 #   sudo REF=<full sha> DIST_TARBALL=<path> DIST_SHA256=<sha256> \
-#     INSTALLER=/path/install-dev-app.sh bash deploy-dev-box.sh
+#     MIGRATIONS_FILE=<path> INSTALLER=/path/install-dev-app.sh \
+#     PREFLIGHT=/path/preflight-dev-deploy.sh bash deploy-dev-box.sh
+#
+# Before anything is stopped it runs the read-only preflight
+# (preflight-dev-deploy.sh: free disk, memory, and that the local database is
+# not ahead of the commit). A refused preflight exits 1 with the dev app still
+# running and both application trees as they were (Evoni, 2026-11-13).
 #
 # Verification after start (all must hold, or the previous tree is put back
 # and restarted):
@@ -19,6 +25,8 @@ set +x
 
 REF="${REF:?}"; DIST_TARBALL="${DIST_TARBALL:?}"; DIST_SHA256="${DIST_SHA256:?}"
 INSTALLER="${INSTALLER:-/home/ubuntu/dev-db/bin/install-dev-app.sh}"
+PREFLIGHT="${PREFLIGHT:-/home/ubuntu/dev-db/bin/preflight-dev-deploy.sh}"
+MIGRATIONS_FILE="${MIGRATIONS_FILE:?set MIGRATIONS_FILE to the list of migration files of the commit}"
 APP_USER="${APP_USER:-ubuntu}"
 APP_DIR="/home/${APP_USER}/episode-metadata"
 PREV="/home/${APP_USER}/episode-metadata.prev"
@@ -41,12 +49,20 @@ verify() {
   case "$code" in 401|403) ;; *) echo "   FAIL: an authenticated route answered without a token"; return 1;; esac
 }
 
+# Nothing above this line changes the box, and neither does the preflight.
+step "preflight (read-only; the dev app keeps running)"
+[ -f "$PREFLIGHT" ] || { echo "== PREFLIGHT MISSING: $PREFLIGHT not found. Nothing was stopped or changed."; exit 1; }
+if ! REF="$REF" MIGRATIONS_FILE="$MIGRATIONS_FILE" APP_USER="$APP_USER" bash "$PREFLIGHT"; then
+  echo "== preflight REFUSED ${REF:0:12}: the dev app was not stopped; the live and rollback trees are as they were"
+  exit 1
+fi
+
 step "stop the dev app"
 pm2u "pm2 stop episode-api episode-worker >/dev/null 2>&1 || true"
 pm2u 'pm2 jlist' | python3 -c 'import json,sys;[print("  ",p["name"],p["pm2_env"]["status"]) for p in json.load(sys.stdin)]'
 
 step "install ${REF:0:12}"
-if ! REF="$REF" DIST_TARBALL="$DIST_TARBALL" DIST_SHA256="$DIST_SHA256" bash "$INSTALLER"; then
+if ! REF="$REF" DIST_TARBALL="$DIST_TARBALL" DIST_SHA256="$DIST_SHA256" MIGRATIONS_FILE="$MIGRATIONS_FILE" bash "$INSTALLER"; then
   echo "== install FAILED before or during the tree swap"
   # Failed mid-swap: the live tree was moved aside but the new one not in.
   if [ ! -d "$APP_DIR" ] && [ -d "$PREV" ]; then echo "   moving the previous tree back"; mv "$PREV" "$APP_DIR"; fi
