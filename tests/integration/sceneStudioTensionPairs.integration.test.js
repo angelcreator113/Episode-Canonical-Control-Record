@@ -27,7 +27,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const uuid = () => crypto.randomUUID();
 
 (shouldSkip ? describe.skip : describe)("Scene Studio's Scan Tension finds its pairs", () => {
+  // World Studio and Show Bible reads are an ADMIN's (Evoni, 2026-11-16): the reads below are made as an ADMIN.
+  // The editor token is kept for what this suite writes, and for the refusal check.
   let token;
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-world-reads', email: 'admin@world-reads.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   const TAG = uuid().slice(0, 8);
   const name = (k) => `Scene Pair ${TAG} ${k}`;
   const show = { a: uuid(), b: uuid() };
@@ -41,7 +44,7 @@ const uuid = () => crypto.randomUUID();
   const rel = { ab: uuid(), bc: uuid(), cd: uuid(), ac: uuid() };
   const relName = Object.fromEntries(Object.entries(rel).map(([k, id]) => [id, k]));
 
-  const check = (qs = '') => request(app).get(`/api/v1/world/tension-check${qs}`).set('Authorization', `Bearer ${token}`);
+  const check = (qs = '', as = adminToken) => request(app).get(`/api/v1/world/tension-check${qs}`).set('Authorization', `Bearer ${as}`);
   const ours = (body) => body.pairs.filter((p) => relName[p.relationship_id]);
 
   beforeAll(async () => {
@@ -79,6 +82,12 @@ const uuid = () => crypto.randomUUID();
     await run('DELETE FROM world_characters WHERE id IN (:ids)', { ids: Object.values(wc) });
     await run('DELETE FROM character_registries WHERE id IN (:ids)', { ids: Object.values(reg) });
     await run('DELETE FROM shows WHERE id IN (:ids)', { ids: Object.values(show) });
+  });
+
+  it('an editor is refused the scan (403), with no pairs in the answer', async () => {
+    const res = await check('', token);
+    expect(res.status).toBe(403);
+    expect(res.body.pairs).toBeUndefined();
   });
 
   it('a pair is a relationship whose two characters are triggered: once, volatile first, with world ids and names', async () => {

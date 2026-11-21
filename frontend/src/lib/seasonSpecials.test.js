@@ -127,7 +127,7 @@ describe('specials on the calendar, the one-pager, the health line, the Events v
 
   test('the health line counts the specials planned, apart from the part', () => {
     const line = seasonHealth({ arc: { current_phase: 1 }, roadmap: map, coverage: null, release: null });
-    expect(line.pieces.map((p) => p.text)).toEqual(['Part 1 is 0 of 8 ready', '2 specials planned']);
+    expect(line.pieces.map((p) => p.text)).toEqual(['Phase 1 is 0 of 8 ready', '2 specials planned']);
     expect(seasonHealth({ arc: { current_phase: 1 }, roadmap: { ...map, specials: [] } }).pieces.map((p) => p.key)).toEqual(['part']);
   });
 

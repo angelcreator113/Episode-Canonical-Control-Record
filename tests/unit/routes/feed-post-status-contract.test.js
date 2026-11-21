@@ -19,12 +19,16 @@ describe('feed post status contract', () => {
   test('the list and the timeline scope by status, live by default', () => {
     const list = slice(routes, "router.get('/', optionalAuth", '// ── GENERATE FEED POSTS');
     const timeline = slice(routes, "router.get('/:showId/timeline'", '// ── GET EPISODE FEED');
-    expect(list).toMatch(/const scoped = statusWhere\(status\);[\s\S]*?const where = \{ deleted_at: null, \.\.\.scoped \}/);
-    expect(timeline).toMatch(/const scoped = statusWhere\(status\);[\s\S]*?const where = \{ show_id: showId, deleted_at: null, \.\.\.scoped \}/);
+    // Since 2026-11-15 the read routes filter by who is reading (readableStatusWhere):
+    // unpublished posts are an ADMIN's. A bare statusWhere on a read route would open them again.
+    expect(list).toMatch(/const scoped = readableStatusWhere\(status, readsAsAdmin\(req\)\);[\s\S]*?const where = \{ deleted_at: null, \.\.\.scoped \}/);
+    expect(timeline).toMatch(/const scoped = readableStatusWhere\(status, readsAsAdmin\(req\)\);[\s\S]*?const where = \{ show_id: showId, deleted_at: null, \.\.\.scoped \}/);
+    expect(list).not.toMatch(/[^a-zA-Z]statusWhere\(status\)/);
+    expect(timeline).not.toMatch(/[^a-zA-Z]statusWhere\(/);
   });
   test('the episode feed answers drafts and live posts alike', () => {
     const episode = slice(routes, "router.get('/episode/:episodeId'", '// ── UPDATE POST');
-    expect(episode).toMatch(/statusWhere\(req\.query\.status === undefined \? 'all' : req\.query\.status\)/);
+    expect(episode).toMatch(/readableStatusWhere\(req\.query\.status === undefined \? 'all' : req\.query\.status, readsAsAdmin\(req\)\)/);
   });
   test('PUT refuses a live post and accepts only draft or live as a status', () => {
     const put = slice(routes, "router.put('/:postId'", '// ── DELETE POST');

@@ -16,16 +16,18 @@
  * Location: frontend/src/pages/WorldAdmin.jsx
  */
 
-import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext, lazy, Suspense } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { seasonPageHref } from '../lib/seasonPage';
 import api from '../services/api';
+import AuthContext from '../contexts/AuthContext';
+import { isAdmin } from '../utils/authGroups';
 import showService from '../services/showService';
 import { rememberShow } from '../utils/activeShow';
 import WorldMomentsTab from '../components/WorldMoments/WorldMomentsTab';
 import RateCardTab from '../components/RateCard/RateCardTab';
 import { S, STAT_ICONS, isFailureToast } from '../components/Show/producerStyles';
-import ShowOverview, { episodesInProduction } from '../components/Show/ShowOverview';
+import ShowOverview, { episodesInProduction, episodeIdentity } from '../components/Show/ShowOverview';
 import { useLookDraft, LookBuilderPanel, RecentlyWorn } from '../components/Show/LookBuilder';
 import { LalaStatsCard, DecisionLogCard, StoryThreadsStrip, CastRow } from '../components/Show/CastContinuity';
 import { matchesDressCode, dressCodeKeywords, setPiecesOf, setSlotClashes } from '../lib/lookBuilder';
@@ -35,7 +37,7 @@ import ReleaseBoard from '../components/Show/ReleaseBoard';
 import LalaFeedTab from '../components/Show/LalaFeedTab';
 import ShowInsightsTab from '../components/Show/ShowInsightsTab';
 import { SLOT_KEYS, SLOT_DEFS, SLOT_SUBCATEGORIES, getSlotForCategory, groupItemsBySlot } from '../lib/wardrobeSlots';
-import { ArrowRight, ArrowLeft, Plus, Calendar, Sparkles, AlertTriangle, Loader2, RotateCw, X, Gem, Crown, Heart, ChevronDown, Search, FileUp, Globe2, CalendarRange } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Plus, Calendar, AlertTriangle, Loader2, RotateCw, X, ChevronDown, Search, FileUp } from 'lucide-react';
 import useWardrobeProcessing from '../hooks/useWardrobeProcessing';
 import { backgroundRemovalStarted, PROCESSING_STATES } from '../utils/wardrobeProcessingState';
 import AddPieceDialog from '../components/Wardrobe/AddPieceDialog';
@@ -45,6 +47,7 @@ import { realDraftFrom, realChanges, realWorldErrorText } from '../lib/wardrobeR
 import { fetchAllEpisodes, partialNote } from '../lib/fetchAllPages';
 import './WorldAdmin.css';
 import useSideScroll from '../hooks/useSideScroll';
+import ProducerNav, { PRODUCER_TABS } from '../components/Show/ProducerNav';
 import '../styles/wardrobe-backdrop.css';
 
 // Track 6 CP13 module-scope helpers — page structural shape, file-local
@@ -129,35 +132,36 @@ const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', 
 // board), events, opportunities, story, goals and results. World gathers
 // Lala's posts, the world's moments and her rate card. Keys stay as they
 // were so existing ?tab= links keep working.
-const TABS = [
-  { key: 'overview', Icon: Sparkles, label: 'Overview' },
-  { key: 'season-page', Icon: CalendarRange, label: 'Season', page: 'season' },
-  { key: 'wardrobe', Icon: Gem, label: 'Assets', subs: [
+// The six tabs are components/Show/ProducerNav's (PRODUCER_TABS: the one
+// list, shared with the Season page). Their sub-tabs are Producer Mode's own.
+const SUBS = {
+  wardrobe: [
     { key: 'scene-sets', label: 'Scene Sets' },
     { key: 'wardrobe-items', label: 'Wardrobe' },
     { key: 'overlays-tab', label: "Lala's Phone" },
     { key: 'production-overlays', label: 'Overlays' },
-  ]},
-  { key: 'characters', Icon: Crown, label: 'Cast & Continuity', subs: [
+  ],
+  characters: [
     { key: 'characters-list', label: "Lala's State & Continuity" },
     { key: 'finances', label: "Lala's Finances" },
     { key: 'decisions', label: 'Activity & Decisions' },
-  ]},
-  { key: 'world', Icon: Globe2, label: 'World', subs: [
+  ],
+  world: [
     // Lala's Feed (Evoni's redesign, 2026-10-05: "bring the feed back"); the Sidebar's Social Media page stays.
     { key: 'feed', label: "Lala's posts" },
     // The world moves on its own calendar (Evoni, 2026-10-18; services/worldMoments).
     { key: 'moments', label: 'World moments' },
     // What Lala charges (Evoni, 2026-10-19; services/rateCard).
     { key: 'rate-card', label: 'Rate card' },
-  ]},
-  { key: 'release', Icon: Heart, label: 'Release', subs: [
+  ],
+  release: [
     // The next episode out the door (Evoni's redesign, 2026-10-05); the release tab opens on it.
     { key: 'release-next', label: 'Next release' },
     { key: 'distribution', label: 'Distribution' },
     { key: 'insights', label: 'Insights' },
-  ]},
-];
+  ],
+};
+const TABS = PRODUCER_TABS.map((t) => (SUBS[t.key] ? { ...t, subs: SUBS[t.key] } : t));
 
 // What moved to the Season page: the old ?tab= key, and goTo with it, opens
 // the Season page on that tab (lib/seasonPage SEASON_TABS). The Season Plan
@@ -179,6 +183,8 @@ export const SEASON_PAGE_KEYS = {
 };
 
 function WorldAdmin() {
+  // Money writes (coins, the seed, the finance config) are an admin's; the API refuses anyone else.
+  const admin = isAdmin(useContext(AuthContext)?.user);
   const { id: showId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -428,14 +434,17 @@ function WorldAdmin() {
     if (!showId) return;
     let cancelled = false;
     (async () => {
+      // The seed is an admin's write; a refused or failed seed never hides the config.
+      if (admin) {
+        try { await api.post(`/api/v1/shows/${showId}/seed-balance`); } catch (err) { console.error('[WorldAdmin] seed failed:', err?.message); }
+      }
       try {
-        await api.post(`/api/v1/shows/${showId}/seed-balance`);
         const res = await api.get(`/api/v1/shows/${showId}/financial-config`);
         if (!cancelled) setFinanceConfig(res.data);
-      } catch { /* non-blocking */ }
+      } catch (err) { console.error('[WorldAdmin] finance config load failed:', err?.message); }
     })();
     return () => { cancelled = true; };
-  }, [showId]);
+  }, [showId, admin]);
 
   useEffect(() => {
     if (successMsg) { const t = setTimeout(() => setSuccessMsg(null), 5000); return () => clearTimeout(t); }
@@ -492,7 +501,9 @@ function WorldAdmin() {
   const saveStats = async () => {
     setSavingStats(true); setError(null);
     try {
-      const res = await api.post(`/api/v1/characters/lala/state/update`, { show_id: showId, ...statForm, source: 'manual', notes: 'Manual edit from World Admin' });
+      // A coin change is an admin's: anyone else sends the other stats only.
+      const { coins: formCoins, ...otherStats } = statForm;
+      const res = await api.post(`/api/v1/characters/lala/state/update`, { show_id: showId, ...(admin ? { coins: formCoins } : {}), ...otherStats, source: 'manual', notes: 'Manual edit from World Admin' });
       if (res.data.success) {
         setCharState(p => ({ ...p, state: res.data.state }));
         setEditingStats(false);
@@ -537,7 +548,6 @@ function WorldAdmin() {
   });
   const lookKeywords = dressCodeKeywords(look.event);
   // The tab rows slide sideways: drag, swipe or wheel (Evoni, 2026-11-03).
-  const [tabBarRef, , tabBarScroll] = useSideScroll();
   const [subTabsRef, , subTabsScroll] = useSideScroll();
 
   if (loading) return (
@@ -618,15 +628,14 @@ function WorldAdmin() {
                   </>
                 )}
               </span>
-              {/* Both pills are links (Evoni, 2026-10-25): the season to its page, the episode in production to its own. */}
+              {/* The season pill is a label (Evoni, 2026-11-12): the Season tab below is the one way in.
+                  The episode pill names the episode in production exactly as the Now producing card does. */}
               {season ? (
-                <Link className="wa-chip wa-chip-season" to={seasonPageHref(showId)} data-testid="wa-chip-season">
-                  Season {season} <ArrowRight size={13} aria-hidden="true" />
-                </Link>
+                <span className="wa-chip wa-chip-season" data-testid="wa-chip-season">Season {season}</span>
               ) : null}
               {producing ? (
-                <Link className="wa-chip wa-chip-producing" to={`/episodes/${producing.id}`} data-testid="wa-chip-producing">
-                  Producing Episode {producing.episode_number ?? ''} <ArrowRight size={13} aria-hidden="true" />
+                <Link className="wa-chip wa-chip-producing" to={`/episodes/${producing.id}?tab=overview`} data-testid="wa-chip-producing" title={`Producing ${episodeIdentity(producing)}`}>
+                  <span className="wa-chip-text">Producing {episodeIdentity(producing)}</span> <ArrowRight size={13} aria-hidden="true" />
                 </Link>
               ) : null}
             </div>
@@ -668,27 +677,7 @@ function WorldAdmin() {
         // waiting on approval, under World.
         const counts = { world: feedWaiting || 0 };
         return (
-          <nav className={`wa-tab-bar ${tabBarScroll}`} ref={tabBarRef} aria-label="Producer Mode">
-            {TABS.map(t => {
-              const n = counts[t.key] || 0;
-              // Season is a page of its own, so its entry is a link.
-              if (t.page === 'season') {
-                return (
-                  <Link key={t.key} to={seasonPageHref(showId)} className="wa-tab" data-testid="wa-tab-season">
-                    <t.Icon size={15} aria-hidden="true" />
-                    <span className="wa-tab-label">{t.label}</span>
-                  </Link>
-                );
-              }
-              return (
-                <button key={t.key} type="button" onClick={() => switchTab(t.key)} className={`wa-tab${activeTab === t.key ? ' active' : ''}`} aria-current={activeTab === t.key ? 'page' : undefined}>
-                  <t.Icon size={15} aria-hidden="true" />
-                  <span className="wa-tab-label">{t.label}</span>
-                  {n > 0 && <span className="wa-tab-count" aria-label={`${n} waiting`}>{n}</span>}
-                </button>
-              );
-            })}
-          </nav>
+          <ProducerNav showId={showId} active={activeTab} onSelect={switchTab} counts={counts} />
         );
       })()}
       {/* ─── SUB-TABS ─── */}
@@ -2250,7 +2239,7 @@ function WorldAdmin() {
             <LalaStatsCard
               charState={charState} history={stateHistory} episodes={episodes}
               coinGoal={financeConfig?.next_goal?.threshold || null}
-              edit={{ editing: editingStats, form: statForm, setForm: setStatForm, open: openStatEditor, cancel: () => setEditingStats(false), save: saveStats, saving: savingStats }}
+              edit={{ canEditCoins: admin, editing: editingStats, form: statForm, setForm: setStatForm, open: openStatEditor, cancel: () => setEditingStats(false), save: saveStats, saving: savingStats }}
             />
             <DecisionLogCard history={stateHistory} episodes={episodes} />
           </div>
@@ -2819,9 +2808,13 @@ function WorldAdmin() {
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 10, borderTop: '1px solid var(--lala-parchment-3)' }}>
                       <button onClick={() => setFinanceEditorDraft(draftFromConfig(financeConfig))} disabled={financeEditorSaving} style={{ ...S.secBtn, padding: '7px 16px' }}>Discard changes</button>
-                      <button onClick={save} disabled={financeEditorSaving} style={{ ...S.primaryBtn, padding: '7px 22px' }}>
-                        {financeEditorSaving ? 'Saving…' : 'Save & re-seed'}
-                      </button>
+                      {admin ? (
+                        <button onClick={save} disabled={financeEditorSaving} style={{ ...S.primaryBtn, padding: '7px 22px' }}>
+                          {financeEditorSaving ? 'Saving…' : 'Save & re-seed'}
+                        </button>
+                      ) : (
+                        <span data-testid="finance-admin-note" style={{ fontSize: 12, color: 'var(--text-secondary)', alignSelf: 'center' }}>Only an admin can save the starting balance and goals.</span>
+                      )}
                     </div>
                     </>
                     )}

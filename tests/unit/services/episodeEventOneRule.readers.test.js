@@ -28,11 +28,15 @@ const ALLOWED = {
   'src/services/episodeGeneratorService.js': 'the Start Episode write of the stamp',
   // worldEvents.js until Task #54 split it into src/routes/worldEvents/.
   'src/routes/worldEvents/inject.js': 'the inject write',
-  'src/routes/worldEvents/episodeBatch.js': 'the generate-from-many write',
+  // The generate-from-many write moved into the generator's transaction (2026-11-12).
+  'src/services/episodeSecondaryEvents.js': 'the episode\'s OTHER events: every event whose own link names the episode, less the brief\'s primary; and the detach write',
+  'src/utils/eventEpisodeLink.js': 'findEpisodeLinkHolder: names the event holding the link in the 409 EPISODE_EVENT_LINK_TAKEN body, not the episode\'s event',
   'src/routes/worldEvents/overlays.js': 'the stale-link cleanup of a deleted episode',
   'src/services/sceneSetUsesService.js': 'scene-set uses: every linked event\'s scene set, not the episode\'s one event',
   'src/utils/eventTermsLock.js': 'the reopen guard: any stamped or brief event of the episode with reopened terms',
   'src/utils/episodeEventSql.js': 'the rule itself, and its doc comment',
+  'src/services/seasonLoader.js': 'slotEventView\'s review flags: whether the episode\'s event (read by the rule) has its own link here, and whether another event is linked; the event shown comes from the rule',
+  'src/utils/frozenEpisode.js': 'filmedLinkRefusal: whether this one event\'s own link already names the filmed episode (the restoration exception), not the episode\'s event',
 };
 
 function jsFiles(dir) {
@@ -67,7 +71,9 @@ describe('the episode\'s event, one rule for every service (Task #1917)', () => 
     'src/services/episodeScriptWriterService.js', 'src/services/groundedScriptGeneratorService.js',
     'src/services/financialTransactionService.js', 'src/services/scenePlannerService.js',
     'src/services/distributionService.js', 'src/services/todoListService.js',
-    'src/services/storyGenerationService.js', 'src/services/careerPipelineService.js',
+    // careerPipelineService's reader (onEpisodeCompleted) was removed on 2026-11-15;
+    // its route, the only caller, reads the episode's event itself.
+    'src/services/storyGenerationService.js', 'src/routes/opportunityRoutes.js',
     'src/services/wardrobeIntelligenceService.js', 'src/services/episodeMoneyService.js',
     'src/services/outfitScoreContext.js', 'src/services/seasonIntentionService.js',
     'src/services/episodeOverlaysService.js', 'src/services/dressedAngleService.js',

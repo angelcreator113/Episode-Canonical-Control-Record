@@ -58,7 +58,8 @@ export function LalaStatsCard({ charState, history = [], episodes = [], coinGoal
               <li key={key} className={`wa-cc-stat stat-${key}${alarm ? ' alarm' : ''}`} data-testid={`cc-stat-${key}`}>
                 <div className="wa-cc-stat-top">
                   <span className="wa-cc-stat-label">{label}</span>
-                  {edit.editing ? (
+                  {edit.editing && !(isCoin && edit.canEditCoins === false) ? (
+                    // A coin change books money: only an admin gets the field (canEditCoins).
                     // Coins take any integer (the backend stores negatives); the rest 0–10, the backend's clamp.
                     <input type="number" className="wa-cc-stat-input" aria-label={label}
                       value={edit.form[key] ?? val}

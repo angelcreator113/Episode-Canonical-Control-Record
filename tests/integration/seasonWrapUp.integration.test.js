@@ -74,6 +74,9 @@ const say = (text) => ({ content: [{ type: 'text', text }], usage: { input_token
     { ep, show, title, n, status: accepted ? 'accepted' : null, ej: accepted ? JSON.stringify({ tier_final: tier, score }) : null });
     await run('UPDATE season_slots SET episode_id = :ep, event_id = :eventId, locked_at = NOW() WHERE arc_id = :arcId AND slot_number = :n',
       { ep, eventId, arcId, n });
+    // The event is the episode's own, as Start Episode leaves it (its link points at the episode):
+    // a started slot's event is read from its episode (seasonLoader.slotEventView, 2026-11-12).
+    if (eventId) await run('UPDATE world_events SET used_in_episode_id = :ep WHERE id = :eventId', { ep, eventId });
     return ep;
   }
   const ledger = (show, { episode = null, type, amount, status = 'executed' }) => run(

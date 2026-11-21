@@ -6,6 +6,7 @@
  * not hold is null, and the page says so.
  */
 import { slotTitle } from './seasonArc';
+import { slotEvent } from './seasonSlotEvent';
 
 /**
  * The page's tabs, in order; `?tab=` holds the key. Each has a one-line
@@ -14,8 +15,8 @@ import { slotTitle } from './seasonArc';
  * here, so the Season page is where the season is run).
  */
 export const SEASON_TABS = [
-  { key: 'overview', label: 'Overview', note: 'The season at a glance: its parts, key events, story threads, secrets and goals.' },
-  { key: 'roadmap', label: 'Roadmap', note: "The season's episode slots, part by part: what each one is for and what fills it." },
+  { key: 'overview', label: 'Overview', note: 'The season at a glance: its phases, key events, story threads, secrets and goals.' },
+  { key: 'roadmap', label: 'Roadmap', note: "The season's episode slots, phase by phase: what each one is for and what fills it." },
   // The production board (components/Show/ShowEpisodesBoard), from Producer Mode's Episodes tab.
   { key: 'episodes', label: 'Episodes', note: 'Every episode this season and where it is in production.' },
   // The event library (components/Show/EventLibrary), from Producer Mode's ?tab=events (2026-10-25).
@@ -24,7 +25,7 @@ export const SEASON_TABS = [
   { key: 'opportunities', label: 'Opportunities', note: 'Offers and bookings from brands, from the first offer to paid.' },
   { key: 'story', label: 'Story', note: 'The threads, twists and reveals the season is building, and what the story still needs.' },
   // Who's in this season (components/Show/SeasonCast; Evoni, 2026-10-26, round 3).
-  { key: 'cast', label: 'Cast', note: "Who is in which episode, and which relationships changed in each part." },
+  { key: 'cast', label: 'Cast', note: "Who is in which episode, and which relationships changed in each phase." },
   // The plant tracker (components/Show/SeasonPlants, 2026-10-25).
   { key: 'plants', label: 'Plants', note: 'Every detail a script plants for later: where each one pays off, and the ones that never do.' },
   // Lala's career goals and the brands she has worked with (Evoni, 2026-10-25:
@@ -42,13 +43,43 @@ export const tabFrom = (value) => {
 };
 
 /**
+ * The values in an address that belong to one tab's own work: a slot or a
+ * Roadmap filter, an event or an Events filter, a new deal's company. An
+ * address that carries one and names no tab is still about that tab.
+ */
+const CONTEXT_TABS = [
+  ['roadmap', ['slot', 'view', 'part', 'status']],
+  ['events', ['event', 'show', 'evpage', 'evq', 'evstate', 'evdeal', 'evsort']],
+  ['opportunities', ['deal_with']],
+];
+
+/**
+ * The tab the Season page opens on when its address names none: the
+ * Overview (Evoni, 2026-11-20; it was the Roadmap once the season was under
+ * way, 2026-11-12). The one exception is an address that carries a tab's own
+ * value (CONTEXT_TABS): `?slot=3` is the Roadmap, `?event=…` the Events tab,
+ * `?deal_with=…` Opportunities, so a link into a piece of work is not sent
+ * to the Overview for want of a `tab`. `params` is the address's query
+ * (URLSearchParams); without it, the Overview.
+ */
+export function defaultSeasonTab(params = null) {
+  if (typeof params?.has !== 'function') return 'overview';
+  return CONTEXT_TABS.find(([, keys]) => keys.some((k) => params.has(k)))?.[0] || 'overview';
+}
+
+/** The tab for an address: the one it names, else the default (defaultSeasonTab). */
+export const tabForAddress = (value, params = null) => (value ? tabFrom(value) : defaultSeasonTab(params));
+
+/**
  * The Season page, on one of its tabs: every in-app link to the season goes
  * through here. `extra` adds query values after the tab (e.g. deal_with
  * for the Opportunities tab's new-deal form).
  */
 export function seasonPageHref(showId, tab = null, extra = null) {
   const q = new URLSearchParams();
-  if (tab && tab !== 'overview') q.set('tab', tab);
+  // The Overview is named too, so a link to it says where it goes whatever
+  // the default is (defaultSeasonTab).
+  if (tab) q.set('tab', tab);
   for (const [k, v] of Object.entries(extra || {})) if (v != null && v !== '') q.set(k, String(v));
   const qs = q.toString();
   return `/shows/${encodeURIComponent(showId)}/season${qs ? `?${qs}` : ''}`;
@@ -127,7 +158,8 @@ export const arcPart = (arc, phase) => (arc?.phases || []).find((p) => Number(p.
 export function slotPicture(slot, { episodes = [], events = [], arc = null } = {}) {
   const ep = slot?.episode ? episodes.find((e) => e.id === slot.episode.id) : null;
   if (ep?.thumbnail_url) return ep.thumbnail_url;
-  const ev = slot?.event ? events.find((e) => e.id === slot.event.id) : null;
+  const shown = slotEvent(slot);
+  const ev = shown ? events.find((e) => e.id === shown.id) : null;
   if (ev?.invitation_url) return ev.invitation_url;
   return arcPart(arc, slot?.phase)?.picture_url || null;
 }
@@ -169,8 +201,8 @@ export function revealMatrix(plan) {
 /** The events in the season's slots, in slot order, with the event row when the show's list has it. */
 export function slotEvents(roadmap, events = []) {
   return allSlots(roadmap)
-    .filter((s) => s.event)
-    .map((s) => ({ slot: s, event: events.find((e) => e.id === s.event.id) || s.event }));
+    .filter((s) => slotEvent(s))
+    .map((s) => ({ slot: s, event: events.find((e) => e.id === slotEvent(s).id) || slotEvent(s) }));
 }
 
 /** "In Production" chip text plus a count line for the Episode Slots card. */
@@ -178,11 +210,15 @@ export const slotsLine = (stats) => `${stats.slots.done} completed · ${stats.sl
 export const goalsLine = (stats) => `${stats.goals.done} complete · ${stats.goals.remaining} remaining`;
 export const eventsLine = (stats) => `${stats.events.scheduled} scheduled · ${stats.events.remaining} remaining`;
 
-/** The hero's chips: "24 Episodes", "3 Parts", the dates when set. */
-export function heroChips({ roadmap, arc }) {
-  const chips = [plural(roadmap?.slot_count ?? 24, 'Episode', 'Episodes'), plural((arc?.phases || []).length || 3, 'Part', 'Parts')];
-  const dates = dateRange(arc?.starts_on, arc?.ends_on);
-  if (dates) chips.push(dates);
-  return chips;
+/**
+ * The season's lifecycle, as the header says it: where the season is in its
+ * life (ShowArc.status: upcoming, active, completed), which is not its
+ * health (lib/seasonHealth: on track, needs attention, behind). A status
+ * that is none of the three is not named.
+ */
+const LIFECYCLE = { upcoming: 'Upcoming', active: 'Active', completed: 'Completed' };
+export function seasonLifecycle(arc) {
+  const key = arc?.status;
+  return typeof key === 'string' && Object.hasOwn(LIFECYCLE, key) ? { key, label: LIFECYCLE[key] } : null;
 }
 

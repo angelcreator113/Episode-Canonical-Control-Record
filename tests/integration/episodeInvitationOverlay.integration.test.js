@@ -49,7 +49,7 @@ afterAll(() => setOverlaysOnBeats(false));
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-p10', email: 'test@p10.dev', name: 'P10', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-p10', email: 'test@p10.dev', name: 'P10', groups: ['USER', 'ADMIN'], role: 'ADMIN', // approving is an admin's (V2-1, 2026-11-19)
     }).accessToken;
     const [{ exists }] = await q(`SELECT to_regclass('public.timeline_placements') IS NOT NULL AS exists`);
     if (!exists) {

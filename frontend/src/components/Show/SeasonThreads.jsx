@@ -47,7 +47,7 @@ function SlotSelect({ label, value, slots, onChange, after = null, testid }) {
       <select value={value || ''} onChange={(e) => onChange(e.target.value || null)} data-testid={testid}>
         <option value="">Not chosen</option>
         {slots.filter((s) => after == null || s.slot_number > after).map((s) => (
-          <option key={s.id} value={s.id}>{s.label}{s.phase ? ` · Part ${s.phase}` : ''}</option>
+          <option key={s.id} value={s.id}>{s.label}{s.phase ? ` · Phase ${s.phase}` : ''}</option>
         ))}
       </select>
     </label>
@@ -72,7 +72,7 @@ function ThreadCard({ t, slots, busy, act, showId, onTwist }) {
         <p className="sth-chips">
           {isNew && <span className="sth-chip is-new" data-testid="sth-new">New · opened by itself</span>}
           <span className={`sth-chip is-${t.status}`}>{STATUS[t.status] || t.status}</span>
-          {t.part && <span className="sth-chip">Part {t.part.phase}: {t.part.title}</span>}
+          {t.part && <span className="sth-chip">Phase {t.part.phase}: {t.part.title}</span>}
         </p>
       </div>
       <p className="sth-meta">
@@ -187,7 +187,7 @@ function Waiting({ w, open, busy, decide }) {
         <p className="sth-title">{w.title}</p>
         <p className="sth-chips">
           <span className="sth-chip">{w.source === 'feed' ? 'Feed' : 'Short story'}</span>
-          {w.part && <span className="sth-chip">Part {w.part.phase}: {w.part.title}</span>}
+          {w.part && <span className="sth-chip">Phase {w.part.phase}: {w.part.title}</span>}
         </p>
       </div>
       <p className="sth-meta"><span>{w.label}</span>{w.created_at && <span>· {day(w.created_at)}</span>}</p>

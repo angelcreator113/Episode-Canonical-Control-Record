@@ -75,9 +75,13 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
       // An offer not accepted yet is asked about (409 OFFER_DECISION_REQUIRED;
       // OfferDecisionDialog), then only the start is sent again, with the
       // decision; the guests above are not saved twice.
-      const res = await offerDecision.run((decision) => api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, {
-        draft_script: false, locations, ...(decision ? { offer_decision: decision } : {}),
-      }));
+      // Each request carries the attempt's Idempotency-Key (config), so a
+      // Start whose answer was lost is answered with its episode when the
+      // same choice is sent again; `check` is the read-only status question
+      // the dialog asks after a network failure.
+      const res = await offerDecision.run((decision, extra, config) => api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, {
+        draft_script: false, locations, ...(decision ? { offer_decision: decision, ...extra } : {}),
+      }, config), { check: () => api.get(`/api/v1/world/${showId}/events/${eventId}/start-readiness`) });
       if (res.data.success) {
         const ep = res.data.data.episode;
         setWhosNewStep(null);
@@ -98,8 +102,10 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
         // Start Episode lands on the Overview, whose Planning card shows what
         // the episode inherited and the next decision (Evoni, 2026-10-03,
         // episode creation step 2). This replaces Production -> Assets
-        // (Task #1905, 2026-09-25) for this caller only; EpisodeDetail's
-        // default tab stays 'checklist'.
+        // (Task #1905, 2026-09-25) for this caller. The Overview is also
+        // where the episode page opens with no ?tab= (utils/episodeTabs
+        // DEFAULT_EP_TAB, since 2026-11-12); the tab is named here so this
+        // landing does not depend on that default.
         if (ep?.id) navigate(`/episodes/${ep.id}?tab=overview`);
         else setToast('Episode created but no episode id was returned.');
       } else {

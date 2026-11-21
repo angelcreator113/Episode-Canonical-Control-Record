@@ -43,7 +43,7 @@ const RETIRED = ['tier_reward', 'tier_paid_bonus', 'event_reward'];
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-payouts', email: 'test@payouts.dev', name: 'Payouts Test', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-payouts', email: 'test@payouts.dev', name: 'Payouts Test', groups: ['ADMIN'], role: 'ADMIN', // approving books the fee: admin only (2026-11-13)
     }).accessToken;
     await migration.up(sequelize.getQueryInterface());
   });

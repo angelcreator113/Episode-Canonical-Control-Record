@@ -14,15 +14,19 @@ vi.mock('../services/api', () => ({
 
 import api from '../services/api';
 import WorldAdmin from './WorldAdmin';
+import AuthContext from '../contexts/AuthContext';
 import EpisodeLedger from '../components/Show/EpisodeLedger';
 
 const CONFIG = { starting_balance: 1900, current_balance: 2450, goals: [{ id: 'g1', threshold: 5000, reward_coins: 200, label: '🌟 Rising Star' }] };
 let where;
 function Where() { const l = useLocation(); where = `${l.pathname}${l.search}`; return null; }
-const renderAt = (tab) => render(
-  <MemoryRouter initialEntries={[`/shows/show-1/world?tab=${tab}`]}>
-    <Routes><Route path="/shows/:id/world" element={<><WorldAdmin /><Where /></>} /></Routes>
-  </MemoryRouter>,
+// An admin unless a test says otherwise: the seed and the finance config are an admin's writes (2026-11-13).
+const renderAt = (tab, user = { id: 'u1', groups: ['admin'] }) => render(
+  <AuthContext.Provider value={{ user }}>
+    <MemoryRouter initialEntries={[`/shows/show-1/world?tab=${tab}`]}>
+      <Routes><Route path="/shows/:id/world" element={<><WorldAdmin /><Where /></>} /></Routes>
+    </MemoryRouter>
+  </AuthContext.Provider>,
 );
 const tabButton = (name) => screen.getByRole('button', { name });
 
@@ -64,6 +68,17 @@ describe("Lala's Finances: one home", () => {
     fireEvent.click(within(section).getByRole('button', { name: 'Save & re-seed' }));
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/shows/show-1/financial-config', expect.objectContaining({ starting_balance: 2500 })));
     expect(api.post).toHaveBeenCalledWith('/api/v1/shows/show-1/seed-balance', { force: true });
+  });
+
+  test('a non-admin reads the finances but is offered no save, and the page posts no seed for them', async () => {
+    renderAt('finances', { id: 'u2', groups: ['editor'] });
+    const section = await screen.findByTestId('lala-finances');
+    fireEvent.click(within(section).getByRole('button', { name: 'Goals' }));
+    await within(section).findByDisplayValue('1900');
+    expect(within(section).queryByRole('button', { name: 'Save & re-seed' })).toBeNull();
+    expect(within(section).getByTestId('finance-admin-note').textContent).toBe('Only an admin can save the starting balance and goals.');
+    expect(vi.mocked(api.post).mock.calls.filter(([url]) => String(url).includes('seed-balance'))).toEqual([]);
+    expect(api.put).not.toHaveBeenCalled();
   });
 
   test('the Wardrobe\'s coin pill opens it', async () => {

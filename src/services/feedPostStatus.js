@@ -27,4 +27,25 @@ function statusWhere(requested) {
   return { status: requested };
 }
 
-module.exports = { STATUSES, LOCKED_MESSAGE, isLive, statusWhere };
+/**
+ * The status filter for a READ, by who is reading (Evoni, 2026-11-15).
+ * The feed's read routes are open to anyone (optionalAuth), and statusWhere
+ * alone honoured ?status=draft and ?status=all from a request with no token:
+ * unpublished posts, scheduled ones and draft comments were readable by
+ * anyone who knew a show, episode or post id.
+ *
+ * Someone who may read unpublished posts gets exactly what statusWhere
+ * gives. Anyone else reads live records only, whatever they ask for:
+ * 'all' is the live ones (the records they may see), and 'draft' is none.
+ * It is a filter, not a refusal, so a count or a page computed with it
+ * says nothing about what is unpublished. A status that is not one of the
+ * three is still the 400 it was.
+ */
+function readableStatusWhere(requested, canReadUnpublished) {
+  const scoped = statusWhere(requested);
+  if (scoped.error || canReadUnpublished === true) return scoped;
+  if (requested === 'draft') return { status: { [require('sequelize').Op.in]: [] } };
+  return { status: 'live' };
+}
+
+module.exports = { STATUSES, LOCKED_MESSAGE, isLive, statusWhere, readableStatusWhere };

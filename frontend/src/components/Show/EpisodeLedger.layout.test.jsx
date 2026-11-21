@@ -79,7 +79,7 @@ describe('Episodes › Results layout', () => {
     expect(head.getAttribute('aria-expanded')).toBe('true');
     const row = screen.getByTestId('ledger-row-ep-1');
     const actions = row.querySelector('.wa-ledger-actions');
-    expect(within(actions).getAllByRole('link').map((a) => a.textContent)).toEqual(['Open episode', 'Re-evaluate', 'Todo List']);
+    expect(within(actions).getAllByRole('link').map((a) => a.textContent)).toEqual(['Open episode', 'View the result', 'Todo List']);
     expect(within(actions).getByRole('link', { name: 'Open episode' }).getAttribute('href')).toBe('/episodes/ep-1');
     // Its first part: nothing above the actions but the header.
     expect(row.querySelector('.wa-ledger-case').firstElementChild).toBe(actions);
@@ -92,6 +92,6 @@ describe('Episodes › Results layout', () => {
     fireEvent.click(await screen.findByText('Rooftop Brunch'));
     expect(within(screen.getByTestId('ledger-row-ep-2')).queryByText('🏆 Evaluation')).toBeNull();
     fireEvent.click(screen.getByText('Gala Night'));
-    expect(within(screen.getByTestId('ledger-row-ep-3')).getByRole('link', { name: 'Evaluate' })).toBeTruthy();
+    expect(within(screen.getByTestId('ledger-row-ep-3')).getByRole('link', { name: 'Estimate the result' })).toBeTruthy();
   });
 });

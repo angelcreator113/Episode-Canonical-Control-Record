@@ -614,3 +614,8 @@
   .em-est-when { grid-area: when; }
   .em-est-row .em-chip { grid-area: chip; }
 }
+
+/* A2: brand compensation no accepted agreement owes. Proposed, never counted. */
+.em-line-not_owed { background: var(--lala-parchment); }
+.em-line-not_owed .em-line-amount { color: var(--lala-ink-muted); }
+.em-chip-not_owed { text-transform: none; color: var(--lala-ink-muted); border-color: var(--lala-parchment-3); }

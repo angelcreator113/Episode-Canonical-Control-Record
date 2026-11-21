@@ -8,10 +8,10 @@ const {
   detectFollowTensions,
 } = require('../services/characterFollowService');
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 // ── GET /character-follows — list all follow profiles ────────────────────────
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.CharacterFollowProfile) return res.json({ profiles: [] });
 
@@ -27,7 +27,7 @@ router.get('/', requireAuth, async (req, res) => {
 
 // ── GET /character-follows/tensions/:charA/:charB — detect follow tensions ───
 // (Must be before /:characterKey to avoid "tensions" matching as a characterKey)
-router.get('/tensions/:charA/:charB', requireAuth, async (req, res) => {
+router.get('/tensions/:charA/:charB', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
 
   try {
@@ -39,7 +39,7 @@ router.get('/tensions/:charA/:charB', requireAuth, async (req, res) => {
 });
 
 // ── GET /character-follows/:characterKey — single profile detail ─────────────
-router.get('/:characterKey', requireAuth, async (req, res) => {
+router.get('/:characterKey', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
   if (!db.CharacterFollowProfile) return res.status(404).json({ error: 'Follow profiles not available' });
 
@@ -173,7 +173,7 @@ router.patch('/:characterKey', requireAuth, async (req, res) => {
 });
 
 // ── GET /character-follows/:characterKey/influence-context — story injection ──
-router.get('/:characterKey/influence-context', requireAuth, async (req, res) => {
+router.get('/:characterKey/influence-context', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const db = req.app.locals.db || require('../models');
 
   try {

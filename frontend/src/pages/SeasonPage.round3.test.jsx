@@ -89,8 +89,10 @@ function Where() {
   return <span data-testid="where">{loc.pathname}{loc.search}</span>;
 }
 function renderPage(search = '') {
+  // These tests are about a named tab. With no ?tab= the page picks its own default (SeasonPage.defaultTab.test.jsx), so the Overview is named here.
+  const at = /[?&]tab=/.test(search) ? search : `${search ? `${search}&` : '?'}tab=overview`;
   return render(
-    <MemoryRouter initialEntries={[`/shows/show-1/season${search}`]}>
+    <MemoryRouter initialEntries={[`/shows/show-1/season${at}`]}>
       <Routes>
         <Route path="/shows/:showId/season" element={<><SeasonPage /><Where /></>} />
         <Route path="*" element={<Where />} />
@@ -136,26 +138,106 @@ beforeEach(() => {
 const getUrls = () => vi.mocked(api.get).mock.calls.map((c) => c[0]);
 
 describe('the health line', () => {
-  test('in the hero: the tone chip, the part in progress, the goals behind, the next release', async () => {
+  test('the tone chip in the hero; the phase in progress, the goals behind and the AI spot on the Overview', async () => {
     renderPage();
     const line = await screen.findByTestId('szn-health');
     expect(within(screen.getByTestId('szn-hero')).getByTestId('szn-health')).toBe(line);
     // A release within three days (Needs attention's own "soon" item): Needs attention.
     await waitFor(() => expect(within(line).getByTestId('szn-health-tone').textContent).toBe('Needs attention'));
-    expect(within(line).getByTestId('szn-health-part').textContent).toMatch(/Part 1 is 2 of 3 ready/);
-    expect(within(line).getByTestId('szn-health-goals').textContent).toMatch(/1 goal behind/);
-    expect(within(line).getByTestId('szn-health-release').textContent).toMatch(/next release \w{3}, Nov 1/);
-    // The AI's "What should I do next?" spot is there, empty.
+    // The hero keeps the tone alone (2026-11-20): the counts and the AI spot are the Overview's.
+    for (const k of ['part', 'goals', 'release']) expect(within(line).queryByTestId(`szn-health-${k}`)).toBeNull();
+    expect(within(screen.getByTestId('szn-hero')).queryByTestId('szn-slot-next-step')).toBeNull();
+    const details = within(screen.getByTestId('szn-panel-overview')).getByTestId('szn-health-details');
+    expect(within(details).getByTestId('szn-health-part').textContent).toMatch(/Phase 1 is 2 of 3 ready/);
+    expect(within(details).getByTestId('szn-health-goals').textContent).toMatch(/1 goal behind/);
+    // The next release is said once, by its card (it was also a line here).
+    expect(within(details).queryByTestId('szn-health-release')).toBeNull();
+    expect(within(screen.getByTestId('szn-panel-overview')).getByTestId('szn-next-release').textContent).toMatch(/\w{3}, Nov 1/);
     // The AI button sits in its spot; nothing is asked until it is pressed.
-    expect(within(within(line).getByTestId('szn-slot-next-step')).getByTestId('szn-next-step-ask')).toBeTruthy();
+    expect(within(within(details).getByTestId('szn-slot-next-step')).getByTestId('szn-next-step-ask')).toBeTruthy();
+    expect(vi.mocked(api.post)).not.toHaveBeenCalled();
+  });
+
+  test('on another tab the hero still says the tone, and the counts are not there', async () => {
+    renderPage('?tab=roadmap');
+    const line = await screen.findByTestId('szn-health');
+    await waitFor(() => expect(within(line).getByTestId('szn-health-tone').textContent).toBe('Needs attention'));
+    expect(screen.queryByTestId('szn-health-details')).toBeNull();
+    expect(screen.queryByTestId('szn-stats')).toBeNull();
+    expect(screen.queryByTestId('szn-next-step-ask')).toBeNull();
   });
 
   test('a past season: Season complete, its own episodes, no goals', async () => {
     renderPage('?season=1');
-    const line = await screen.findByTestId('szn-health');
-    expect(within(line).getByTestId('szn-health-tone').textContent).toBe('Season complete');
-    expect(within(line).getByTestId('szn-health-part').textContent).toMatch(/The episode is done/);
-    expect(within(line).queryByTestId('szn-health-goals')).toBeNull();
+    // A finished season is said once on the header, by its lifecycle (S2): no health chip saying "Season complete" beside it.
+    const hero = await screen.findByTestId('szn-hero');
+    expect(within(hero).getByTestId('szn-lifecycle').textContent).toBe('Completed');
+    expect(within(hero).queryByTestId('szn-health')).toBeNull();
+    expect(within(hero).queryByTestId('szn-hero-phase')).toBeNull();
+    const details = await screen.findByTestId('szn-health-details');
+    expect(within(details).getByTestId('szn-health-part').textContent).toMatch(/The episode is done/);
+    expect(within(details).queryByTestId('szn-health-goals')).toBeNull();
+    // A past season is read, not acted on: no AI button.
+    expect(within(details).queryByTestId('szn-next-step-ask')).toBeNull();
+  });
+});
+
+// What an open of the Overview reads (S1, 2026-11-20): the stat cards, the
+// season's counts and "What should I do next?" moved into it from the page's
+// header, and they read nothing of their own. The list is what the page
+// read before the move (the same test passes on the page as it was, opened
+// at ?tab=overview); a read added to the Overview fails here.
+const OVERVIEW_READS = [
+  '/api/v1/episodes?show_id=show-1&limit=100&page=1',
+  '/api/v1/opportunities/show-1',
+  '/api/v1/shows/show-1',
+  '/api/v1/world/show-1/arc',
+  '/api/v1/world/show-1/events',
+  '/api/v1/world/show-1/goals',
+  '/api/v1/world/show-1/release-schedule',
+  '/api/v1/world/show-1/release-schedule',
+  '/api/v1/world/show-1/season/goal-coverage',
+  '/api/v1/world/show-1/season/goal-coverage',
+  '/api/v1/world/show-1/season/insights',
+  '/api/v1/world/show-1/season/knows',
+  '/api/v1/world/show-1/season/needs',
+  '/api/v1/world/show-1/season/proposals',
+  '/api/v1/world/show-1/season/reveals',
+  '/api/v1/world/show-1/season/roadmap',
+  '/api/v1/world/show-1/season/threads',
+];
+describe('what the Overview reads', () => {
+  const settle = async () => {
+    await screen.findByTestId('szn-stats');
+    await waitFor(() => expect(within(screen.getByTestId('szn-health')).getByTestId('szn-health-tone').textContent).toBe('Needs attention'));
+    await screen.findByTestId('szn-reveal-matrix').catch(() => null);
+    await new Promise((r) => setTimeout(r, 50));
+  };
+  test('the default open and ?tab=overview make the same reads as before, each as often, and no write', async () => {
+    renderPage();
+    await settle();
+    expect([...getUrls()].sort()).toEqual(OVERVIEW_READS);
+    for (const m of ['post', 'put', 'patch', 'delete']) if (api[m]) expect(vi.mocked(api[m])).not.toHaveBeenCalled();
+  });
+
+  test('?tab=overview reads the same', async () => {
+    renderPage('?tab=overview');
+    await settle();
+    expect([...getUrls()].sort()).toEqual(OVERVIEW_READS);
+  });
+});
+
+describe('Producer Mode\'s tabs with a past season open', () => {
+  test('Season stays the open tab; the other five go to Producer Mode for the same show, with no season in their address', async () => {
+    renderPage('?season=1&tab=results');
+    const nav = await screen.findByRole('navigation', { name: 'Producer Mode' });
+    await screen.findByTestId('szn-past-season');
+    const links = within(nav).getAllByRole('link');
+    expect(links.filter((a) => a.getAttribute('aria-current') === 'page').map((a) => a.textContent)).toEqual(['Season']);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/shows/show-1/world?tab=overview', '/shows/show-1/season', '/shows/show-1/world?tab=scene-sets',
+      '/shows/show-1/world?tab=characters-list', '/shows/show-1/world?tab=feed', '/shows/show-1/world?tab=release-next',
+    ]);
   });
 });
 
@@ -232,13 +314,24 @@ describe('the Calendar view', () => {
 });
 
 describe('Print plan', () => {
-  test('the hero links the one-pager, for the season shown', async () => {
+  test('the header\'s ⋯ menu links the one-pager, for the season shown (it was a button on the hero)', async () => {
     renderPage();
-    expect((await screen.findByTestId('szn-print-plan')).getAttribute('href')).toBe('/shows/show-1/season/plan');
+    expect(screen.queryByTestId('szn-print-plan')).toBeNull();
+    fireEvent.click(await screen.findByTestId('szn-hero-more'));
+    const link = within(screen.getByTestId('szn-hero-menu')).getByRole('menuitem', { name: 'Print plan' });
+    expect(link).toBe(screen.getByTestId('szn-print-plan'));
+    expect(link.tagName).toBe('A');
+    expect(link.getAttribute('href')).toBe('/shows/show-1/season/plan');
+    // Escape closes the menu, as before.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('szn-hero-menu')).toBeNull();
   });
   test('a past season keeps Print plan (and only that)', async () => {
     renderPage('?season=1');
-    expect((await screen.findByTestId('szn-print-plan')).getAttribute('href')).toBe('/shows/show-1/season/plan?season=1');
+    fireEvent.click(await screen.findByTestId('szn-hero-more'));
+    const items = within(screen.getByTestId('szn-hero-menu')).getAllByRole('menuitem');
+    expect(items.map((i) => i.textContent.trim())).toEqual(['Print plan']);
+    expect(items[0].getAttribute('href')).toBe('/shows/show-1/season/plan?season=1');
     expect(screen.queryByTestId('szn-edit-season')).toBeNull();
   });
 });

@@ -28,13 +28,14 @@ const PINNED = {
   'src/services/beat14Opportunity.js': { traced: false, locks: { episodes: 2 } },
   'src/services/dealTermsDraftService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/dealTypeDraftService.js': { traced: false, locks: { world_events: 1 } },
-  'src/services/episodeCompletionService.js': { traced: false, locks: { episodes: 1 } },
+  'src/services/episodeCompletionService.js': { traced: false, locks: { episodes: 1, world_events: 1 } }, // A2 (2026-11-14): the event row, after the episode and the ledger and before the offers, so Complete (episode, ledger, event, offers) and Start Episode (episode, event, offers) agree; raced in compensationEligibility.integration.test.js
   'src/services/episodeEstimateBackfill.js': { traced: false, locks: { episodes: 1 } },
   'src/services/eventCostsService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/eventDocumentsService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/financialTransactionService.js': { traced: false, locks: { episodes: 1 } },
   'src/services/sceneSetVersionService.js': { traced: false, locks: { world_events: 1 } },
   'src/services/seasonFullSpecials.js': { traced: true, locks: { world_events: 1 } },
+  'src/services/styleSheetDistributionService.js': { traced: false, locks: { episodes: 1 } }, // 2026-11-15: writeMetadata locks the one episode row it then writes (its style-sheet entry) and takes no other lock in that transaction
   'src/services/seasonGoalCoverage.js': { traced: false, locks: { world_events: 1 } },
   'src/services/seasonIntentionService.js': { traced: true, locks: { season_slots: 1 } },
   'src/services/seasonLoader.js': { traced: true, locks: { show_arcs: 1, season_slots: 1 } },

@@ -48,7 +48,7 @@ export function gapText(after, slotCount = 24) {
 export function placeReason(place, part = null) {
   if (!place) return '';
   const head = place.by === 'no_date'
-    ? `No date yet: place it when you know. For now it follows E${place.after}, the last episode of ${part?.title ? `Part ${part.number}: ${part.title}` : 'the part in progress'}.`
+    ? `No date yet: place it when you know. For now it follows E${place.after}, the last episode of ${part?.title ? `Phase ${part.number}: ${part.title}` : 'the phase in progress'}.`
     : `In story order: its date comes just after E${place.after}'s event.`;
   const skipped = place.skipped_released > 0 ? ` The weeks before it are already released, so it takes the first gap still to come.` : '';
   return `${head}${skipped}`;

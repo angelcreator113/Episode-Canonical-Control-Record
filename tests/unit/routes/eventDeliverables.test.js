@@ -36,7 +36,8 @@ jest.mock('../../../src/models', () => ({
       mockCalls.push({ sql, replacements: r });
       // The approval's deal read: these events are legacy (no deal type), so
       // no content fee is booked and the ledger is not touched.
-      if (/^SELECT id, name, deal_type, deal_components, host, host_brand, used_in_episode_id FROM world_events WHERE id = :eventId$/.test(sql)) {
+      // A2: it also reads the offer the event was made from (none here).
+      if (/^SELECT id, name, deal_type, deal_components, appearance_required, host, host_brand, used_in_episode_id, opportunity_id FROM world_events WHERE id = :eventId$/.test(sql)) {
         const ev = mockEvents[r.eventId];
         return [ev ? [{ ...ev, deal_type: null }] : []];
       }
@@ -121,7 +122,7 @@ jest.mock('../../../src/middleware/auth', () => {
     // A request with a header is signed in; one without goes through the
     // real requireAuth, whose no-header path answers 401 AUTH_REQUIRED.
     requireAuth: (req, res, next) => {
-      if (req.headers.authorization) { req.user = { id: 'u1' }; return next(); }
+      if (req.headers.authorization) { req.user = { id: 'u1', groups: ['ADMIN'] }; return next(); }
       return actual.requireAuth(req, res, next);
     },
   };

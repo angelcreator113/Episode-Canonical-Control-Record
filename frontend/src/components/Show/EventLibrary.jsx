@@ -24,10 +24,12 @@
  * a line to each card with `cardExtra(ev)` (the slot, the goals it moves, a
  * pencil).
  */
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useContext } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MoreHorizontal, ArrowRight, Plus, Lightbulb, AlertTriangle, Search, ChevronDown } from 'lucide-react';
 import api from '../../services/api';
+import AuthContext from '../../contexts/AuthContext';
+import { isAdmin } from '../../utils/authGroups';
 import { S, isFailureToast } from './producerStyles';
 import { InvitationButton } from '../../pages/InvitationGenerator';
 import EventOutfitPicker from '../EventOutfitPicker';
@@ -49,6 +51,7 @@ import OfferDecisionDialog from '../OfferDecisionDialog';
 import { packageHref } from '../../lib/eventFlow';
 
 export default function EventLibrary({ showId, scope = null, cardExtra = null, onChanged = null, data = null, packageFrom = null }) {
+  const admin = isAdmin(useContext(AuthContext)?.user);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -308,14 +311,17 @@ export default function EventLibrary({ showId, scope = null, cardExtra = null, o
     if (!showId) return;
     let cancelled = false;
     (async () => {
+      // The seed is an admin's write; a refused or failed seed never hides the config.
+      if (admin) {
+        try { await api.post(`/api/v1/shows/${showId}/seed-balance`); } catch (err) { console.error('[EventLibrary] seed failed:', err?.message); }
+      }
       try {
-        await api.post(`/api/v1/shows/${showId}/seed-balance`);
         const res = await api.get(`/api/v1/shows/${showId}/financial-config`);
         if (!cancelled) setFinanceConfig(res.data);
       } catch (err) { console.error('[EventLibrary] finance config load failed:', err?.message); }
     })();
     return () => { cancelled = true; };
-  }, [showId]);
+  }, [showId, admin]);
 
   // Forecast fetch — refire whenever the open event changes OR its
   // outfit_pieces change (user saved a new outfit in the picker), or
@@ -874,11 +880,13 @@ The revised event should feel like a completely different experience from the si
                   const ids = Array.from(selectedEvents);
                   try {
                     setToast(`🎬 Generating episode from ${ids.length} event${ids.length === 1 ? '' : 's'}...`);
-                    const res = await offerDecision.run((decision) => api.post(`/api/v1/world/${showId}/events/generate-episode-from-many`, {
+                    // The attempt's Idempotency-Key goes with each request (config); the
+                    // status check asks about the anchor, the first event chosen.
+                    const res = await offerDecision.run((decision, extra, config) => api.post(`/api/v1/world/${showId}/events/generate-episode-from-many`, {
                       event_ids: ids,
                       draft_script: draftScriptOnGenerate,
-                      ...(decision ? { offer_decision: decision } : {}),
-                    }));
+                      ...(decision ? { offer_decision: decision, ...extra } : {}),
+                    }, config), { check: () => api.get(`/api/v1/world/${showId}/events/${ids[0]}/start-readiness`) });
                     if (res.data.success) {
                       setEpisodeBlueprint(res.data.data);
                       const ep = res.data.data.episode;

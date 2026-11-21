@@ -32,7 +32,7 @@ router.get('/', validateEpisodeQuery, requireAuth, asyncHandler(episodeControlle
 router.get(
   '/:id/wardrobe',
   validateUUIDParam('id'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(wardrobeController.getEpisodeWardrobe)
 );
 
@@ -67,7 +67,7 @@ router.delete(
 router.get(
   '/:id/outfits',
   validateUUIDParam('id'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(outfitSetsController.getEpisodeOutfits)
 );
 
@@ -111,6 +111,8 @@ router.delete(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   requireAuth,
+  // It also clears the asset's own episode link; not for a document presentation (V2-2a).
+  require('../utils/documentPresentationAssets').protectDocumentPresentations((req) => req.params.assetId),
   asyncHandler(episodeController.removeEpisodeAsset)
 );
 
@@ -318,7 +320,16 @@ router.get('/:id/events', validateUUIDParam('id'), requireAuth, async (req, res)
     }
     const { listEpisodeEvents } = require('../services/episodeEventsService');
     const data = await listEpisodeEvents(models, episode.id);
-    return res.json({ success: true, ...data });
+    // Whether another event can be linked now, so the Events card does not
+    // offer an action the server will refuse (services/episodeSecondaryEvents).
+    // Read-only and additive: a failed read leaves it out, and the list stands.
+    let addEvent;
+    try {
+      addEvent = await require('../services/episodeSecondaryEvents').addEventAvailability(models.sequelize, episode.id);
+    } catch (availabilityErr) {
+      console.error('[Episodes] GET /:id/events: add-event availability could not be read:', availabilityErr.message);
+    }
+    return res.json({ success: true, ...data, ...(addEvent ? { add_event: addEvent } : {}) });
   } catch (error) {
     console.error('[Episodes] GET /:id/events failed:', error.message);
     return res.status(500).json({ success: false, error: 'Failed to load episode events' });
@@ -489,11 +500,11 @@ router.delete('/:id/title-card', validateUUIDParam('id'), requireAuth, async (re
 // cost. Every image route checks the photo belongs to this episode.
 function sendLookbookError(res, err, where) {
   console.error(`[Lookbook] ${where} failed:`, err.message);
-  if (err.status) return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+  if (err.status) return res.status(err.status).json({ success: false, error: err.message, code: err.code, ...(err.details ? { details: err.details } : {}) });
   return res.status(500).json({ success: false, error: 'The Lookbook could not be saved. Try again.' });
 }
 
-router.get('/:id/lookbook', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/lookbook', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { getLookbook } = require('../services/episodeLookbookService');
@@ -594,7 +605,7 @@ router.delete('/:id/lookbook/images/:imageId', validateUUIDParam('id'), validate
 // The 1024 x 1536 style sheet from canon data and the Lookbook: read it
 // (images inlined so the browser can draw the PNG), approve it, reopen it.
 // No AI, no image generation, no cost.
-router.get('/:id/style-sheet', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/style-sheet', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { buildStyleSheet } = require('../services/styleSheetService');
@@ -616,7 +627,7 @@ router.post('/:id/style-sheet/approve', validateUUIDParam('id'), requireAuth, as
 
 // One export size of the approved sheet, drawn on the server (Task #2877):
 // sheet, pin, story, post, look or pdf. Refused while Draft or out of date.
-router.get('/:id/style-sheet/export/:size', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/style-sheet/export/:size', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { exportStyleSheet } = require('../services/styleSheetService');
@@ -632,7 +643,7 @@ router.get('/:id/style-sheet/export/:size', validateUUIDParam('id'), requireAuth
 
 // Evoni's five designs (2026-10-22): one design in one size, or all five
 // in one size (or "all" sizes) as a zip. Approved, up-to-date sheets only.
-router.get('/:id/style-sheet/design/:design/:size', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/style-sheet/design/:design/:size', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { exportDesign } = require('../services/styleSheetService');
@@ -646,7 +657,7 @@ router.get('/:id/style-sheet/design/:design/:size', validateUUIDParam('id'), req
   }
 });
 
-router.get('/:id/style-sheet/designs-zip/:size', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/style-sheet/designs-zip/:size', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { exportDesignsZip } = require('../services/styleSheetService');
@@ -674,7 +685,7 @@ router.post('/:id/style-sheet/reopen', validateUUIDParam('id'), requireAuth, asy
 // Send the approved sheet's export sizes to the episode's Distribution with a
 // caption draft; edit the caption and the Shop the Look toggle; take it out.
 // Stored in episodes.distribution_metadata.style_sheet. Nothing is posted.
-router.get('/:id/style-sheet/distribution', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.get('/:id/style-sheet/distribution', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { getStyleSheetDistribution } = require('../services/styleSheetDistributionService');
@@ -721,9 +732,45 @@ router.post('/:id/style-sheet/distribution/site', validateUUIDParam('id'), requi
   try {
     const models = require('../models');
     const { publishStyleSheetToSite } = require('../services/styleSheetDistributionService');
-    return res.json({ success: true, data: await publishStyleSheetToSite(models, req.params.id, req.user) });
+    // The body is what she confirmed of each product: { links: [{ piece_id, real_brand, real_product_name, retailer, url, affiliate, match, confirmed }] },
+    // and what she declares of the look image: { image_rights: { category, note? } }; without it the look is text only.
+    return res.json({ success: true, data: await publishStyleSheetToSite(models, req.params.id, req.user, { links: req.body?.links, imageRights: req.body?.image_rights }) });
   } catch (err) {
     return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site');
+  }
+});
+
+// Withdraw the look image's rights without publishing again (Evoni, 2026-11-15): the image stops being shown at
+// once; the look, its products and links stay. Safe to ask twice. Nothing in storage is deleted or moved.
+router.post('/:id/style-sheet/distribution/site/image/withdraw', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { withdrawLookImageRights } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await withdrawLookImageRights(models, req.params.id, req.user) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site/image/withdraw');
+  }
+});
+
+// Check whether a copy that is no longer shown can still be fetched at its public address: { key }.
+router.post('/:id/style-sheet/distribution/site/image/check', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { checkPublicCopy } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await checkPublicCopy(models, req.params.id, req.user, { key: req.body?.key }) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'POST /:id/style-sheet/distribution/site/image/check');
+  }
+});
+
+// A product of the published look can no longer be bought, or can again: { piece_id, available }.
+router.patch('/:id/style-sheet/distribution/site/links', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const models = require('../models');
+    const { setPublishedLinkAvailability } = require('../services/styleSheetDistributionService');
+    return res.json({ success: true, data: await setPublishedLinkAvailability(models, req.params.id, { pieceId: req.body?.piece_id, available: req.body?.available }) });
+  } catch (err) {
+    return sendLookbookError(res, err, 'PATCH /:id/style-sheet/distribution/site/links');
   }
 });
 
@@ -1058,7 +1105,7 @@ router.delete(
 router.get(
   '/:id/timeline/wardrobe/current',
   validateUUIDParam('id'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(require('../controllers/timelinePlacementsController').getCurrentWardrobe)
 );
 
@@ -1164,7 +1211,7 @@ router.delete(
 router.get(
   '/:episodeId/timeline/wardrobe/current',
   validateUUIDParam('episodeId'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(timelinePlacementsController.getCurrentWardrobe)
 );
 
@@ -1229,7 +1276,7 @@ router.delete(
  * GET /api/v1/episodes/:id/wardrobe-defaults
  * Get episode wardrobe defaults for all characters
  */
-router.get('/:id/wardrobe-defaults', requireAuth, async (req, res) => {
+router.get('/:id/wardrobe-defaults', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { EpisodeWardrobeDefault, Asset } = require('../models');
 
@@ -1274,6 +1321,10 @@ router.post('/:id/wardrobe-defaults', requireAuth, async (req, res) => {
       return res.status(400).json({
         error: 'character_name is required',
       });
+    }
+    {
+      const { anyDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
+      if (await anyDocumentPresentation(outfit_asset_id)) return refuseDocumentPresentation(res);
     }
 
     // Upsert: create or update

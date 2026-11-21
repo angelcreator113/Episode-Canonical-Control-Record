@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 const ep1 = require('../fixtures/myLittleListEpisode1');
 
 const { sequelize } = models;
@@ -26,14 +27,22 @@ const uuid = () => crypto.randomUUID();
 const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: sequelize.QueryTypes.SELECT });
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('My Little List ♡ (Phase 1)', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the last test here).
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; an editor is refused them (a test below).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-myLittleList', email: 'admin@myLittleList.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
+  const readOnly = readOnlyTokens('mll');
   const shows = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-mll', email: 'test@mll.dev', name: 'MLL', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-admin-mll', email: 'admin@mll.dev', name: 'MLL', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
@@ -79,7 +88,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
   }
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
-  const listAt = (ids, beat, line = 0) => auth(request(app).get(`/api/v1/episodes/${ids.ep}/my-little-list?beat=${beat}&line=${line}`));
+  const listAt = (ids, beat, line = 0) => asAdmin(request(app).get(`/api/v1/episodes/${ids.ep}/my-little-list?beat=${beat}&line=${line}`));
 
   it('the migration added personal_list, NOT NULL with {} for existing rows', async () => {
     const [col] = await q(`SELECT is_nullable, column_default FROM information_schema.columns
@@ -132,5 +141,25 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     expect(asJson(row.personal_list).reminders).toEqual([]);
     const [{ status }] = await q('SELECT status FROM event_deliverables WHERE id = :reel', ids);
     expect(status).toBe('pending');
+  });
+  test("the wardrobe's reads are an ADMIN's: an editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/episodes/00000000-0000-4000-8000-000000000000/my-little-list`).set('Authorization', `Bearer ${readOnly.editor}`);
+    expect(res.status).toBe(403);
+  });
+
+  guardIt('signed out, a viewer and an editor cannot add, tick, edit or remove a reminder: the list is as it was', async () => {
+    const ids = await seed();
+    const items = `/api/v1/episodes/${ids.ep}/my-little-list/items`;
+    const added = await auth(request(app).post(items)).send({ title: 'Check my coins' });
+    expect(added.status).toBe(201);
+    const { key } = added.body;
+    const state = async () => JSON.stringify(await q('SELECT tasks, social_tasks, personal_list, status, updated_at FROM episode_todo_lists WHERE episode_id = :ep', ids));
+    const before = await state();
+    expect(asJson(JSON.parse(before)[0].personal_list).reminders).toHaveLength(1);
+    await expectWriteRefused(() => request(app).post(items).send({ title: 'Not mine to add' }), readOnly);
+    await expectWriteRefused(() => request(app).patch(`${items}/${key}`).send({ done: true, beat: 3 }), readOnly);
+    await expectWriteRefused(() => request(app).patch(`${items}/${key}`).send({ title: 'Changed', beat: 3 }), readOnly);
+    await expectWriteRefused(() => request(app).delete(`${items}/${key}?beat=3`), readOnly);
+    expect(await state()).toBe(before);
   });
 });

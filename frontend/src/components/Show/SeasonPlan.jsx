@@ -22,6 +22,7 @@ import { eventCardDetails } from '../../utils/eventCardSummary';
 import '../../pages/WorldAdmin.css';
 import { packageHref } from '../../lib/eventFlow';
 import { withSkippedNote } from '../../lib/snapshotFreeze';
+import { slotEvent, slotEventNote, NO_PRIMARY_EVENT } from '../../lib/seasonSlotEvent';
 
 // ─── SEASON TAB COMPONENT ───────────────────────────────────────────────────
 // Planning Insights (§8(ff) A8, Q13, Q15): per slot the plan beside the
@@ -478,7 +479,7 @@ const slotSelectStyle = { width: '100%', marginTop: 6, fontSize: 12, padding: '4
 // (its twists, secrets and the relationships it needs, SlotNotes), and the
 // pencil list is ranked by fit for this slot, each event with a reason.
 // readOnly: a past season (the Season page's switcher, 2026-10-25): read, never pencilled or re-planned.
-export function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null, api = null, needs = [], onNeedsChanged, readOnly = false }) {
+export function SlotPanel({ slot, showId, available, busy, episode, event, onPencil, onIntention, onClose, editing = false, error = null, children = null, api = null, needs = [], onNeedsChanged, readOnly = false, season = null }) {
   const fit = useEventFit(api, showId, slot.id, !readOnly && !slot.locked && available.length > 0);
   const options = rankedOptions(available, fit);
   const title = slotTitle(slot);
@@ -505,7 +506,8 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
       )}
 
       <dl className="wa-arc-facts">
-        <div><dt>Event</dt><dd>{slot.event?.name || 'None pencilled'}</dd></div>
+        {/* A started slot with no event linked to it has an event (the episode's); "None pencilled" is for a slot nothing has started in. */}
+        <div><dt>Event</dt><dd data-testid={`season-slot-event-${slot.slot_number}`}>{slotEvent(slot)?.name || (slot.episode ? (slot.event_view ? NO_PRIMARY_EVENT : 'Not linked to this slot') : 'None pencilled')}{slot.episode && slotEventNote(slot)?.reasons ? ` · ${slotEventNote(slot).label}` : ''}</dd></div>
         {deal && <div><dt>Deal{deal.label ? ` · ${deal.label}` : ''}</dt><dd>{deal.pays}</dd></div>}
       </dl>
 
@@ -541,11 +543,23 @@ export function SlotPanel({ slot, showId, available, busy, episode, event, onPen
       {children}
       {error && <p className="wa-season-inline-error" role="alert" data-testid="season-slot-error">{error}</p>}
       {slot.episode ? (
-        <Link className="wa-arc-primary" to={`/episodes/${slot.episode.id}`}>
-          {slot.state === 'done' ? 'Open episode' : 'Continue episode'}
-        </Link>
+        <>
+          <Link className="wa-arc-primary" to={`/episodes/${slot.episode.id}`}>
+            {slot.state === 'done' ? 'Open episode' : 'Continue episode'}
+          </Link>
+          {/* A started slot keeps the way to its event package. When the event is not linked to the slot, it says exactly that: the episode has its events (2026-11-12). */}
+          {slotEvent(slot) && (
+            <Link className="wa-arc-secondary" to={packageHref(showId, slotEvent(slot).id, { kind: 'roadmap', slot: slot.slot_number, season })} data-testid={`season-slot-package-${slot.slot_number}`}>Open the event package</Link>
+          )}
+          {/* What is left to say about a started slot's event: none linked, or an association that needs review (lib/seasonSlotEvent). */}
+          {slotEventNote(slot) && (
+            <p className="szn-muted" data-testid={`season-slot-no-event-${slot.slot_number}`}>
+              {slotEventNote(slot).label}{slotEventNote(slot).reasons ? `: ${slotEventNote(slot).reasons}` : ''}. <Link to={`/episodes/${slot.episode.id}?tab=overview`}>View the episode's events.</Link>
+            </p>
+          )}
+        </>
       ) : slot.event ? (
-        <Link className="wa-arc-primary" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })}>Open the event package</Link>
+        <Link className="wa-arc-primary" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number, season })} data-testid={`season-slot-pencil-package-${slot.slot_number}`}>Open the event package</Link>
       ) : null}
     </section>
   );
@@ -571,7 +585,7 @@ export function AdvanceConfirm({ warning, advancing, onConfirm, onCancel, S }) {
       {open.length > 0 && (
         <p className="wa-arc-confirm-line" data-testid="season-confirm-open-slots">
           {open.length} {open.length === 1 ? 'slot stays' : 'slots stay'} open: {open.map((sl) => `E${sl.slot_number}`).join(', ')}.
-          {' '}{final ? 'The season completes with them unfilled.' : `They stay in Part ${warning.current_phase?.phase ?? ''} and can still be filled.`}
+          {' '}{final ? 'The season completes with them unfilled.' : `They stay in Phase ${warning.current_phase?.phase ?? ''} and can still be filled.`}
         </p>
       )}
       {unmet.length > 0 && (
@@ -750,7 +764,7 @@ export function AdvanceBar({ roadmap, S, onAdvance, advancing, advanceWarning, o
       {!roadmap.phase_boundary && currentPart && openInPart.length > 0 && doneInPart > 0 && onAdvance && (
         <div className="wa-arc-open-advance" data-testid="season-advance-open">
           <p className="wa-arc-open-advance-text">
-            Part {currentPart.phase}: {currentPart.title} · {doneInPart} of {currentPart.slots.length} slots done
+            Phase {currentPart.phase}: {currentPart.title} · {doneInPart} of {currentPart.slots.length} slots done
           </p>
           {advanceWarning ? (
             <AdvanceConfirm warning={advanceWarning} advancing={advancing} onConfirm={onConfirmAdvance} onCancel={onCancelAdvance} S={S} />
@@ -777,6 +791,8 @@ export function SlotSide({ controls, roadmap, S, api, showId, onChanged, setToas
         <SlotPanel
           onClose={() => setSheetOpen(false)}
           slot={selected} showId={showId} available={available} busy={busySlot === selected.id}
+          // The package's way back returns to this season's Roadmap (lib/eventFlow).
+          season={roadmap?.season_number ?? null}
           episode={episodes.find((e) => e.id === selected.episode?.id) || null}
           event={events.find((e) => e.id === selected.event?.id) || null}
           onPencil={(value) => pencil(selected, value)}

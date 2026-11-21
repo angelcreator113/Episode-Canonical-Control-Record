@@ -1,6 +1,7 @@
 const { models } = require('../models');
 const { TimelinePlacement, EpisodeScene, Asset, Wardrobe } = models;
 const { literal } = require('sequelize');
+const { anyDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 
 const SCENE_INCLUDE = {
   model: EpisodeScene,
@@ -124,6 +125,10 @@ exports.createPlacement = async (req, res) => {
         error: 'Either sceneId (scene-attached) or absoluteTimestamp (time-based) is required',
       });
     }
+
+    // A document presentation is not placed like other assets (whatever the
+    // placement's type: the id is stored either way).
+    if (await anyDocumentPresentation(assetId)) return refuseDocumentPresentation(res);
 
     // Create placement
     const placement = await TimelinePlacement.create({

@@ -45,7 +45,8 @@ jest.mock('../../../src/services/episodeStoryRecord', () => ({ draftLater: jest.
 jest.mock('../../../src/services/threadInbox', () => ({ openSeedsLater: jest.fn() }));
 jest.mock('../../../src/routes/wardrobe', () => ({}));
 jest.mock('../../../src/services/careerPipelineService', () => ({
-  onEpisodeCompleted: jest.fn(async () => ({ opportunities_advanced: [] })),
+  // A2: the event's own offer is completed inside the completion's transaction.
+  completeOwnerOffer: jest.fn(async () => ({ opportunities_advanced: [], opportunities_unaccepted: [] })),
   spawnGoalUnlocks: jest.fn(async () => []),
 }));
 const mockModels = {};

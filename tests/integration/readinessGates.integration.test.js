@@ -37,6 +37,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 (shouldSkip ? describe.skip : describe)('Readiness gates (audit GATE-01..03)', () => {
   const show = uuid();
   let token;
+  // The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization). This
+  // suite reads them as one; its own account, an editor, is refused them (the last test here).
+  const adminToken = TokenService.generateTokenPair({ id: 'test-admin-readinessGates', email: 'admin@readinessGates.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
 
   async function episode() {
@@ -90,28 +94,28 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   test('GATE-02: slot coverage names the required slots with no piece, from the show\'s own configuration', async () => {
     const url = `/api/v1/wardrobe/slot-coverage?show_id=${show}`;
-    let res = await auth(request(app).get(url));
+    let res = await asAdmin(request(app).get(url));
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ show_id: show, required_slots: ['outfit', 'shoes'], inventory: 0, covered: false, missing: ['outfit', 'shoes'], text: 'No wardrobe pieces uploaded' });
 
     await run(`INSERT INTO wardrobe (name, clothing_category, show_id, created_at, updated_at) VALUES ('Red heels', 'heels', :show, NOW(), NOW())`, { show });
-    res = await auth(request(app).get(url));
+    res = await asAdmin(request(app).get(url));
     expect(res.body.data).toMatchObject({ inventory: 1, covered: false, missing: ['outfit'], text: 'Missing required slot: outfit' });
 
     await run(`INSERT INTO wardrobe (name, clothing_category, show_id, created_at, updated_at) VALUES ('Gala dress', 'dress', :show, NOW(), NOW())`, { show });
-    res = await auth(request(app).get(url));
+    res = await asAdmin(request(app).get(url));
     expect(res.body.data).toMatchObject({ inventory: 2, covered: true, missing: [], text: 'Required slots covered: outfit, shoes' });
 
     await run(`UPDATE shows SET metadata = '{"required_slots": ["outfit", "shoes", "jewelry", "accessories", "fragrance"]}'::jsonb WHERE id = :show`, { show });
-    res = await auth(request(app).get(url));
+    res = await asAdmin(request(app).get(url));
     expect(res.body.data).toMatchObject({ covered: false, missing: ['jewelry', 'accessories', 'fragrance'], text: 'Missing required slots: jewelry, accessories, fragrance' });
     expect(res.body.data.slots.map((s) => [s.slot, s.required, s.count])).toEqual([
       // Hair (Task #3167) is a slot, optional unless the show requires it.
       ['outfit', true, 1], ['shoes', true, 1], ['jewelry', true, 0], ['accessories', true, 0], ['hair', false, 0], ['fragrance', true, 0],
     ]);
 
-    expect((await auth(request(app).get('/api/v1/wardrobe/slot-coverage'))).status).toBe(400);
-    expect((await auth(request(app).get(`/api/v1/wardrobe/slot-coverage?show_id=${uuid()}`))).status).toBe(404);
+    expect((await asAdmin(request(app).get('/api/v1/wardrobe/slot-coverage'))).status).toBe(400);
+    expect((await asAdmin(request(app).get(`/api/v1/wardrobe/slot-coverage?show_id=${uuid()}`))).status).toBe(404);
   });
 
   test('GATE-03: a script generated but not saved says so and keeps the script; saving later does not regenerate', async () => {
@@ -146,5 +150,9 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(ok.status).toBe(200);
     expect(ok.body).toMatchObject({ success: true, saved: true, script: SCRIPT });
     expect(ok.body.code).toBeUndefined();
+  });
+  test("the wardrobe's reads are an ADMIN's: this suite's editor is refused", async () => {
+    const res = await request(app).get(`/api/v1/wardrobe/slot-coverage`).set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
   });
 });

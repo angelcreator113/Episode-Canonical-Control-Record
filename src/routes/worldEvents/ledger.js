@@ -18,7 +18,8 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
+const { asRetryable, RetryableConflictError } = require('../../utils/episodeLocks');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { TermsReopenedError, termsReopenedBody } = require('../../utils/eventTermsLock');
 const { loadScopedEvent } = require('../../utils/eventScope');
@@ -29,13 +30,20 @@ const { loadMoneyPreview } = require('./helpers');
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/complete
-router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, async (req, res) => {
+// Admin only (Evoni, 2026-11-12): completing books the ledger, pays deals and
+// changes Lala's stats for good. The same authorization as the legacy
+// POST /episodes/:id/accept (routes/evaluation.js), which runs this operation.
+router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const models = req.app?.get?.('models') || require('../../models');
     const { completeEpisode } = require('../../services/episodeCompletionService');
 
-    const result = await completeEpisode(episodeId, showId, models.sequelize);
+    // Milestone attribution (Evoni, 2026-11-13): an admin's decisions on
+    // rewards whose episode the ledger does not say, recorded against them.
+    const result = await completeEpisode(episodeId, showId, models.sequelize, {
+      milestoneDecisions: req.body?.milestone_decisions ?? null, decidedBy: req.user,
+    });
 
     return res.json({
       success: true,
@@ -48,6 +56,12 @@ router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, async (r
     console.error('[CompleteEpisode] Error:', err);
     // Task #2378: nothing books while the event's terms are reopened.
     if (err instanceof TermsReopenedError) return res.status(err.status).json(termsReopenedBody(err));
+    // A reward whose episode is not known and matters: nothing was written; an admin decides.
+    if (err instanceof require('../../services/episodeCompletionService').MilestoneAttributionError) return res.status(err.status).json(err.toJSON());
+    // Ownership of the event's terms cannot be established (A2): nothing was booked; an admin resolves the offers.
+    if (require('../../services/startOfferDecision').isOfferResolutionError(err)) return res.status(err.status).json(err.toJSON());
+    // A second event with commitments that second events do not carry yet: nothing was written.
+    if (require('../../services/episodeSecondaryEvents').isSecondaryEventError(err)) return res.status(err.status).json(err.toJSON());
     // A two-parter's Part 1 is "to be continued": the event completes with Part 2 (seasonSpecials).
     if (err instanceof require('../../services/seasonSpecials').SpecialsError) {
       return res.status(err.status).json({ success: false, error: err.message, code: err.code });
@@ -56,6 +70,12 @@ router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, async (r
     const { InsufficientCoinsError, insufficientCoinsBody } = require('../../services/coinBalanceGuard');
     if (err instanceof InsufficientCoinsError) {
       return res.status(err.status).json(insufficientCoinsBody(err));
+    }
+    // A lock another writer held: the completion rolled back whole, nothing
+    // was booked. The existing retryable 409, not a 500.
+    const retry = asRetryable(err);
+    if (retry instanceof RetryableConflictError) {
+      return res.status(409).json({ success: false, error: retry.message, code: retry.code });
     }
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -66,13 +86,15 @@ router.post('/world/:showId/episodes/:episodeId/complete', requireAuth, async (r
 // ═══════════════════════════════════════════════════════════════════════
 
 // POST /world/:showId/episodes/:episodeId/finalize-financials
-router.post('/world/:showId/episodes/:episodeId/finalize-financials', requireAuth, async (req, res) => {
+// Admin only, like completion (Evoni, 2026-11-13): finalize books the episode's
+// money, which is the financial half of completing it.
+router.post('/world/:showId/episodes/:episodeId/finalize-financials', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, episodeId } = req.params;
     const models = req.app?.get?.('models') || require('../../models');
     const { finalizeEpisodeFinancials } = require('../../services/financialTransactionService');
 
-    const result = await finalizeEpisodeFinancials(episodeId, showId, models.sequelize);
+    const result = await finalizeEpisodeFinancials(episodeId, showId, models.sequelize, { actor: req.user });
 
     return res.json({
       success: true,
@@ -88,6 +110,13 @@ router.post('/world/:showId/episodes/:episodeId/finalize-financials', requireAut
     if (err instanceof TermsReopenedError) {
       console.error('[Financials] Finalize refused, terms reopened:', err.message);
       return res.status(err.status).json(termsReopenedBody(err));
+    }
+    // A second event with commitments that second events do not carry yet: nothing was written.
+    if (require('../../services/episodeSecondaryEvents').isSecondaryEventError(err)) return res.status(err.status).json(err.toJSON());
+    // Ownership of the event's terms cannot be established (A2): the whole finalize rolled back.
+    if (require('../../services/startOfferDecision').isOfferResolutionError(err)) {
+      console.error('[Financials] Finalize refused, offers unresolved:', err.message);
+      return res.status(err.status).json(err.toJSON());
     }
     const { InsufficientCoinsError, insufficientCoinsBody } = require('../../services/coinBalanceGuard');
     if (err instanceof InsufficientCoinsError) {

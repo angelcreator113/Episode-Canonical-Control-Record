@@ -55,7 +55,7 @@ function mockGets({ goals = [], threads = [] } = {}) {
 }
 function renderSeason() {
   return render(
-    <MemoryRouter initialEntries={['/shows/show-1/season']}>
+    <MemoryRouter initialEntries={['/shows/show-1/season?tab=overview']}>
       <Routes><Route path="/shows/:showId/season" element={<SeasonPage />} /></Routes>
     </MemoryRouter>
   );
@@ -89,7 +89,10 @@ describe('Setting up a season on the Season page', () => {
     renderSeason();
     const hero = await screen.findByTestId('szn-hero');
     expect(within(hero).getByRole('heading', { level: 1 }).textContent).toBe('Soft Luxury Ascension');
-    expect(within(hero).getByText('Complete')).toBeTruthy();
+    // The lifecycle chip says it once (S2): "Completed", with no health chip repeating it.
+    expect(within(hero).getByTestId('szn-lifecycle').textContent).toBe('Completed');
+    expect(within(hero).queryByTestId('szn-health')).toBeNull();
+    expect(within(hero).queryByText('Complete')).toBeNull();
     fireEvent.click(screen.getByTestId('szn-hero-more'));
     fireEvent.click(within(screen.getByTestId('szn-hero-menu')).getByRole('menuitem', { name: 'Start Season 2' }));
     expect(screen.getByRole('heading', { name: /Set up Season 2/ })).toBeTruthy();

@@ -195,7 +195,11 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Remote-Token'],
+  // Idempotency-Key: Start Episode's retry protection (services/
+  // startEpisodeIdempotency), which the pages send (Evoni, 2026-11-13). The
+  // app calls the API from its own origin, where this list is not asked;
+  // it is here so a build served from another allowed origin can still start.
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Remote-Token', 'Idempotency-Key'],
   exposedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200,
 };
@@ -256,6 +260,13 @@ app.use(attachRBAC);
 
 // Capture response data for audit logging
 app.use(captureResponseData);
+
+// ADMIN by default for every state-changing API request (Evoni, 2026-11-15;
+// middleware/adminWriteGuard). Mounted on /api ahead of every router, the
+// legacy /api/* ones included, so a write route added later is an ADMIN's
+// unless config/writeGuardManifest names it. ADMIN_WRITE_GUARD sets it:
+// unset or 'off' does nothing, 'report' only logs, 'enforce' refuses.
+app.use('/api', require('./middleware/adminWriteGuard').adminWriteGuard);
 
 // Teleprompter phone remote (Teleprompter batch 3): mounted ahead of the
 // global /api limiters, because the desktop asks for the phone's commands

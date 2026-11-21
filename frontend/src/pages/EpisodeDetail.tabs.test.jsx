@@ -167,21 +167,64 @@ describe('EpisodeDetail: the tab is the URL (LINK-04)', () => {
   });
 
   // Evoni, 2026-10-17: the page opens on Production → Scenes.
-  test('Ctrl+2 opens Production → Wardrobe, in the URL; no ?tab= is Scenes; an unknown tab has a body', async () => {
+  test('Ctrl+2 opens Production → Wardrobe, in the URL; no ?tab= is the Overview; an unknown tab has a body', async () => {
     renderAt('/episodes/ep-1');
-    expect(await screen.findByTestId('episode-scenes')).toBeTruthy();
+    expect(await screen.findByTestId('episode-overview')).toBeTruthy();
+    expect(screen.queryByTestId('episode-scenes')).toBeNull();
     fireEvent.keyDown(window, { key: '2', ctrlKey: true });
     expect(where()).toBe('/episodes/ep-1?tab=wardrobe');
     await waitFor(() => expect(activeMain()).toBe('Production'));
-    await waitFor(() => expect(screen.queryByTestId('episode-scenes')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('episode-overview')).toBeNull());
 
     fireEvent.click(screen.getByTestId('back'));
-    expect(await screen.findByTestId('episode-scenes')).toBeTruthy();
+    expect(await screen.findByTestId('episode-overview')).toBeTruthy();
   });
 
-  test('?tab=nope lands on Scenes, not on an empty page', async () => {
+  test('?tab=nope lands on the Overview, not on an empty page', async () => {
     renderAt('/episodes/ep-1?tab=nope');
+    expect(await screen.findByTestId('episode-overview')).toBeTruthy();
+  });
+
+  test('a tab named in the address always wins over the default: Production opens Scenes, Overview the Overview, old links their new home', async () => {
+    renderAt('/episodes/ep-1?tab=production');
     expect(await screen.findByTestId('episode-scenes')).toBeTruthy();
+    expect(screen.queryByTestId('episode-overview')).toBeNull();
+  });
+
+  test.each([['overview', 'episode-overview'], ['brief', 'episode-overview'], ['scenes', 'episode-scenes'], ['assets', 'episode-scenes'], ['checklist', 'episode-checklist']])('?tab=%s opens %s', async (tab, testId) => {
+    renderAt(`/episodes/ep-1?tab=${tab}`);
+    expect(await screen.findByTestId(testId)).toBeTruthy();
+  });
+
+  test('other values in the address are not a tab: ?from=… alone still opens the Overview, and is kept', async () => {
+    renderAt('/episodes/ep-1?from=%2Fshows%2Fshow-1%2Fseason');
+    expect(await screen.findByTestId('episode-overview')).toBeTruthy();
+    expect(where()).toBe('/episodes/ep-1?from=%2Fshows%2Fshow-1%2Fseason');
+  });
+
+  test('browser Back and Forward walk the tabs that were opened, from the default Overview and back to it', async () => {
+    renderAt('/episodes/ep-1');
+    expect(await screen.findByTestId('episode-overview')).toBeTruthy();
+    expect(where()).toBe('/episodes/ep-1'); // the default is not written into the address
+    fireEvent.keyDown(window, { key: '2', ctrlKey: true });
+    await waitFor(() => expect(where()).toBe('/episodes/ep-1?tab=wardrobe'));
+    fireEvent.keyDown(window, { key: '1', ctrlKey: true });
+    await waitFor(() => expect(where()).toBe('/episodes/ep-1?tab=overview'));
+    expect(await screen.findByTestId('episode-overview')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('back'));
+    await waitFor(() => expect(where()).toBe('/episodes/ep-1?tab=wardrobe'));
+    await waitFor(() => expect(screen.queryByTestId('episode-overview')).toBeNull());
+    fireEvent.click(screen.getByTestId('back'));
+    await waitFor(() => expect(where()).toBe('/episodes/ep-1'));
+    expect(await screen.findByTestId('episode-overview')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('forward'));
+    await waitFor(() => expect(where()).toBe('/episodes/ep-1?tab=wardrobe'));
+    await waitFor(() => expect(screen.queryByTestId('episode-overview')).toBeNull());
+    fireEvent.click(screen.getByTestId('forward'));
+    await waitFor(() => expect(where()).toBe('/episodes/ep-1?tab=overview'));
+    expect(await screen.findByTestId('episode-overview')).toBeTruthy();
   });
 
   test('?tab=checklist still opens the checklist', async () => {
@@ -244,6 +287,18 @@ describe('EpisodeDetail: the Script tab keeps its work', () => {
       renderAt('/episodes/ep-1?tab=scripts');
       fireEvent.click(await screen.findByTestId('script-edit'));
       fireEvent.click(document.querySelector('.ed-back-btn'));
+      expect(confirm).toHaveBeenCalledWith('The script has unsaved changes. Leave without saving?');
+      expect(where()).toBe('/episodes/ep-1?tab=scripts');
+    } finally { confirm.mockRestore(); }
+  });
+
+  test('"Edit Episode" asks first while the script has unsaved edits, and stays when she says no (PR-05: the prompt is kept)', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      renderAt('/episodes/ep-1?tab=scripts');
+      fireEvent.click(await screen.findByTestId('script-edit'));
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      fireEvent.click(screen.getByRole('button', { name: /Edit Episode/ }));
       expect(confirm).toHaveBeenCalledWith('The script has unsaved changes. Leave without saving?');
       expect(where()).toBe('/episodes/ep-1?tab=scripts');
     } finally { confirm.mockRestore(); }

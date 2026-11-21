@@ -36,6 +36,7 @@ import { nextReadyEvent } from '../components/Show/ShowOverview';
 import { computeEventState } from '../utils/eventReadinessSections';
 import { DECIDE } from './DailyUpdate';
 import { activeShowId } from '../utils/activeShow';
+import { productionEpisode, resumeEpisode, rememberedEpisodeId } from '../utils/activeEpisode';
 import { seasonPageHref } from '../lib/seasonPage';
 import PageLayout from '../components/layout/PageLayout';
 import useAllowPullToRefresh from '../hooks/useAllowPullToRefresh';
@@ -175,11 +176,17 @@ export function trending(posts, n = TRENDING_SHOWN) {
   return [...(posts || [])].sort((a, b) => (b.likes || 0) - (a.likes || 0) || time(b.posted_at) - time(a.posted_at)).slice(0, n);
 }
 
-/** The episode most recently worked on: in progress first, else the newest. */
-export function continueEpisode(episodes) {
-  const live = (episodes || []).filter((e) => stageOf(e) && stageOf(e) !== 'released');
-  const pool = live.length ? live : (episodes || []).filter((e) => stageOf(e));
-  return [...pool].sort((a, b) => time(b.updated_at) - time(a.updated_at))[0] || null;
+/**
+ * The episode "Continue" opens: the one to resume (utils/activeEpisode: the
+ * episode last opened while it is unfinished, else the show's official
+ * production episode). With nothing unfinished it is, as before, the most
+ * recently updated episode that is not archived.
+ */
+export function continueEpisode(episodes, rememberedId = null) {
+  const resume = resumeEpisode(episodes, rememberedId);
+  if (resume) return resume;
+  const rest = (episodes || []).filter((e) => stageOf(e));
+  return [...rest].sort((a, b) => time(b.updated_at) - time(a.updated_at))[0] || null;
 }
 
 /** The daily update's waiting items as one list, in the update's group order. */
@@ -348,7 +355,11 @@ function Home() {
   const characters = Array.isArray(data.characters) ? data.characters : [];
   const books = Array.isArray(data.books) ? data.books : [];
   const lalaChar = characters.find((c) => c.character_key === 'lala') || characters.find((c) => /^lala$/i.test(c.display_name || ''));
-  const current = continueEpisode(episodes);
+  const current = continueEpisode(episodes, rememberedEpisodeId());
+  // The show's official production episode, named beside "Continue" only
+  // when Continue resumes a different one (Evoni, 2026-11-17).
+  const official = productionEpisode(episodes);
+  const inProduction = official && current && official.id !== current.id ? official : null;
   const upcoming = upcomingEvent(data.events || []);
   const event = upcoming?.event || null;
   const hot = trending(data.posts);
@@ -426,6 +437,11 @@ function Home() {
                   <span className="hp-progress__bar"><span style={{ width: `${((stageIdx + 1) / STAGES.length) * 100}%` }} /></span>
                   <span className="hp-progress__label">{STAGES[stageIdx]?.label} · stage {stageIdx + 1} of {STAGES.length}</span>
                 </div>
+                {inProduction && (
+                  <p className="hp-feature__empty" data-testid="home-in-production">
+                    In production: <Link to={`/episodes/${inProduction.id}`}>{episodeCode(inProduction)}</Link>
+                  </p>
+                )}
                 <Link className="hp-feature__go" to={`/episodes/${current.id}`} aria-label={`Open ${current.title || 'the episode'}`}>
                   <Play size={22} aria-hidden />
                 </Link>

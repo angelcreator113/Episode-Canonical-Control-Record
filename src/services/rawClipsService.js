@@ -308,6 +308,27 @@ async function createClip(sequelize, clip) {
   }
 }
 
+/**
+ * Before an episode's first take (the upload's start, and again under the
+ * episode lock when the take is attached): an episode with a second event
+ * whose commitments are not handled yet is not filmed (409
+ * UNSUPPORTED_SECONDARY_OBLIGATIONS; services/episodeSecondaryEvents). Only
+ * the first take is asked: an episode already filmed keeps taking takes,
+ * and an episode with one event is never refused here.
+ */
+async function assertFirstTakeAllowed(sequelize, episodeId, { transaction } = {}) {
+  const [filmed] = await sequelize.query('SELECT 1 FROM episode_raw_clips WHERE episode_id = :episodeId LIMIT 1',
+    { replacements: { episodeId }, ...(transaction ? { transaction } : {}) });
+  if (filmed?.length) return;
+  const secondary = require('./episodeSecondaryEvents');
+  try {
+    await secondary.assertNoUnsupportedSecondaryObligations(sequelize, episodeId, { transaction, doing: 'be filmed' });
+  } catch (err) {
+    if (secondary.isSecondaryEventError(err)) throw new RawClipError(err.status, err.message, err.code);
+    throw err;
+  }
+}
+
 const ATTACH_ATTEMPTS = 3;
 const ATTACH_BACKOFF_MS = 250;
 
@@ -330,6 +351,9 @@ async function attachClip(sequelize, clip, replacements, transaction) {
   if (!episodeRow || episodeRow.deleted_at) {
     throw new RawClipError(409, 'This episode was deleted while the take was uploading. The take was not saved.', CLIP_EPISODE_DELETED);
   }
+  // 3. The first take is refused while a second event's commitments are
+  //    not handled, asked here under the episode lock a new link also takes.
+  await assertFirstTakeAllowed(sequelize, clip.episode_id, { transaction });
   const [[row]] = await sequelize.query(
     `INSERT INTO episode_raw_clips
        (id, episode_id, show_id, performer, guest_name, label, beat_number, original_filename, content_type,
@@ -898,7 +922,7 @@ function readFrameRate(json) {
 module.exports = {
   PERFORMERS, KEY_STATUSES, KEY_STRENGTHS, STALE_HOURS, STALE_MESSAGE, CANCELLED_MESSAGE, DEFAULT_KEY_COLOR, STRENGTH_SIMILARITY,
   TAKE_FIELDS, TAKE_FIELDS_MISSING, BEAT_MARKS_MISSING, END_BEAT_MISSING, MAX_BEAT_MARKS, MAX_MARK_SECONDS,
-  UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, readVideoSize, truthy, findEpisode, shapeRow,
+  UPLOAD_EXTRAS, RawClipError, readFields, readBeatMarks, readStrength, readTakeSeconds, readVideoSize, truthy, findEpisode, shapeRow, assertFirstTakeAllowed,
   listClips, getClip, createClip, updateClip, storeTakeExtras, setKeyState, removeClip, CLIP_IN_USE,
   KEY_MB_PER_SECOND, KEY_MIN_BYTES, KEY_MARGIN_BYTES, KEY_UNKNOWN_SECONDS, keyRoomNeeded, cutoutKeyFor, netInputArgs, CutoutIncompleteError, cutoutComplete,
   KEY_MAX_FPS, pickKeyColor, chromakeyArgs, progressSeconds, progressView, sampleFrameArgs,

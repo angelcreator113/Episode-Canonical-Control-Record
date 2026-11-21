@@ -184,6 +184,9 @@ textarea.eov-input { resize: vertical; line-height: 1.5; }
 .eov-event-main { flex: 1; min-width: 0; }
 .eov-event-name { font-size: 15px; font-weight: 700; color: var(--lala-ink); overflow-wrap: anywhere; }
 .eov-event-tools { display: flex; gap: 6px; flex-shrink: 0; }
+/* Why the source event's Unlink is off: a full line under the row, so it reads at any width. */
+.eov-event { flex-wrap: wrap; }
+.eov-protected-note { flex: 1 0 100%; margin: 0; font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
 
 /* Season. */
 .eov-season-bar { display: flex; gap: 2px; margin-top: 2px; }

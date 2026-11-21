@@ -99,6 +99,50 @@ async function lockLiveEvent(sequelize, eventId, { transaction } = {}) {
   return row;
 }
 
+// The partial unique index that lets one event's own link point at an episode
+// (migration 20260805000000-episode-brief-outfit-set-and-event-uniqueness).
+// It is not a product rule (Evoni, 2026-11-12: an episode may have several
+// events); it is what the database allows until that index is replaced.
+const EVENT_EPISODE_LINK_INDEX = 'world_events_used_in_episode_unique';
+const EPISODE_EVENT_LINK_TAKEN_CODE = 'EPISODE_EVENT_LINK_TAKEN';
+
+/**
+ * True only for the database refusing a second event's link to an episode:
+ * PostgreSQL 23505 (unique_violation) on EVENT_EPISODE_LINK_INDEX. Any other
+ * unique violation, and any other error, is not this conflict.
+ */
+function isEpisodeEventLinkConflict(err) {
+  const pg = err && (err.original || err.parent);
+  return Boolean(pg && pg.code === '23505' && pg.constraint === EVENT_EPISODE_LINK_INDEX);
+}
+
+/** The 409 body for that conflict, in the worldEvents routes' { success, error, code } shape. */
+function episodeEventLinkTakenBody({ episodeId = null, holder = null } = {}) {
+  const who = holder?.name ? `"${holder.name}"` : 'another event';
+  return {
+    success: false,
+    error: `This episode already has ${who} linked to it, and a second event cannot be linked to an episode yet. Nothing was changed.`,
+    code: EPISODE_EVENT_LINK_TAKEN_CODE,
+    fields: ['used_in_episode_id'],
+    episode_id: episodeId,
+    linked_event: holder ? { id: holder.id, name: holder.name ?? null } : null,
+  };
+}
+
+/** The event that holds an episode's link, for that body. Best effort: null when it cannot be read. */
+async function findEpisodeLinkHolder(sequelize, episodeId, exceptEventId = null) {
+  if (!episodeId) return null;
+  try {
+    const [rows] = await sequelize.query(
+      'SELECT id, name FROM world_events WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL AND (:exceptId::uuid IS NULL OR id <> :exceptId::uuid) ORDER BY created_at ASC LIMIT 1',
+      { replacements: { episodeId, exceptId: exceptEventId } });
+    return rows?.[0] || null;
+  } catch (err) {
+    console.error('[eventEpisodeLink] could not read the event already linked to the episode:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   EVENT_EPISODE_CONFLICT_CODE,
   EVENT_DELETED_CODE,
@@ -109,4 +153,9 @@ module.exports = {
   eventEpisodeConflictMessage,
   eventEpisodeConflictError,
   eventEpisodeConflictBody,
+  EVENT_EPISODE_LINK_INDEX,
+  EPISODE_EVENT_LINK_TAKEN_CODE,
+  isEpisodeEventLinkConflict,
+  episodeEventLinkTakenBody,
+  findEpisodeLinkHolder,
 };

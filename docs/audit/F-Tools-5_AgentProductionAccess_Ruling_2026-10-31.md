@@ -1,3 +1,13 @@
+> **AMENDMENT BANNER 1 — §4 "ENFORCEMENT" AND §2: CLOUD SESSIONS MAY RUN A
+> NAMED SET OF REVERSIBLE INFRASTRUCTURE COMMANDS (added 2026-11-13, after
+> `15aabfe0`, additive).**
+>
+> **Banners on this document are read newest-first.** This banner points and
+> carries nothing: Evoni's decision, the list of commands, and the policy on
+> the cloud identity are in
+> `F-Tools-5_AgentProductionAccess_Ruling_Amendment1_2026-11-13.md`.
+> The body below is not edited.
+
 | **PRIME STUDIOS** **F-TOOLS-5 — AGENT SESSIONS MAY OPERATE PRODUCTION (RULE 7 RULING)** *Lifts the production freeze for every agent session, cloud and laptop. A session may use AWS, SSM, SSH to the production box, pm2, psql against production, `gh` and GitHub workflows to do what Evoni asks. Two limits remain: an explicit yes in that session before anything that deletes or irreversibly changes data or infrastructure, and no secret is ever printed, committed or put in chat. The audit register stays immutable. Supersedes F-Tools-1 to F-Tools-4, and the rulings listed in §7, where they conflict. Mints nothing.* |
 | --- |
 

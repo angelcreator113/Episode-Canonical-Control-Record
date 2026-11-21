@@ -459,6 +459,9 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   // the same key answers with that episode, before any refusal and without
   // creating anything. Without a key, nothing here runs.
   const idempotencyKey = options.idempotencyKey || null;
+  // The episode's other events, linked in the Start's own transaction. The
+  // caller has checked them (assertSecondaryCandidates); never with a regenerate.
+  const secondaryEvents = options.replacingEpisodeId ? [] : (options.secondaryEvents || []).filter((e) => e && String(e.id) !== String(eventId));
   if (idempotencyKey && !replacingEpisodeId) {
     const replayId = await findIdempotentStart(models.sequelize, eventId, idempotencyKey);
     if (replayId) return loadStartReplay(models, replayId, { beats: BEAT_TEMPLATES });
@@ -489,9 +492,13 @@ async function generateEpisodeFromEvent(event, models, options = {}) {
   // accepted by itself. A regenerate re-makes an episode already started,
   // so it is not asked again.
   const offerDecision = replacingEpisodeId ? null : (options.offerDecision ?? null);
+  // Who decides, why, and about which offers (A1, 2026-11-13;
+  // services/opportunityTransitionAudit): checked here and again under the
+  // offers' locks.
+  const offerBy = { actor: options.offerActor ?? null, reason: options.offerReason ?? null, opportunityIds: options.offerOpportunityIds ?? null };
   if (!replacingEpisodeId) {
     const { findOpenOffers, assertOfferDecision } = require('./startOfferDecision');
-    assertOfferDecision(await findOpenOffers(models.sequelize, eventId), offerDecision);
+    assertOfferDecision(await findOpenOffers(models.sequelize, eventId), offerDecision, offerBy);
   }
 
   // Get next episode number from active episodes only. Soft-deleted
@@ -705,7 +712,15 @@ Return ONLY JSON.` }],
     // The same lock a delete takes (utils/worldEventSafeDelete): an event
     // deleted while this Start waited is refused here (EVENT_DELETED), before
     // anything is created (Evoni, 2026-11-12).
-    await lockLiveEvent(models.sequelize, eventId, { transaction });
+    // Its other events (options.secondaryEvents, services/episodeSecondaryEvents):
+    // every event row is locked in one order (by id), so two Starts that
+    // share events never wait on each other in opposite orders.
+    for (const id of [eventId, ...secondaryEvents.map((e) => e.id)].map(String).sort()) {
+      await lockLiveEvent(models.sequelize, id, { transaction });
+    }
+    if (replacingEpisodeId) {
+      await require('./episodeSecondaryEvents').assertRegenerateHasNoSecondary(models.sequelize, { episodeId: replacingEpisodeId, eventId, transaction });
+    }
     const liveUnderLock = await findLiveLinkedEpisode(models.sequelize, eventId, { transaction });
     // A1.2c (Q-7 Layer 2): asked again under the event lock.
     const frozenUnderLock = replacingEpisodeId ? null : await findFrozenDeletedEpisode(models.sequelize, eventId, { transaction });
@@ -854,15 +869,24 @@ Return ONLY JSON.` }],
     // a later rate card edit never reaches them (Evoni, 2026-10-19;
     // services/dealPriceSnapshot).
     await takePriceSnapshot(models.sequelize, eventId, { transaction, reason: 'start_episode' });
+    // The episode's other events, in this commit: each is asked again under
+    // its lock and linked, or the whole Start rolls back and nothing is
+    // created. None asked for (every single-event Start): nothing happens.
+    const linkedSecondary = [];
+    for (const ev of secondaryEvents) {
+      linkedSecondary.push(await require('./episodeSecondaryEvents').attachSecondaryInStart(models.sequelize, {
+        event: ev, episodeId: episode.id, transaction, stampEventUsed, takePriceSnapshot,
+      }));
+    }
     // The offer decision, in the same commit as the episode: the open
     // offers locked and checked again, each step in their status_history
     // with this event and episode. None open: nothing is written.
     const offerDecisions = replacingEpisodeId ? [] : await require('./startOfferDecision')
-      .applyOfferDecision(models.sequelize, { eventId, episodeId: episode.id, decision: offerDecision, transaction });
-    return { episode, brief, offerDecisions };
+      .applyOfferDecision(models.sequelize, { eventId, episodeId: episode.id, decision: offerDecision, transaction, ...offerBy });
+    return { episode, brief, offerDecisions, linkedSecondary };
   });
   if (started.replayId) return loadStartReplay(models, started.replayId, { beats: BEAT_TEMPLATES });
-  const { episode, brief, offerDecisions } = started;
+  const { episode, brief, offerDecisions, linkedSecondary } = started;
 
   // Season Arc (§8(ff) Q5, A7): the episode takes the slot its event is
   // pencilled into, else the earliest open slot, and the slot locks. Logged,
@@ -886,11 +910,16 @@ Return ONLY JSON.` }],
 
   // Stamp the episode on the event's deliverables (Task #1814). Logged,
   // never fatal: the snapshot above already holds them.
+  // What happened is reported (postCommit below): a failure here leaves the
+  // episode committed, and the answer says so.
+  let deliverableStampStep = { status: 'not_needed' };
   if (eventDeliverables.length > 0) {
     try {
       await stampDeliverablesEpisode(models.sequelize, eventId, episode.id);
+      deliverableStampStep = { status: 'complete', count: eventDeliverables.length };
     } catch (stampErr) {
       console.error('[EpisodeGenerator] Deliverable episode stamp failed (non-blocking):', stampErr.message);
+      deliverableStampStep = { status: 'failed', reason: `the event's deliverables do not name this episode yet (${stampErr.message}).` };
     }
   }
 
@@ -1199,14 +1228,17 @@ Return ONLY JSON.` }],
     const { Asset } = models;
     if (Asset) {
       const eventId = typeof event.id === 'string' ? event.id : String(event.id);
+      // A document's presentation panels are not the episode's assets: they
+      // reach an episode only through the document's own pinning (V2-2a).
+      const { NOT_DOCUMENT_PRESENTATION_SQL, exceptDocumentPresentations } = require('../utils/documentPresentationAssets');
       // Find all assets referencing this event via metadata.event_id
       const eventAssets = await Asset.findAll({
-        where: {
+        where: exceptDocumentPresentations({
           [models.Sequelize.Op.or]: [
             { '$metadata.event_id$': eventId },
             models.sequelize.literal(`metadata->>'event_id' = '${eventId.replace(/'/g, "''")}'`),
           ],
-        },
+        }),
       }).catch((findErr) => {
         console.warn('[EpisodeGenerator] Event asset lookup failed, trying raw SQL (non-blocking):', findErr.message);
         return [];
@@ -1217,7 +1249,7 @@ Return ONLY JSON.` }],
       if (!assets || assets.length === 0) {
         try {
           const [rows] = await models.sequelize.query(
-            `SELECT id FROM assets WHERE metadata->>'event_id' = :eventId AND deleted_at IS NULL`,
+            `SELECT id FROM assets WHERE metadata->>'event_id' = :eventId AND deleted_at IS NULL AND ${NOT_DOCUMENT_PRESENTATION_SQL}`,
             { replacements: { eventId } }
           );
           assets = rows || [];
@@ -1231,7 +1263,7 @@ Return ONLY JSON.` }],
         const assetId = a.id;
         try {
           await models.sequelize.query(
-            `UPDATE assets SET episode_id = :episodeId WHERE id = :assetId`,
+            `UPDATE assets SET episode_id = :episodeId WHERE id = :assetId AND ${NOT_DOCUMENT_PRESENTATION_SQL}`,
             { replacements: { episodeId: episode.id, assetId } }
           );
           linked++;
@@ -1281,6 +1313,11 @@ Return ONLY JSON.` }],
     feedMomentSave,
     // What Start Episode's offer decision did: [{ id, name, decision, from, to }].
     offerDecisions,
+    // The other events linked in the same commit as the episode: [{ id, name }].
+    linkedSecondaryEvents: linkedSecondary || [],
+    // The two steps that run after the commit and never undo it: the season
+    // slot and the primary event's deliverables naming the episode.
+    postCommit: { season_slot: seasonSlotStep, deliverable_stamp: deliverableStampStep },
   };
 }
 

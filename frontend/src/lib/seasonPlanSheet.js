@@ -11,6 +11,7 @@
  */
 import { allSlots, dateRange, dayLabel, slotCardTitle, SLOT_STATUS } from './seasonPage';
 import { slotWhen, scheduleSentence, startLine, seasonOf, formatDay, formatTime } from './releaseSchedule';
+import { slotEvent } from './seasonSlotEvent';
 
 const GOAL_STATUS = { active: 'Active', paused: 'Paused', completed: 'Complete', failed: 'Missed', upcoming: 'Planned' };
 
@@ -25,7 +26,7 @@ export function seasonPlanSheet({ arc = null, roadmap = null, events = [], goals
     slots: [...(p.slots || [])].sort((a, b) => a.slot_number - b.slot_number).map((s) => ({
       code: s.two_part ? s.two_part.label : `E${s.slot_number}`,
       title: slotCardTitle(s),
-      event: s.event ? (byId.get(s.event.id)?.name || s.event.name || null) : null,
+      event: slotEvent(s) ? (byId.get(slotEvent(s).id)?.name || slotEvent(s).name || null) : null,
       status: SLOT_STATUS[s.state] || null,
       when: slotWhen(release, s, seasonNumber)?.text || null,
     })),
@@ -36,8 +37,8 @@ export function seasonPlanSheet({ arc = null, roadmap = null, events = [], goals
   };
   // A two-parter's event is listed once, at Part 1.
   const seen = new Set();
-  const slotEvents = allSlots(roadmap).filter((s) => s.event && !seen.has(s.event.id) && seen.add(s.event.id))
-    .map((s) => eventRow(s.two_part ? `E${s.slot_number}–E${s.two_part.other_slot_number}` : `E${s.slot_number}`, s.event));
+  const slotEvents = allSlots(roadmap).filter((s) => slotEvent(s) && !seen.has(slotEvent(s).id) && seen.add(slotEvent(s).id))
+    .map((s) => eventRow(s.two_part ? `E${s.slot_number}–E${s.two_part.other_slot_number}` : `E${s.slot_number}`, slotEvent(s)));
   // Bonus episodes and specials (seasonSpecials), marked as specials, in season order.
   const specials = (roadmap?.specials || []).map((sp) => {
     const row = (release?.specials || []).find((r) => r.special_id === sp.id) || null;

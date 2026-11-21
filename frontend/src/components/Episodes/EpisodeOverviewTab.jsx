@@ -5,6 +5,7 @@ import { CalendarHeart, Tv, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, 
 import api from '../../services/api';
 import { getEpisodeEvents } from '../../services/episodeEventsApi';
 import { seasonPageHref } from '../../lib/seasonPage';
+import { packageHref } from '../../lib/eventFlow';
 import { purposeLines } from '../../lib/seasonArc';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import EpisodeTeaserSection from './EpisodeTeaserSection';
@@ -125,7 +126,25 @@ const PENDING_FIELDS = [
   { key: 'creative_notes', label: 'Creative Notes', note: 'Not saved yet. Its home in production planning is still being decided.' },
 ];
 
-function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null }) {
+/** Why the source event's Unlink is off: the server keeps an event with the episode it started (the terms lock). */
+export const SOURCE_EVENT_PROTECTED = 'Source event: it stays with this episode, so it cannot be unlinked here.';
+/** Why any other linked event's Unlink is off: the same server rule (the episode link is a locked term once it points at a live episode). */
+export const LINKED_EVENT_LOCKED = 'Linked event: an event stays with the episode it is linked to, so it cannot be unlinked here.';
+
+/**
+ * Why an event row cannot be unlinked, from what the episode's events read
+ * already says (services/episodeEventsService: link.anchor, link.stamped) and
+ * the server's terms lock (src/utils/eventTermsLock.js): the brief's source
+ * event, and any event whose own link points at this episode. null when the
+ * server would allow it. No permission is invented here.
+ */
+export function unlinkLockReason(ev, episodeId) {
+  if (ev?.link?.anchor) return SOURCE_EVENT_PROTECTED;
+  if (ev?.link?.stamped || (episodeId && ev?.used_in_episode_id === episodeId)) return LINKED_EVENT_LOCKED;
+  return null;
+}
+
+function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null, onRead = null, checksStatus = null, checksRead = null }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [allEvents, setAllEvents] = useState([]);  // every event in the show — drives the linker dropdown
@@ -135,6 +154,13 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // Reads that failed (Evoni, 2026-11-12): said on the page with Retry. A
   // failed read is not "no events linked", "no script" or an empty brief.
   const [loadFailed, setLoadFailed] = useState({});
+  // Reads that have answered, so "not read yet" is not shown as "none":
+  // events, eventList, script, brief, outfit. A read is pending while it is
+  // neither here nor in loadFailed. Written where loadFailed is, by the
+  // newest run only; emptied for another episode, kept through a Retry so
+  // what has answered stays on screen while the rest is read again.
+  const [answered, setAnswered] = useState({});
+  const heard = (key) => setAnswered((a) => (a[key] ? a : { ...a, [key]: true }));
   const failedRead = (key, label, err) => { console.error(`[EpisodeOverview] ${label} load failed:`, err); setLoadFailed((f) => ({ ...f, [key]: label })); };
   // Each run of loadContext has a number. Only the newest run's answers and
   // failures are applied, so a slow earlier read (a Retry pressed twice, or
@@ -144,6 +170,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const [linkBusy, setLinkBusy] = useState(false);
   // A refused link or unlink, in the server's words (e.g. the terms lock, §8(x) D4)
   const [linkError, setLinkError] = useState(null);
+  // { allowed, reason, restore_event_id } from GET /episodes/:id/events, or null when the server did not say.
+  const [addEvent, setAddEvent] = useState(null);
   // World locations for the show — needed to resolve venue_location_id on
   // each linked event into a name + thumbnail. Locations don't propagate
   // to the episode directly; the Locations card reads them through the
@@ -203,6 +231,10 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
 
   useEffect(() => {
     if (!episode?.id) return;
+    setAnswered({});
+    // Another episode's script answer does not decide this one's next step,
+    // even if this tab is not unmounted in between.
+    setScriptInfo(null);
     loadContext();
   }, [episode?.id]);
 
@@ -211,75 +243,106 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     const live = () => run === loadRun.current;
     const failed = (key, label) => (err) => { if (live()) failedRead(key, label, err); else console.error(`[EpisodeOverview] an earlier ${label} read failed:`, err); };
     setLoadFailed({});
-    // The episode's own events (Task #1906): the brief's source event
-    // first, then any additional linked events.
-    getEpisodeEvents(episode.id).then((data) => {
-      if (!live()) return;
-      setLinkedEvents(data?.events || []);
-    }).catch(failed('events', "this episode's events"));
-    if (showId) {
-      // The show's event list feeds only the linker dropdown (events not
-      // yet linked anywhere). It is not how this episode finds its events.
-      api.get(`/api/v1/world/${showId}/events`).then(({ data }) => {
+    // The brief and the scene sets are told to the page (onRead, optional)
+    // so its production checklist does not ask for them again: each exactly
+    // once per run, with the answer or as failed. An answer the checklist
+    // would read differently from this tab is told as failed, and the
+    // checklist then reads it itself.
+    const episodeId = episode.id;
+    const told = {};
+    const tell = (key, result) => {
+      if (told[key] || !live()) return;
+      told[key] = true;
+      try { onRead?.(episodeId, key, result); } catch (err) { console.error('[EpisodeOverview] onRead failed:', err); }
+    };
+    try {
+      // The episode's own events (Task #1906): the brief's source event
+      // first, then any additional linked events.
+      getEpisodeEvents(episode.id).then((data) => {
         if (!live()) return;
-        setAllEvents(data?.events || []);
-      }).catch(failed('eventList', "the show's events"));
-      // Episode-scoped ledger. Skipping when no showId — the endpoint
-      // requires it, and a draft episode without a show wouldn't have
-      // transactions anyway.
-      api.get(`/api/v1/world/${showId}/episodes/${episode.id}/money`)
-        .then((r) => { if (live()) setMoney(r?.data?.data || false); })
-        .catch((err) => { console.error('[EpisodeOverview] money plan load failed:', err); if (live()) setMoney(false); });
-      api.get(`/api/v1/world/${showId}/financial-ledger?episode_id=${episode.id}&limit=50`)
-        .then(({ data }) => {
-          // Only the rows that count toward Lala's balance: a voided row
-          // stays in the ledger as history but is not money (Task #2273).
-          const txs = (data?.data?.transactions || []).filter(t => t.counted !== false);
-          if (live()) setLedger({ transactions: txs, loading: false });
-        })
-        .catch((err) => { console.error('[EpisodeOverview] ledger load failed:', err); if (live()) setLedger({ transactions: [], loading: false }); });
-    } else {
-      setLedger({ transactions: [], loading: false });
+        setLinkedEvents(data?.events || []);
+        // Whether another event can be linked now (the server's word; absent from an older server).
+        setAddEvent(data?.add_event || null);
+        heard('events');
+      }).catch(failed('events', "this episode's events"));
+      if (showId) {
+        // The show's event list feeds only the linker dropdown (events not
+        // yet linked anywhere). It is not how this episode finds its events.
+        api.get(`/api/v1/world/${showId}/events`).then(({ data }) => {
+          if (!live()) return;
+          setAllEvents(data?.events || []);
+          heard('eventList');
+        }).catch(failed('eventList', "the show's events"));
+        // Episode-scoped ledger. Skipping when no showId — the endpoint
+        // requires it, and a draft episode without a show wouldn't have
+        // transactions anyway.
+        api.get(`/api/v1/world/${showId}/episodes/${episode.id}/money`)
+          .then((r) => { if (live()) setMoney(r?.data?.data || false); })
+          .catch((err) => { console.error('[EpisodeOverview] money plan load failed:', err); if (live()) setMoney(false); });
+        api.get(`/api/v1/world/${showId}/financial-ledger?episode_id=${episode.id}&limit=50`)
+          .then(({ data }) => {
+            // Only the rows that count toward Lala's balance: a voided row
+            // stays in the ledger as history but is not money (Task #2273).
+            const txs = (data?.data?.transactions || []).filter(t => t.counted !== false);
+            if (live()) setLedger({ transactions: txs, loading: false });
+          })
+          .catch((err) => { console.error('[EpisodeOverview] ledger load failed:', err); if (live()) setLedger({ transactions: [], loading: false }); });
+      } else {
+        setLedger({ transactions: [], loading: false });
+      }
+      api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => {
+        if (!live()) return;
+        tell('sceneSets', { ok: !(data && !data.data && data.sceneSets), value: data?.data || [] });
+        setSceneSets(data?.data || []);
+      }).catch((err) => { console.error('[EpisodeOverviewTab] scene sets load failed:', err); tell('sceneSets', { ok: false }); });
+      api.get(`/api/v1/episodes/${episode.id}/scripts?includeAllVersions=false`).then(({ data }) => {
+        if (!live()) return;
+        const scripts = data?.data || data?.scripts || [];
+        if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
+        heard('script');
+      }).catch(failed('script', 'the script check'));
+      // EpisodeBrief — drives the merged Identity/Source/Stakes/Reference
+      // sections. Auto-creates if missing (the GET handler does that).
+      api.get(`/api/v1/episode-brief/${episode.id}`).then(({ data }) => {
+        if (!live()) return;
+        const b = data?.data || null;
+        tell('brief', { ok: data != null, value: b });
+        setBrief(b);
+        heard('brief');
+        setDraft({
+          narrative_purpose: b?.narrative_purpose || '',
+          forward_hook: b?.forward_hook || '',
+          episode_archetype: b?.episode_archetype || '',
+          designed_intent: b?.designed_intent || '',
+          allowed_outcomes: Array.isArray(b?.allowed_outcomes) ? b.allowed_outcomes : [],
+          arc_number: b?.arc_number ?? '',
+          position_in_arc: b?.position_in_arc ?? '',
+        });
+        if (b?.event_id && showId) {
+          api.get(`/api/v1/world/${showId}/events/${b.event_id}`)
+            .then((res) => { if (live()) setSource(res.data || null); })
+            .catch((err) => { console.error('[Episode] source event load failed:', err); if (live()) setSource(null); });
+          api.get(`/api/v1/wardrobe/outfit/${episode.id}`)
+            .then((res) => { if (live()) { setOutfit(Array.isArray(res.data?.items) ? res.data.items : undefined); heard('outfit'); } })
+            // A failed read is not "no look locked": it is said in the note with Retry and on the Look tile.
+            .catch((err) => { console.error('[Episode] locked outfit load failed:', err); if (live()) { setOutfit(undefined); setLoadFailed((f) => ({ ...f, outfit: 'the locked outfit' })); } });
+        }
+        // Resolve narrative_chain.parent_event_id → event name for the Source band.
+        const parentId = b?.narrative_chain?.parent_event_id;
+        if (parentId && showId) {
+          api.get(`/api/v1/world/${showId}/events`).then(({ data: ev }) => {
+            const events = ev?.events || [];
+            if (live()) setParentEvent(events.find(e => e.id === parentId) || null);
+          }).catch((err) => console.error('[EpisodeOverview] parent event load failed:', err));
+        }
+      }).catch((err) => { failed('brief', 'the story brief')(err); tell('brief', { ok: false }); });
+    } catch (err) {
+      // A read that could not even be asked for: said here, and the page is
+      // not left waiting for it.
+      console.error('[EpisodeOverview] load stopped early:', err);
+      tell('sceneSets', { ok: false });
+      tell('brief', { ok: false });
     }
-    api.get(`/api/v1/episodes/${episode.id}/scene-sets`).then(({ data }) => { if (live()) setSceneSets(data?.data || []); })
-      .catch((err) => console.error('[EpisodeOverviewTab] scene sets load failed:', err));
-    api.get(`/api/v1/episodes/${episode.id}/scripts?includeAllVersions=false`).then(({ data }) => {
-      if (!live()) return;
-      const scripts = data?.data || data?.scripts || [];
-      if (scripts.length > 0) setScriptInfo({ exists: true, wordCount: scripts[0].content?.split(/\s+/).length || 0 });
-    }).catch(failed('script', 'the script check'));
-    // EpisodeBrief — drives the merged Identity/Source/Stakes/Reference
-    // sections. Auto-creates if missing (the GET handler does that).
-    api.get(`/api/v1/episode-brief/${episode.id}`).then(({ data }) => {
-      if (!live()) return;
-      const b = data?.data || null;
-      setBrief(b);
-      setDraft({
-        narrative_purpose: b?.narrative_purpose || '',
-        forward_hook: b?.forward_hook || '',
-        episode_archetype: b?.episode_archetype || '',
-        designed_intent: b?.designed_intent || '',
-        allowed_outcomes: Array.isArray(b?.allowed_outcomes) ? b.allowed_outcomes : [],
-        arc_number: b?.arc_number ?? '',
-        position_in_arc: b?.position_in_arc ?? '',
-      });
-      if (b?.event_id && showId) {
-        api.get(`/api/v1/world/${showId}/events/${b.event_id}`)
-          .then((res) => { if (live()) setSource(res.data || null); })
-          .catch((err) => { console.error('[Episode] source event load failed:', err); if (live()) setSource(null); });
-        api.get(`/api/v1/wardrobe/outfit/${episode.id}`)
-          .then((res) => { if (live()) setOutfit(Array.isArray(res.data?.items) ? res.data.items : undefined); })
-          .catch((err) => { console.error('[Episode] locked outfit load failed:', err); if (live()) setOutfit(undefined); });
-      }
-      // Resolve narrative_chain.parent_event_id → event name for the Source band.
-      const parentId = b?.narrative_chain?.parent_event_id;
-      if (parentId && showId) {
-        api.get(`/api/v1/world/${showId}/events`).then(({ data: ev }) => {
-          const events = ev?.events || [];
-          if (live()) setParentEvent(events.find(e => e.id === parentId) || null);
-        }).catch((err) => console.error('[EpisodeOverview] parent event load failed:', err));
-      }
-    }).catch(failed('brief', 'the story brief'));
   };
 
   // ── Brief edit helpers ─────────────────────────────────────────────────
@@ -344,15 +407,37 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // events linked to a different episode are filtered out.
   const linkEvent = async (eventId) => {
     if (!eventId || !showId) return;
+    // A first link needs no question. Adding an event to an episode that
+    // already has one is a reassociation the server will not undo (an event
+    // stays with the episode it is linked to), so it says what will change.
+    // Linking the source event again (the repair the server names) changes
+    // nothing else, so it asks nothing either.
+    const restoring = Boolean(restoreId && eventId === restoreId);
+    if (linkedEvents.length > 0 && !restoring) {
+      const adding = allEvents.find((e) => e.id === eventId);
+      const source = linkedEvents.find((e) => e.link?.anchor) || linkedEvents[0];
+      const ok = window.confirm(
+        `Link "${adding?.name || 'this event'}" to this episode as well?\n\n`
+        + `What changes: "${adding?.name || 'this event'}" becomes linked to "${episode.title || 'this episode'}".\n`
+        + `What does not change: "${source?.name || 'the current event'}" stays this episode's ${source?.link?.anchor ? 'source event' : 'event'}.\n\n`
+        + 'An event stays with the episode it is linked to, so this cannot be undone here.',
+      );
+      if (!ok) return;
+    }
     setLinkBusy(true);
     setLinkError(null);
     try {
       await api.put(`/api/v1/world/${showId}/events/${eventId}`, { used_in_episode_id: episode.id });
       const ev = allEvents.find(e => e.id === eventId);
       if (ev) {
-        setLinkedEvents(prev => [...prev, { ...ev, used_in_episode_id: episode.id }]);
+        if (!restoring) setLinkedEvents(prev => [...prev, { ...ev, used_in_episode_id: episode.id }]);
         setAllEvents(prev => prev.map(e => e.id === eventId ? { ...e, used_in_episode_id: episode.id } : e));
       }
+      // The episode's events as the server has them now, and whether another can still be added.
+      getEpisodeEvents(episode.id).then((data) => {
+        if (restoring) setLinkedEvents(data?.events || []);
+        setAddEvent(data?.add_event || null);
+      }).catch((err) => console.error('[Episode] events refresh after a link failed:', err));
     } catch (err) {
       console.error('[Episode] Failed to link event:', err);
       setLinkError(`Could not link the event: ${err.response?.data?.error || err.message || 'request failed'}`);
@@ -362,6 +447,15 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   };
   const unlinkEvent = async (eventId) => {
     if (!eventId || !showId) return;
+    const leaving = linkedEvents.find((e) => e.id === eventId);
+    // A locked link is never unlinked from here (its button is off); this is a second guard.
+    if (unlinkLockReason(leaving, episode.id)) return;
+    const ok = window.confirm(
+      `Unlink "${leaving?.name || 'this event'}" from this episode?\n\n`
+      + `What changes: "${leaving?.name || 'this event'}" would no longer be linked to "${episode.title || 'this episode'}".\n`
+      + 'What does not change: the event and the episode themselves are not deleted.',
+    );
+    if (!ok) return;
     setLinkBusy(true);
     setLinkError(null);
     try {
@@ -375,7 +469,13 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       setLinkBusy(false);
     }
   };
-  const linkableEvents = allEvents.filter(e => !e.used_in_episode_id);
+  // When the server says no other event can be added, the control is shown
+  // disabled with its reason, never enabled to fail. The one exception is the
+  // repair it names: the source event whose own link is missing.
+  const addBlocked = Boolean(addEvent && addEvent.allowed === false);
+  const restoreId = addBlocked ? (addEvent.restore_event_id || null) : null;
+  const linkableEvents = allEvents.filter(e => !e.used_in_episode_id && (!addBlocked || (restoreId && e.id === restoreId)));
+  const addBlockedReason = addBlocked ? (addEvent.reason || 'No other event can be added to this episode now.') : null;
 
   // Regenerate this episode from one of its linked events. The backend
   // soft-deletes the current episode and re-runs the generator on the
@@ -384,7 +484,13 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   // no longer the active one.
   const regenerateFromEvent = async (ev) => {
     if (!showId) return;
-    if (!window.confirm(`Regenerate episode from "${ev.name}"? The current episode will be soft-deleted and a fresh one created.`)) return;
+    const ok = window.confirm(
+      `Regenerate this episode from "${ev.name}"?\n\n`
+      + `What changes: "${episode.title || 'this episode'}" is soft-deleted and a new episode is created from the event.\n`
+      + 'A filmed episode is never replaced: the server refuses and nothing changes.',
+    );
+    if (!ok) return;
+    setLinkError(null);
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/${ev.id}/regenerate-episode`);
       const newId = res.data?.data?.episode?.id;
@@ -395,7 +501,9 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
         if (typeof onUpdate === 'function') onUpdate({});
       }
     } catch (err) {
-      alert('Regenerate failed: ' + (err?.response?.data?.error || err.message));
+      console.error('[Episode] Failed to regenerate from the event:', err);
+      // The refusal (a filmed episode, a blocked start) in the server's words, on the card.
+      setLinkError(`Could not regenerate the episode: ${err?.response?.data?.error || err.message || 'request failed'}`);
     }
   };
 
@@ -468,16 +576,43 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     ? episodePlanning({ episode, event: source.event, sourceProfile: source.sourceProfile, sceneSet: source.sceneSet, venueLocation: source.venueLocation, outfit })
     : null;
   const fromEvent = fromEventItems(plan);
-  const hasScript = !!(typeof episode.script_content === 'string' && episode.script_content.trim()) || !!scriptInfo?.exists;
-  const step = nextStep({ hasScript, brief: brief ? { ...brief, ...draft } : null, plan, checks });
+  const hasScriptText = !!(typeof episode.script_content === 'string' && episode.script_content.trim());
+  const hasScript = hasScriptText || !!scriptInfo?.exists;
+  // What is still being read, per area ('loading', 'failed' or null). Each
+  // looks only at the read it needs.
+  const pending = (key) => (loadFailed[key] ? 'failed' : !answered[key] ? 'loading' : null);
+  const eventsStatus = pending('events');
+  const eventListStatus = showId ? pending('eventList') : null;
+  const briefStatus = brief ? null : pending('brief');
+  // The episode's own script text settles it at once; else the script check does.
+  const scriptStatus = hasScript ? null : pending('script');
+  const step = nextStep({ hasScript, brief: brief ? { ...brief, ...draft } : null, plan, checks, script: scriptStatus, briefStatus, checksStatus });
+  // The checklist line under the next step. Three ways only when the
+  // loader said which checks it could not read (checksRead); else the count.
+  const checksMeta = checks
+    ? (checksRead?.unreadable > 0
+      ? `Production checklist: ${checksRead.done} of ${checksRead.total} verified complete · ${checksRead.incomplete} incomplete · ${checksRead.unreadable} couldn't be checked. Open the Checklist tab to check again.`
+      : `Production checklist: ${checks.done} of ${checks.total} done`)
+    : checksStatus === 'loading' ? 'Production checklist: checking…'
+      : checksStatus === 'failed' ? "Production checklist: couldn't be checked. Open the Checklist tab to check again."
+        : null;
+  // The look tile also waits for the locked outfit, which is read once the brief names an event.
+  const lookStatus = eventsStatus === 'loading' || briefStatus === 'loading' || (brief?.event_id && showId && !answered.outfit && !loadFailed.outfit) ? 'loading' : null;
+  // The locked outfit could not be read: the event's planned look still
+  // stands in when there is one, and the tile says what it could not read.
+  const lookUnread = loadFailed.outfit
+    ? (outfitPieces.length
+      ? { value: `${outfitPieces.length} piece${outfitPieces.length === 1 ? '' : 's'}`, tone: null, note: 'locked outfit could not be read' }
+      : { value: '—', tone: null, note: 'could not be read' })
+    : null;
   // Coins after the episode from the Money plan (Task #1919), never from the
   // columns Start Episode estimated (which once counted the whole closet).
   const coinsTile = coinsAfterPlan(money, { accepted: isAccepted });
   const prestige = primaryEvent?.prestige;
   const tiles = [
-    { key: 'prestige', label: 'Prestige', value: prestige ? `${prestige} / 10` : 'Not set', note: 'from the event' },
+    { key: 'prestige', label: 'Prestige', value: eventsStatus ? '—' : prestige ? `${prestige} / 10` : 'Not set', note: eventsStatus === 'failed' ? 'could not be read' : 'from the event' },
     { key: 'coins', label: 'Coins after episode', value: coinsTile.value, link: { label: 'Open Money', tab: 'money' }, note: coinsTile.note },
-    { key: 'look', label: "Lala's look", ...lookTile(outfit, outfitPieces), link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
+    { key: 'look', label: "Lala's look", ...(lookStatus ? { value: '—', tone: null } : lookUnread || lookTile(outfit, outfitPieces)), link: { label: 'Open Wardrobe', tab: 'wardrobe' } },
   ];
 
   // The form shows what the server saved: the update's reply (or, without
@@ -587,6 +722,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
   const failedLabels = Object.values(loadFailed);
   return (
     <div className="eov">
+      {/* The one announcement of a failed read; the lines inside the cards say it again in place, silently. */}
       {failedLabels.length > 0 && (
         <p role="alert" className="eov-warn" data-testid="eov-load-failed">
           Couldn't load {failedLabels.join(', ')}. What's shown below may be incomplete; nothing was changed.{' '}
@@ -626,7 +762,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       <div className="eov-top">
         <NextStepBanner
           step={step} onOpenTab={onOpenTab}
-          meta={checks ? `Production checklist: ${checks.done} of ${checks.total} done` : null}
+          meta={checksMeta}
           extra={(
             <button
               type="button"
@@ -654,11 +790,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       <div className="eos-grid">
         <StoryBriefCard
           brief={brief} draft={draft} setDraft={setDraft} saveBriefField={saveBriefField}
-          saving={savingBrief} locked={isLocked} synopsis={formData.description}
+          saving={savingBrief} locked={isLocked} synopsis={formData.description} status={briefStatus}
           onEdit={() => setIsEditing(true)} archetypes={ARCHETYPES} intents={INTENTS}
           outcomes={outcomes}
         />
-        <FromEventCard from={fromEvent} showId={showId} eventId={source?.event?.id} onOpenTab={onOpenTab} />
+        <FromEventCard from={fromEvent} showId={showId} eventId={source?.event?.id} episodeId={episode?.id} onOpenTab={onOpenTab} />
       </div>
 
       {/* Viewer teaser (P12, Task #2386) */}
@@ -673,9 +809,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             linked anywhere; picking one stamps it with this episode's
             used_in_episode_id. */}
         <div className="eov-card">
-          <CardTitle icon={CalendarHeart}>Events {!loadFailed.events && <span className="eov-count">{linkedEvents.length}</span>}</CardTitle>
+          <CardTitle icon={CalendarHeart}>Events {!eventsStatus && <span className="eov-count">{linkedEvents.length}</span>}</CardTitle>
           {loadFailed.events ? (
-            <p className="eov-empty" role="alert" data-testid="eov-events-failed">Couldn't load this episode's events. Retry above.</p>
+            <p className="eov-empty" data-testid="eov-events-failed">Couldn't load this episode's events. Retry above.</p>
+          ) : eventsStatus === 'loading' ? (
+            <p className="eov-empty" data-testid="eov-events-loading">Loading…</p>
           ) : linkedEvents.length === 0 ? (
             <p className="eov-empty">No events linked</p>
           ) : (
@@ -697,11 +835,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
                         read-only once Start Episode has locked the terms. */}
                     {(ev.show_id || showId) && (
                       <Link
-                        to={`/shows/${ev.show_id || showId}/events/${ev.id}`}
+                        to={packageHref(ev.show_id || showId, ev.id, episode?.id ? { kind: 'episode', id: episode.id } : null)}
                         data-testid={`overview-event-package-${ev.id}`}
                         className="eov-link"
                       >
-                        View Event Package <ArrowRight size={14} aria-hidden="true" />
+                        Open the event package <ArrowRight size={14} aria-hidden="true" />
                       </Link>
                     )}
                   </div>
@@ -711,18 +849,24 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
                       className="eov-icon-btn"
                       onClick={() => regenerateFromEvent(ev)}
                       disabled={linkBusy}
-                      title="Regenerate this episode from the event (soft-deletes the current episode)"
+                      title="Regenerate this episode from the event (soft-deletes the current episode; refused for a filmed episode)"
                       aria-label="Regenerate this episode from the event"
+                      data-testid={`overview-event-regenerate-${ev.id}`}
                     ><RefreshCw size={15} aria-hidden="true" /></button>
                     <button
                       type="button"
                       className="eov-icon-btn"
                       onClick={() => unlinkEvent(ev.id)}
-                      disabled={linkBusy}
-                      title="Unlink event from this episode"
-                      aria-label="Unlink event from this episode"
+                      // Wherever the server would refuse, the control is shown, off, with the reason (2026-11-12).
+                      disabled={linkBusy || Boolean(unlinkLockReason(ev, episode.id))}
+                      title={unlinkLockReason(ev, episode.id) || 'Unlink event from this episode'}
+                      aria-label={unlinkLockReason(ev, episode.id) ? `Unlink is off. ${unlinkLockReason(ev, episode.id)}` : 'Unlink event from this episode'}
+                      data-testid={`overview-event-unlink-${ev.id}`}
                     ><X size={15} aria-hidden="true" /></button>
                   </div>
+                  {unlinkLockReason(ev, episode.id) && (
+                    <p className="eov-protected-note" data-testid={`overview-event-protected-${ev.id}`}>{unlinkLockReason(ev, episode.id)}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -734,14 +878,22 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
             className="eov-select"
             aria-label="Link an event"
             value=""
-            disabled={linkBusy || linkableEvents.length === 0 || Boolean(loadFailed.events || loadFailed.eventList)}
+            disabled={linkBusy || linkableEvents.length === 0 || Boolean(eventsStatus || eventListStatus)}
+            aria-describedby={addBlockedReason ? 'overview-add-event-blocked' : undefined}
             onChange={(e) => { if (e.target.value) linkEvent(e.target.value); e.target.value = ''; }}
           >
-            <option value="">{loadFailed.events || loadFailed.eventList ? "Events didn't load" : linkableEvents.length === 0 ? 'No unlinked events available' : '+ Link an event…'}</option>
+            <option value="">{loadFailed.events || loadFailed.eventList ? "Events didn't load"
+              : eventsStatus === 'loading' || eventListStatus === 'loading' ? 'Loading events…'
+              : restoreId && linkableEvents.length > 0 ? '+ Link the source event again…'
+                : addBlocked ? 'No event can be added now'
+                  : linkableEvents.length === 0 ? 'No unlinked events available' : '+ Link an event…'}</option>
             {linkableEvents.map(ev => (
               <option key={ev.id} value={ev.id}>{ev.name}{ev.event_type ? ` (${ev.event_type})` : ''}</option>
             ))}
           </select>
+          {addBlockedReason && (
+            <p id="overview-add-event-blocked" className="eov-protected-note" data-testid="overview-add-event-blocked">{addBlockedReason}</p>
+          )}
         </div>
 
         {/* Season Position — the season context snapshotted at Start Episode
@@ -779,6 +931,12 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
               })()}
               {seasonContext.desired_pressure && (
                 <p className="eov-season-pressure" data-testid="season-pressure">Desired pressure: <strong>{seasonContext.desired_pressure}</strong></p>
+              )}
+              {/* A placed episode's way back to its slot (2026-11-12). The slot comes from the episode's own season context; nothing is placed or moved from here. */}
+              {showId && Number.isInteger(Number(seasonContext.slot_number)) && Number(seasonContext.slot_number) > 0 && (
+                <Link className="eov-link" to={seasonPageHref(showId, 'roadmap', { slot: seasonContext.slot_number })} data-testid="season-position-roadmap">
+                  View on the Season Roadmap <ArrowRight size={14} aria-hidden="true" />
+                </Link>
               )}
             </>
           ) : (

@@ -42,11 +42,8 @@
 .szn-error { margin: 8px 0 0; font-weight: 700; color: var(--sp-pink-deep); }
 .szn-note { margin: 12px 0 0; padding: 10px 14px; border-radius: 12px; font-size: 13px; background: var(--sp-green-soft); color: var(--sp-green); }
 .szn-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.szn-back {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-bottom: 8px;
-  font-size: 13px; font-weight: 600; color: var(--sp-pink-deep); text-decoration: none;
-}
-.szn-back:hover { text-decoration: underline; }
+/* Producer Mode's six tabs above the season's header (ProducerNav): a little closer to it than on Producer Mode. */
+.szn-page > .wa-tab-bar { margin: 0 0 12px; }
 
 /* Buttons and links */
 .szn-btn {
@@ -92,36 +89,57 @@
 .szn-menu button:hover:not(:disabled), .szn-menu a:hover { background: var(--sp-pink-soft); }
 .szn-menu button:disabled { color: var(--sp-muted); cursor: not-allowed; }
 
-/* The hero: the cover with a plum shade under the words; no cover, the page's gradient. */
+/* The season's header (S2, 2026-11-20): one compact band in the page's
+   gradient. The show, the season and its title; its lifecycle, health, phase
+   and dates on a line; the switcher and the actions beside them. The full
+   cover and the tagline are the Overview's season card's. */
 .szn-hero {
-  position: relative; overflow: hidden; border-radius: 24px; min-height: 300px;
-  background: linear-gradient(120deg, var(--sp-shade) 0%, var(--sp-purple-fill) 45%, var(--sp-pink) 100%);
-  background-size: cover; background-position: center right;
-}
-.szn-hero.has-cover { background-color: var(--sp-shade); }
-.szn-hero-shade {
-  display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; min-height: 300px; padding: 28px 32px;
-  background: linear-gradient(90deg, rgba(42, 14, 42, 0.92) 0%, rgba(42, 14, 42, 0.72) 42%, rgba(42, 14, 42, 0.1) 75%, transparent 100%);
+  position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 14px 20px; border-radius: 20px;
+  background:
+    linear-gradient(90deg, rgba(42, 14, 42, 0.7) 0%, rgba(42, 14, 42, 0.25) 60%, transparent 100%),
+    linear-gradient(120deg, var(--sp-shade) 0%, var(--sp-purple-fill) 45%, var(--sp-pink) 100%);
   color: var(--sp-white);
 }
-.szn-hero:not(.has-cover) .szn-hero-shade { background: linear-gradient(90deg, rgba(42, 14, 42, 0.7) 0%, rgba(42, 14, 42, 0.25) 60%, transparent 100%); }
-.szn-hero-show {
-  margin: 0 0 auto; font-family: var(--font-prose); font-size: 26px; font-weight: 700; font-style: italic; line-height: 1.1;
-  letter-spacing: 0.02em; color: var(--sp-gold); max-width: 60%;
+/* The cover, small: a picture beside the title, never a background (and not on a phone). */
+.szn-hero-thumb {
+  flex: 0 0 auto; width: 56px; height: 56px; border-radius: 12px; object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.45); background: var(--sp-shade);
 }
-.szn-hero-eyebrow { margin: 12px 0 0; font-size: 13px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
-.szn-hero-title { margin: 0; font-family: var(--font-prose); font-size: 44px; font-weight: 600; line-height: 1.1; color: var(--sp-white); max-width: 70%; overflow-wrap: anywhere; }
-.szn-hero-tagline { margin: 0; font-size: 17px; max-width: 60ch; color: var(--sp-white); }
-.szn-hero-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
-.szn-hero-chips li {
-  padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 700;
+.szn-hero-id { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.szn-hero-eyebrow {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: 0;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.szn-hero-show {
+  font-family: var(--font-prose); font-size: 15px; font-weight: 700; font-style: italic; letter-spacing: 0.02em; text-transform: none;
+  color: var(--sp-gold); overflow-wrap: anywhere;
+}
+/* Two lines at most; the whole title is in the page (and in its title attribute). */
+.szn-hero-title {
+  margin: 0; font-family: var(--font-prose); font-size: 26px; font-weight: 600; line-height: 1.15; color: var(--sp-white); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.szn-hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 2px 0 0; font-size: 13px; font-weight: 600; }
+.szn-hero-meta .shl { margin: 0; }
+/* "Health" and its tone read as one pill: the name on the header's dark chip, the tone joined to it. */
+.szn-hero-meta .shl-line { gap: 0; font-size: 13px; flex-wrap: nowrap; }
+.szn-hero-meta .shl-prefix {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 2px 8px 2px 12px; border-radius: 999px 0 0 999px;
+  background: rgba(42, 14, 42, 0.55); border: 1px solid rgba(255, 255, 255, 0.45); border-right: 0; color: var(--sp-white);
+}
+.szn-hero-meta .shl-tone { border-radius: 0 999px 999px 0; }
+.szn-hero-chip {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 2px 12px; border-radius: 999px; font-size: 13px; font-weight: 700;
   background: rgba(42, 14, 42, 0.55); border: 1px solid rgba(255, 255, 255, 0.45); color: var(--sp-white);
 }
-.szn-hero-chips li.is-done { background: var(--sp-green); }
-.szn-hero-actions { position: absolute; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 8px; }
-/* Round 3 (2026-10-26): Print plan beside Edit Season, white on the shade; the health line keeps clear of the actions. */
+/* The lifecycle is an outline; the health beside it is a filled tone (SeasonHealthLine). */
+.szn-hero-chip.is-life { background: transparent; border-color: var(--sp-white); }
+.szn-hero-chip.is-life.is-completed { background: var(--sp-green); border-color: var(--sp-green); }
+.szn-hero-chip.is-quiet { border-style: dashed; font-weight: 600; }
+.szn-hero-side { flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
+.szn-hero .szn-switch { margin-top: 0; }
+.szn-hero-actions { display: flex; align-items: center; gap: 8px; }
 .szn-btn.is-ghost { background: var(--sp-card); color: var(--sp-ink); }
-.szn-hero-shade .shl { max-width: calc(100% - 360px); }
 /* The empty spots a later AI step fills (the Story's carried-over, the Cast's suggestions): nothing shows while empty. */
 .szn-ai-slot:empty { display: none; }
 .szn-story-season { margin: 0 0 12px; }
@@ -178,7 +196,7 @@
 .szn-tab-badge.is-overdue { background: var(--sp-pink-soft); color: var(--sp-pink-deep); }
 .szn-tab.is-on .szn-tab-badge { background: var(--sp-white); color: var(--sp-ink); }
 
-/* The season switcher, in the hero (2026-10-25). */
+/* The season switcher, in the header (2026-10-25). */
 .szn-switch { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .szn-switch-btn {
   display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
@@ -251,7 +269,13 @@
 }
 
 /* Overview: three cards in a row, then the fold, then four summary cards. */
+/* The Overview's own blocks from the header (2026-11-20): the season's counts, then the stat cards. */
+.szn-overview-tab > .shl.is-details { margin: 0 0 14px; }
+.szn-glance { margin: 0 0 16px; }
+.szn-glance > .szn-stats { margin-top: 0; }
 .szn-overview-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+/* The season's cover, in its card (it was the header's background until S2): a band, never a hero. */
+.szn-overview-cover { display: block; width: 100%; height: 120px; margin: 0 0 12px; border-radius: 14px; object-fit: cover; object-position: center right; background: var(--sp-purple-soft); }
 .szn-facts { display: grid; gap: 10px; margin: 0; }
 .szn-facts > div { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 10px; align-items: baseline; }
 .szn-facts dt { font-size: 13px; font-weight: 700; color: var(--sp-ink); }
@@ -335,6 +359,11 @@
 .szn-slot-body { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
 .szn-slot-num { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: var(--sp-pink-deep); }
 .szn-slot-next { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--sp-purple-fill); color: var(--sp-white); }
+/* The episode being made now: a filled gold tag, so it is not read as the purple "Next open slot". */
+.szn-slot-now { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--lala-gold-soft); color: var(--text-primary); border: 1px solid var(--lala-gold-line); white-space: nowrap; }
+.szn-slot-next { white-space: nowrap; }
+/* A started slot whose event association needs a look (lib/seasonSlotEvent). Words, not colour alone. */
+.szn-slot-review { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; color: var(--warning-text); border: 1px solid currentColor; background: transparent; }
 /* The slot's release day, from the show's release schedule (a preview dashed). */
 .szn-slot-num { flex-wrap: wrap; }
 .szn-slot-when { padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--sp-ink); border: 1px solid var(--sp-line); }
@@ -380,9 +409,10 @@
 .szn-event-code { padding: 2px 8px; border-radius: 6px; background: var(--sp-ink); color: var(--sp-white); font-size: 12px; font-weight: 700; font-family: var(--font-mono, 'DM Mono', monospace); }
 .szn-event-pencil { max-width: 100%; }
 @media (max-width: 600px) {
-  .szn-events-bar .szn-seg { display: flex; width: 100%; }
-  .szn-events-bar .szn-seg { border-radius: 16px; }
-  .szn-events-bar .szn-seg button { flex: 1 1 0; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 4px; border-radius: 13px; font-size: 13px; line-height: 1.2; text-align: center; }
+  /* The Roadmap's view switcher (four views) takes the same phone shape as the Events one: the full row, shared equally, never wider than the screen. */
+  .szn-events-bar .szn-seg, .szn-toolbar .szn-seg { display: flex; width: 100%; }
+  .szn-events-bar .szn-seg, .szn-toolbar .szn-seg { border-radius: 16px; }
+  .szn-events-bar .szn-seg button, .szn-toolbar .szn-seg button { flex: 1 1 0; min-width: 0; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 4px; border-radius: 13px; font-size: 13px; line-height: 1.2; text-align: center; }
 }
 .szn-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .szn-list-row {
@@ -395,6 +425,8 @@
 
 /* Tablet: two columns of everything. */
 @media (max-width: 1180px) {
+  /* A tablet, like a phone, has no hover to read a cut title by: the whole title is shown (S2 review, 2026-11-20). */
+  .szn-hero-title { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
   .szn-overview-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .szn-overview-row > :last-child { grid-column: 1 / -1; }
   .szn-summary-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -405,18 +437,19 @@
   .szn-parts { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* Phone: stat cards 2×2, one column, a shorter hero. */
+/* Phone: stat cards 2×2, one column, the header without its picture. */
 @media (max-width: 640px) {
   .szn-page { padding: 8px 16px 40px; }
-  .szn-hero, .szn-hero-shade { min-height: 260px; }
-  .szn-hero-shade { padding: 18px 16px 76px; background: linear-gradient(0deg, rgba(42, 14, 42, 0.92) 0%, rgba(42, 14, 42, 0.7) 55%, rgba(42, 14, 42, 0.3) 100%); }
-  .szn-hero:not(.has-cover) .szn-hero-shade { background: linear-gradient(0deg, rgba(42, 14, 42, 0.6) 0%, transparent 100%); }
-  .szn-hero-show { font-size: 20px; max-width: 100%; }
-  .szn-hero-title { font-size: 30px; max-width: 100%; }
-  .szn-hero-tagline { font-size: 15px; }
-  .szn-hero-chips li { font-size: 12px; }
-  .szn-hero-actions { left: 16px; right: 16px; bottom: 16px; justify-content: space-between; }
-  .szn-hero-shade .shl { max-width: 100%; }
+  /* The header on a phone: no picture; the words, then the switcher and the actions on their own row. */
+  .szn-hero { padding: 12px 14px; gap: 10px; background: linear-gradient(120deg, var(--sp-shade) 0%, var(--sp-purple-fill) 70%, var(--sp-pink) 130%); }
+  .szn-hero-thumb { display: none; }
+  .szn-hero-id { flex-basis: 100%; }
+  /* On a phone the whole title is shown: there is no hover to read a cut one by, and the Overview no longer repeats it. */
+  .szn-hero-title { font-size: 22px; display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+  .szn-hero-side { flex: 1 1 100%; justify-content: space-between; margin-left: 0; }
+  /* The actions keep to the right edge with or without a switcher, so the menu under ⋯ opens inside the screen. */
+  .szn-hero-actions { margin-left: auto; }
+  .szn-hero-chip, .szn-hero-meta .shl-prefix, .szn-hero-meta .shl-tone { font-size: 12px; padding-left: 9px; padding-right: 9px; }
   .szn-stats { gap: 10px; }
   .szn-stat { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'icon' 'body' 'bar' 'line'; padding: 12px; row-gap: 8px; }
   .szn-stat.is-budget { grid-template-areas: 'icon' 'body' 'spark' 'line'; }
@@ -439,5 +472,4 @@
   .szn-tab-badge-text { display: none; }
   .szn-tab-badge { padding: 1px 7px; }
   .szn-overview-row.is-two { grid-template-columns: minmax(0, 1fr); }
-  .szn-switch { margin-top: 10px; }
 }

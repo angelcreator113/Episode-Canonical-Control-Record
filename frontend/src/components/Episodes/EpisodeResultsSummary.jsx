@@ -7,13 +7,18 @@
  * platform copy, Pulse posts) is on Distribution (ResultsShare).
  * Helpers: lib/episodeResults.js. Reads only.
  */
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { seasonPageHref } from '../../lib/seasonPage';
-import { ArrowRight, Hourglass } from 'lucide-react';
+import { packageHref } from '../../lib/eventFlow';
+import { episodeSlotLink } from '../../lib/episodePlace';
+import { ArrowRight, Hourglass, X } from 'lucide-react';
 import api from '../../services/api';
+import AuthContext from '../../contexts/AuthContext';
+import { isAdmin } from '../../utils/authGroups';
+import { completeEpisode, MILESTONE_DECISIONS } from '../../lib/episodeCompletion';
 import { evaluationOf, howItWent, moneyRows, statRows, shareState, signedCoins } from '../../lib/episodeResults';
-import { EpisodeResultsEvaluation } from './EpisodeResultsPages';
+import { EpisodeResultsEvaluation, describeMilestoneCandidate } from './EpisodeResultsPages';
 import './EpisodeResultsSummary.css';
 
 function useGet(url, pick) {
@@ -67,7 +72,127 @@ export function ResultsShare({ episode, showId, onOpenTab, copyAction = null }) 
   );
 }
 
-export default function EpisodeResultsSummary({ episode, showId, onOpenTab, focus = null }) {
+/**
+ * Complete the episode, from the episode itself (Evoni, 2026-11-12). It is
+ * offered for the episode by its own id: nothing here depends on the event's
+ * link back to the episode. The one operation is lib/episodeCompletion; the
+ * server decides. A refusal stays on screen, in the server's words, until it
+ * is dismissed or the next attempt answers.
+ */
+function CompleteEpisode({ episode, showId, onOpenTab, onCompleted }) {
+  const admin = isAdmin(useContext(AuthContext)?.user);
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState(null);
+  const [notice, setNotice] = useState(null);
+  // An admin's answers for the milestone rewards a refusal names: { [row id]: decision }.
+  const [choices, setChoices] = useState({});
+
+  const run = async (milestoneDecisions = null) => {
+    setBusy(true);
+    setRefusal(null);
+    setNotice(null);
+    const out = await completeEpisode({ showId, episodeId: episode.id, title: episode.title, milestoneDecisions });
+    setBusy(false);
+    if (out.status === 'cancelled') return;
+    if (out.status === 'refused') {
+      // Keep only the answers for rewards still in question.
+      const asked = new Set((out.refusal.candidates || []).map((c) => c.tx_id));
+      setChoices((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => asked.has(id))));
+      setRefusal(out.refusal);
+      return;
+    }
+    setChoices({});
+    setNotice(out.status === 'already' ? 'This episode was already completed. Nothing was booked again.' : 'Completed. The result below is the one stored for this episode.');
+    // The stored result is read back from the server, never assumed here.
+    if (onCompleted) await onCompleted();
+  };
+
+  return (
+    <div className="ers-complete" data-testid="results-complete">
+      {admin ? (
+        <button type="button" className="ers-complete-btn" onClick={() => run()} disabled={busy} data-testid="results-complete-btn">
+          {busy ? 'Completing…' : 'Complete episode'}
+        </button>
+      ) : (
+        <p className="ers-note" data-testid="results-complete-admin-only">Only an admin can complete an episode: it books money and changes Lala&apos;s stats for good.</p>
+      )}
+      {notice && <p className="ers-note" role="status" data-testid="results-complete-notice">{notice}</p>}
+      {refusal && (
+        <div className="ers-refusal" role="alert" data-testid="results-complete-refusal">
+          <div className="ers-refusal-head">
+            <strong>{refusal.title}</strong>
+            <button type="button" className="ers-refusal-close" onClick={() => setRefusal(null)} aria-label="Dismiss this message" data-testid="results-complete-dismiss"><X size={16} aria-hidden="true" /></button>
+          </div>
+          <p className="ers-refusal-text">{refusal.message}</p>
+          <p className="ers-refusal-text">Nothing was booked.</p>
+          {refusal.action?.to && <Link className="ers-link" to={refusal.action.to} data-testid="results-complete-action">{refusal.action.label}</Link>}
+          {refusal.action?.tab && <button type="button" className="ers-link" onClick={() => onOpenTab?.(refusal.action.tab)} data-testid="results-complete-action">{refusal.action.label}</button>}
+          {refusal.action?.retry && <button type="button" className="ers-link" onClick={() => run()} disabled={busy} data-testid="results-complete-action">{refusal.action.label}</button>}
+          {admin && refusal.candidates?.length > 0 && (
+            <form
+              className="ers-milestones" data-testid="results-milestone-decisions"
+              onSubmit={(e) => { e.preventDefault(); run(Object.fromEntries(Object.entries(choices).filter(([, v]) => v))); }}
+            >
+              <p className="ers-refusal-text">
+                Each reward below was booked before rewards recorded their episode. Say whose it is only if you know; leave it undecided otherwise. It is never guessed.
+              </p>
+              <ul className="ers-milestone-list">
+                {refusal.candidates.map((c) => (
+                  <li key={c.tx_id} className="ers-milestone">
+                    <label htmlFor={`milestone-${c.tx_id}`} className="ers-milestone-name">{describeMilestoneCandidate(c)}</label>
+                    <select
+                      id={`milestone-${c.tx_id}`} className="ers-milestone-select" data-testid={`results-milestone-${c.tx_id}`}
+                      value={choices[c.tx_id] || ''} disabled={busy}
+                      onChange={(e) => setChoices((prev) => ({ ...prev, [c.tx_id]: e.target.value }))}
+                    >
+                      {MILESTONE_DECISIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    </select>
+                  </li>
+                ))}
+              </ul>
+              <button type="submit" className="ers-complete-btn" disabled={busy} data-testid="results-milestone-submit">
+                {busy ? 'Completing…' : 'Complete with these decisions'}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Where these results came from (Evoni, 2026-11-15): the event the episode
+ * was started from and its place on the Roadmap, each a link when the
+ * episode stores it and plain words when it does not.
+ *   sourceEvent        the episode's anchor event (EpisodeDetail's read of
+ *                      GET /episodes/:id/events), or null
+ *   sourceEventStatus  'loading' | 'ready' | 'failed'
+ * The slot is the episode's own season snapshot (lib/episodePlace): nothing
+ * is worked out from its number or dates, and a special is in no slot.
+ */
+export function ResultsContext({ episode, showId, sourceEvent = null, sourceEventStatus = 'ready' }) {
+  const eventShow = sourceEvent?.show_id || showId;
+  const place = episodeSlotLink(showId, episode);
+  return (
+    <p className="ers-context" data-testid="results-context">
+      <span className="ers-context-part" data-testid="results-context-event">
+        <span className="ers-context-label">Event</span>
+        {sourceEvent?.id && eventShow
+          ? <Link className="ers-link" to={packageHref(eventShow, sourceEvent.id, { kind: 'episode', id: episode?.id, tab: 'results' })} data-testid="results-event-link">{sourceEvent.name || 'Event Package'}</Link>
+          : <span className="ers-context-none">{sourceEventStatus === 'loading' ? 'Reading…' : sourceEventStatus === 'failed' ? 'Could not be read' : 'No event linked'}</span>}
+      </span>
+      <span className="ers-context-part" data-testid="results-context-slot">
+        <span className="ers-context-label">Roadmap</span>
+        {place
+          ? <Link className="ers-link" to={place.href} data-testid="results-slot-link">{place.label}</Link>
+          : <span className="ers-context-none">Not placed in a season</span>}
+      </span>
+    </p>
+  );
+}
+
+export default function EpisodeResultsSummary({ episode, showId, onOpenTab, onCompleted = null, focus = null, sourceEvent = null, sourceEventStatus = 'ready' }) {
   const episodeId = episode?.id;
   const brief = useGet(episodeId ? `/api/v1/episode-brief/${episodeId}` : null, (d) => d?.data || null);
   const money = useGet(showId && episodeId ? `/api/v1/world/${showId}/episodes/${episodeId}/money` : null, (d) => d?.data || null);
@@ -91,6 +216,7 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab, focu
         <span className="ers-sub">{how.done ? `Completed${how.score != null ? ` · ${how.score}/100` : ''}` : 'Not completed yet'}</span>
         {how.done && <button type="button" className="ers-btn" onClick={toEvaluation}>The evaluation</button>}
       </div>
+      <ResultsContext episode={episode} showId={showId} sourceEvent={sourceEvent} sourceEventStatus={sourceEventStatus} />
 
       <div className="ers-grid">
         {/* Until it is completed: what fills in then, not five empty rows. */}
@@ -101,8 +227,8 @@ export default function EpisodeResultsSummary({ episode, showId, onOpenTab, focu
               The outcome{how.designed ? <> (designed: <strong>{how.designed}</strong>)</> : null}, its score and what it changed for
               Lala&apos;s stats and goals, and the money settled.
             </p>
-            <p className="ers-note">Complete the episode from its event in Producer Mode to evaluate it.</p>
-            {showId && <Link className="ers-link" to={seasonPageHref(showId, 'events')}>Open the events</Link>}
+            <p className="ers-note">Completing evaluates the episode, books its money and updates Lala&apos;s stats. It is final.</p>
+            <CompleteEpisode episode={episode} showId={showId} onOpenTab={onOpenTab} onCompleted={onCompleted} />
           </section>
         )}
         {how.done && (

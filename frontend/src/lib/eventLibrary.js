@@ -7,6 +7,7 @@
  */
 import { calcEventDifficulty, eventDifficultyLabel } from '../utils/eventReadiness';
 import { allSlots } from './seasonPage';
+import { slotEvent } from './seasonSlotEvent';
 
 // Maps the Feed event templates grid's own label-word `category` values to
 // the ten settled world_events.category values (Evoni's taxonomy ruling,
@@ -123,7 +124,9 @@ export function seasonEventViews({ roadmap = null, events = [], episodes = [], s
   const usedBy = new Map();
   for (const ev of events) if (ev.used_in_episode_id && !usedBy.has(ev.used_in_episode_id)) usedBy.set(ev.used_in_episode_id, ev.id);
   for (const slot of slots) {
-    if (slot.event?.id) add(slot.event.id, slot);
+    if (slotEvent(slot)?.id) add(slotEvent(slot).id, slot);
+    // The raw pencil too, when it differs: the event is still held by this slot's pencil.
+    if (slot.event?.id && slot.event.id !== slotEvent(slot)?.id) add(slot.event.id, slot);
     if (slot.episode?.id && usedBy.has(slot.episode.id)) add(usedBy.get(slot.episode.id), slot);
   }
   // A bonus episode's or special's event is in the season too (seasonSpecials, 2026-10-26),

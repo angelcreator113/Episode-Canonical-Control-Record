@@ -151,6 +151,28 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
         `This event started ${episodeLabel(lockEpisode)}, so it can't be moved to another episode. Its terms and episode link are locked.`));
     }
 
+    // Inject attaches an episode's event and rewrites its script's one event
+    // tag, so it is for a first event or the primary only (Evoni, 2026-11-12):
+    // a second event for an episode that has one is linked from the episode's
+    // Events, not injected. Refused before anything is written.
+    {
+      const secondaryEvents = require('../../services/episodeSecondaryEvents');
+      const link = await secondaryEvents.classifyLink(models.sequelize, { eventId, episodeId: episode_id });
+      // A filmed episode is refused below as filmed (its script is never
+      // changed by a generator): that answer comes first and is kept.
+      const filmedAlready = link.kind === 'secondary' ? await require('../../utils/frozenEpisode').filmedAt(models.sequelize, episode_id) : null;
+      if (link.kind === 'secondary' && !filmedAlready) {
+        const refusal = secondaryEvents.attachEnabled()
+          ? new secondaryEvents.SecondaryEventError(409, secondaryEvents.CODES.INJECT_UNSUPPORTED,
+            'This episode already has its event. A second event is linked from the episode\'s Events, not injected: injecting would replace the script\'s event tag. Nothing was changed.',
+            { episode_id: episode_id, event_id: eventId })
+          : new secondaryEvents.SecondaryEventError(409, secondaryEvents.CODES.NOT_ENABLED,
+            'This episode already has its event, and linking a second event to an episode is not switched on yet. Nothing was changed.');
+        console.warn(`[inject] refused (${refusal.code}):`, refusal.message);
+        return res.status(refusal.status).json(refusal.toJSON());
+      }
+    }
+
     // A1.2c (Q-7 Layer 2): the event of a filmed episode that was deleted
     // is never attached to another episode. Asked again under the event lock below.
     const frozenDeleted = await findFrozenDeletedEpisode(models.sequelize, eventId);
@@ -208,6 +230,17 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
         await lockLiveEvent(models.sequelize, eventId, { transaction: t });
         const frozenNow = await findFrozenDeletedEpisode(models.sequelize, eventId, { transaction: t });
         if (frozenNow) throw restartRefusal(eventId, frozenNow);
+        // Asked again under the episode and event locks: another event
+        // linked meanwhile makes this a second event, which is not injected.
+        {
+          const secondaryEvents = require('../../services/episodeSecondaryEvents');
+          const linkNow = await secondaryEvents.classifyLink(models.sequelize, { eventId, episodeId: episode_id, transaction: t });
+          if (linkNow.kind === 'secondary') {
+            throw new secondaryEvents.SecondaryEventError(409, secondaryEvents.CODES.INJECT_UNSUPPORTED,
+              'Another event was linked to this episode while this one was being injected. A second event is not injected. Nothing was changed.',
+              { episode_id, event_id: eventId });
+          }
+        }
         await models.sequelize.query(
           `UPDATE world_events SET used_in_episode_id = :episodeId, times_used = COALESCE(times_used, 0) + 1, status = 'used', updated_at = NOW() WHERE id = :eventId AND deleted_at IS NULL`,
           { replacements: { episodeId: episode_id, eventId }, transaction: t }
@@ -224,6 +257,10 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
       });
     } catch (err) {
       if (sendScriptSaveError(res, err)) return undefined;
+      if (require('../../services/episodeSecondaryEvents').isSecondaryEventError(err)) {
+        console.warn(`[inject] refused (${err.code}):`, err.message);
+        return res.status(err.status).json(err.toJSON());
+      }
       if (isFrozenEpisodeError(err)) {
         console.warn(`[inject] refused (${err.code}):`, err.message);
         return res.status(409).json(err.toJSON());
@@ -250,6 +287,16 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
       message: `${saved.extra?.tagged === false ? `Event "${event.name}" attached. The episode has no script yet, so its tag was not added; generate or write the script, then attach the event again to add it.` : `Event "${event.name}" injected into episode script.`}${sceneSetLinked ? ' Scene set auto-linked.' : ''}${sceneSet.status === STATUS.NEEDS_RECONNECTING ? ' Scene set needs reconnecting.' : ''}${sceneSet.status === STATUS.CHOOSE ? ' Choose its scene set.' : ''}`,
     });
   } catch (error) {
+    // The episode's one link is held by another event (the database allows
+    // one for now): the inject rolled back whole. Said as that, with the
+    // event that holds it, so the link can be repaired; not a 500.
+    const { isEpisodeEventLinkConflict, episodeEventLinkTakenBody, findEpisodeLinkHolder } = require('../../utils/eventEpisodeLink');
+    if (isEpisodeEventLinkConflict(error)) {
+      const models = await getModels();
+      const holder = await findEpisodeLinkHolder(models.sequelize, req.body?.episode_id, req.params.eventId);
+      console.warn('[inject] refused (EPISODE_EVENT_LINK_TAKEN): the episode\'s link is held by another event');
+      return res.status(409).json(episodeEventLinkTakenBody({ episodeId: req.body?.episode_id || null, holder }));
+    }
     console.error('Inject event error:', error);
     return res.status(500).json({ success: false, error: 'Failed to inject event', message: error.message });
   }
@@ -293,6 +340,46 @@ router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, async 
   } catch (error) {
     console.error('Scene set link error:', error);
     return res.status(500).json({ success: false, error: 'Failed to link the scene set', message: error.message });
+  }
+});
+
+// POST /world/:showId/events/:eventId/detach-episode
+//
+// Remove a second event from its episode, before filming (Evoni, 2026-11-12;
+// services/episodeSecondaryEvents.detachSecondaryEvent). Body: { reason }.
+// One transaction; a repeat is a no-op (200, detached: false); refused with
+// what blocks it (409) for the primary event, a filmed episode, reopened
+// terms, any commitment, or anything in production that still depends on
+// it. Every outcome is written to the activity log. Not gated by the attach
+// switch: removing is always allowed where it is safe.
+router.post('/world/:showId/events/:eventId/detach-episode', requireAuth, async (req, res) => {
+  const secondaryEvents = require('../../services/episodeSecondaryEvents');
+  try {
+    const { showId, eventId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
+    const result = await secondaryEvents.detachSecondaryEvent(models.sequelize, models, {
+      eventId, showId, userId: req.user?.id ?? null, reason: req.body?.reason,
+    });
+    return res.json(result);
+  } catch (err) {
+    if (secondaryEvents.isSecondaryEventError(err)) {
+      console.warn(`[detach-episode] refused (${err.code}):`, err.message);
+      return res.status(err.status).json(err.toJSON());
+    }
+    // Deleted while the detach waited for it: nothing was changed.
+    if (err.code === EVENT_DELETED_CODE) {
+      console.warn('[detach-episode] refused:', err.message);
+      return res.status(409).json(eventDeletedBody(err));
+    }
+    const { asRetryable, RetryableConflictError } = require('../../utils/episodeLocks');
+    const retry = asRetryable(err);
+    if (retry instanceof RetryableConflictError) {
+      console.warn(`[detach-episode] refused (${retry.code}):`, retry.message);
+      return res.status(409).json({ success: false, error: retry.message, code: retry.code });
+    }
+    console.error('[detach-episode] failed:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

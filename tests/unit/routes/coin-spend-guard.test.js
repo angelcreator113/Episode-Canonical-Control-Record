@@ -122,6 +122,8 @@ jest.mock('../../../src/middleware/auth', () => ({
   requireAuth: (req, res, next) => next(),
   optionalAuth: (req, res, next) => next(),
   authorize: () => (req, res, next) => next(),
+  // A coin change is an admin's (2026-11-13); these tests are about the guard, not who asks.
+  userInGroup: () => true,
 }));
 jest.mock('../../../src/services/financialTransactionService', () => ({
   // The fast read, outside the transaction: possibly stale.

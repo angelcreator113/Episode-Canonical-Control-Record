@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Calendar, Camera, Clapperboard, Compass, Home, ImagePlus, Inbox, MapPin, MessageCircle,
-  PlusSquare, Search, User, Users,
+  PlusSquare, Search, User, Users, BarChart3,
 } from 'lucide-react';
 import api from '../services/api';
 import useActiveShow from '../hooks/useActiveShow';
@@ -16,6 +16,7 @@ import PulseStories, { recentPosters } from '../components/Pulse/PulseStories';
 import PulseCity from '../components/Pulse/PulseCity';
 import PulseMessages from '../components/Pulse/PulseMessages';
 import PulsePerson from '../components/Pulse/PulsePerson';
+import AudiencePoll from '../components/site/AudiencePoll';
 import { CitiesCard, CityStrip, TrendingCard, UpcomingCard, UpcomingRow, LatestFitCard, UPLOADS } from '../components/Pulse/PulseSides';
 import { RevealChip } from '../components/Pulse/PulseReveal';
 import { revealKey, loadRevealLabels } from '../lib/pulseReveals';
@@ -25,6 +26,9 @@ import { RELATIONSHIP_POST_TYPE, STATUSES, relationshipText, latestStatus } from
 import { posterOf } from '../lib/pulsePosts';
 import { followersText } from '../lib/pulseAudience';
 import './SocialMediaPage.css';
+
+/** Admin › The Pulse › Polls: where a poll is made, opened and closed. */
+export const POLLS_ADMIN = '/admin?tab=pulse&sub=polls';
 
 // Moved to lib/pulsePosts and components/Admin/PulseReviewPost (Task 2925);
 // re-exported for existing callers.
@@ -618,6 +622,11 @@ export default function SocialMediaPage() {
             <Clapperboard size={16} aria-hidden="true" />
             {director ? 'Director view: empty spots shown' : "Lala's screen (what the audience sees)"}
           </button>
+          {/* Managing polls is an ADMIN's: the link is inside the admin-only bar. */}
+          <Link className="pl-toggle pl-polls-link" to={POLLS_ADMIN} data-testid="pl-polls-link">
+            <BarChart3 size={16} aria-hidden="true" />
+            Polls
+          </Link>
         </div>
       )}
       {!director && atOverride !== null && (
@@ -632,6 +641,8 @@ export default function SocialMediaPage() {
         <div className="pl-grid">
           <aside className="pl-left"><LeftNav tab={tab} onTab={switchTab} /><LatestFitCard fit={fit} director={director} revealLabel={fit?.source === 'fit' && fit.id ? labels?.get(revealKey('image', fit.id, 'fit')) : null} /></aside>
           <main className="pl-center">
+            {/* The audience poll (the public read and vote, as on the landing page): the open one, else the latest result. */}
+            {tab === 'posts' && <AudiencePoll />}
             {tab === 'posts' && <Feed show={show} lala={lala} director={director} search={search} cities={cities} labels={labels} cityStates={cityStates} viewAt={viewAt} onCity={openCity} onPerson={openPerson} />}
             {tab === 'cities' && <PulseCity show={show} cities={cities} cityKey={params.get('city')} viewAt={viewAt} onCity={openCity} onPerson={openPerson} />}
             {tab === 'events' && <EventsView events={events} />}

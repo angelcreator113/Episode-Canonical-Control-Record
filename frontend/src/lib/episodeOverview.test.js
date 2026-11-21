@@ -48,3 +48,38 @@ describe('episodeOverview', () => {
     expect(coinsAfterPlan(false)).toEqual({ value: '—', note: 'could not be read' });
   });
 });
+
+describe('nextStep: what is not known yet is not guessed', () => {
+  test('callers that say nothing about loading get the same steps as before', () => {
+    expect(nextStep({ hasScript: false })).toMatchObject({ key: 'script', why: 'The brief is done.', action: 'Generate Script', tab: 'scripts' });
+    expect(nextStep({ hasScript: true })).toMatchObject({ key: 'production', why: 'The script is written.', action: 'Open Checklist', tab: 'checklist' });
+  });
+  test('the script check is still out, or failed: no step is named and there is no button', () => {
+    expect(nextStep({ hasScript: false, script: 'loading' })).toMatchObject({ title: 'Checking for a script…', action: null, tab: null });
+    expect(nextStep({ hasScript: false, script: 'failed' })).toMatchObject({ title: "Couldn't check for a script", why: 'Retry above to see your next step.', action: null, tab: null });
+    // The checklist and the brief are not what this waits for.
+    expect(nextStep({ hasScript: false, script: 'loading', checks: { done: 3, total: 3 }, brief: { narrative_purpose: 'x' } }).action).toBeNull();
+  });
+  test('no script: the button does not wait for the brief; only the sentence does', () => {
+    const loading = nextStep({ hasScript: false, briefStatus: 'loading', checksStatus: 'loading' });
+    expect(loading).toMatchObject({ key: 'script', title: 'Generate the script', why: 'Checking the brief…', action: 'Generate Script', tab: 'scripts' });
+    expect(loading.why).not.toContain('The brief is done');
+    expect(nextStep({ hasScript: false, briefStatus: 'failed' }).why).toBe("The brief couldn't be loaded.");
+  });
+  test('a script, the checklist still out: no step is named and there is no button', () => {
+    expect(nextStep({ hasScript: true, checksStatus: 'loading' })).toMatchObject({ title: 'Checking the production checklist…', why: 'The script is written.', action: null, tab: null });
+    // The brief still loading changes nothing here.
+    expect(nextStep({ hasScript: true, checksStatus: 'loading', briefStatus: 'loading' }).why).toBe('The script is written.');
+  });
+  test('a script, the checklist failed: said, with the Checklist tab to check again; never "complete"', () => {
+    const step = nextStep({ hasScript: true, checksStatus: 'failed' });
+    expect(step).toMatchObject({ key: 'production', title: 'Work through production', action: 'Open Checklist', tab: 'checklist' });
+    expect(step.why).toContain("couldn't be checked");
+  });
+  test('once the checks are there they decide, whatever the status said', () => {
+    expect(nextStep({ hasScript: true, checks: { done: 2, total: 5 }, checksStatus: 'loading' })).toMatchObject({ key: 'production', why: '3 production checks left.' });
+    expect(nextStep({ hasScript: true, checks: { done: 5, total: 5 }, checksStatus: 'ready' })).toMatchObject({ key: 'results', action: 'Open Results' });
+    // One check short is never "complete", whatever the reason it is short.
+    expect(nextStep({ hasScript: true, checks: { done: 4, total: 5 }, checksStatus: 'ready' }).key).toBe('production');
+  });
+});

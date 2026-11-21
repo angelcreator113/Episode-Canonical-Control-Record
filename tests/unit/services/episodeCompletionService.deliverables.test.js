@@ -10,7 +10,7 @@
  * whose event owes deliverables in every status.
  *
  * sequelize.query and the model layer are mocked; no DB. The real
- * careerPipelineService.onEpisodeCompleted runs against the mocked models.
+ * careerPipelineService runs against the mocked models.
  */
 
 const fs = require('fs');

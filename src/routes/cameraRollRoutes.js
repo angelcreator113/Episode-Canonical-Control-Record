@@ -42,7 +42,8 @@ function sendError(res, err, label) {
   return res.status(500).json({ success: false, error: 'That could not be done; nothing was saved.' });
 }
 
-router.get('/characters/:id', requireAuth, async (req, res) => {
+// ADMIN: a character's camera roll is the studio's (Evoni, 2026-11-15); The Pulse's profile gives their posted, public photos.
+router.get('/characters/:id', ...admin, async (req, res) => {
   try {
     const { audienceOf } = require('../services/mediaLibrary');
     const data = await roll().rollFor(models(), req.params.id, { audience: audienceOf(req.user) });

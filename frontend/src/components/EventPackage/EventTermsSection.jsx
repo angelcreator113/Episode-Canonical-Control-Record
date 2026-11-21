@@ -68,11 +68,14 @@
  *
  * Styles live in pages/EventPackagePage.css (one CSS file per page).
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useContext } from 'react';
+import { NOT_OWED_REASON, deliverableFeeNote } from '../../lib/episodeMoney';
 import {
   KeyRound, ClipboardList, Ban, Coins, Lock, Pencil, Plus, Trash2, Loader2, AlertCircle, Check, Handshake, Calculator, Tag,
 } from 'lucide-react';
 import api from '../../services/api';
+import AuthContext from '../../contexts/AuthContext';
+import { isAdmin } from '../../utils/authGroups';
 import { saveErrorMessage as errorMessage } from '../../utils/eventSaveVersion';
 import {
   REQUIREMENT_KEYS, describeRequirements, requirementsDraftFrom, buildRequirementsUpdate,
@@ -258,6 +261,8 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
   };
 
   // ── Fulfilment: after Start Episode only ──
+  // Approving books the content fee: the API allows it to an admin only.
+  const admin = isAdmin(useContext(AuthContext)?.user);
   const [advancingId, setAdvancingId] = useState(null);
   const [advanceError, setAdvanceError] = useState(null); // { id, message }
 
@@ -268,9 +273,14 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
     try {
       const res = await advanceDeliverableApi(showId, eventId, d.id, next);
       const updated = res.data?.deliverable;
-      if (updated?.id) setDeliverables((list) => list.map((row) => (row.id === updated.id ? updated : row)));
+      // Approval and the fee are separate (A2): an approval is read again, so
+      // the row shows what was booked, or that nothing was and why.
+      if (updated?.id && next !== 'approved') setDeliverables((list) => list.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)));
       else await loadDeliverables();
-      toast(`Marked ${DELIVERABLE_STATUS_LABELS[next].toLowerCase()}`);
+      const withheld = next === 'approved' ? res.data?.content_fee_withheld : null;
+      toast(withheld
+        ? `Marked approved. The fee was not booked${NOT_OWED_REASON[withheld.reason] ? `: ${NOT_OWED_REASON[withheld.reason]}` : ''}.`
+        : `Marked ${DELIVERABLE_STATUS_LABELS[next].toLowerCase()}`);
     } catch (err) {
       console.error('[EventTerms] deliverable status change failed:', err);
       setAdvanceError({ id: d.id, message: errorMessage(err, 'Failed to record the status') });
@@ -769,6 +779,11 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                         return draftNote && <span data-testid={`terms-deliverable-draft-${d.id}`}>{draftNote}</span>;
                       })()}
                       <span className={`epp-term-status is-${status}`} data-testid={`terms-deliverable-status-${d.id}`}>{DELIVERABLE_STATUS_LABELS[status]}</span>
+                      {/* The fee beside the approval (A2): booked, or not booked and why. */}
+                      {(() => {
+                        const note = locked ? deliverableFeeNote(d) : null;
+                        return note && <span className={`epp-term-fee-state is-${note.kind}`} data-testid={`terms-deliverable-booking-${d.id}`}>{note.text}</span>;
+                      })()}
                     </span>
                     {timeline.length > 0 && (
                       <span className="epp-term-timeline" data-testid={`terms-deliverable-timeline-${d.id}`}>
@@ -783,7 +798,10 @@ export default function EventTermsSection({ showId, eventId, event, locked, putE
                       <span className="epp-term-error"><AlertCircle size={12} aria-hidden="true" /> {advanceError.message}</span>
                     )}
                   </div>
-                  {next && (
+                  {next === 'approved' && !admin && (
+                    <span className="epp-term-timeline-step" data-testid={`terms-deliverable-approve-admin-${d.id}`}>Only an admin can approve (approval books the fee)</span>
+                  )}
+                  {next && (next !== 'approved' || admin) && (
                     <button
                       type="button" className="epp-btn epp-btn-small epp-term-advance"
                       data-testid={`terms-deliverable-advance-${d.id}`}

@@ -12,6 +12,7 @@ vi.mock('../../services/api', () => ({
 }));
 
 import api from '../../services/api';
+import AuthContext from '../../contexts/AuthContext';
 import EventTermsSection from './EventTermsSection';
 
 const EVENT = {
@@ -30,11 +31,15 @@ function renderTerms(props = {}) {
   const putEvent = vi.fn(async () => ({ data: { success: true } }));
   const onSaved = vi.fn(async () => {});
   const onToast = vi.fn();
+  // An admin unless a test says otherwise: approving a deliverable is an admin's (2026-11-13).
+  const { user = { id: 'u1', groups: ['admin'] }, ...rest } = props;
   render(
-    <EventTermsSection
-      showId="show-1" eventId="ev-1" event={EVENT} locked={false}
-      putEvent={putEvent} onSaved={onSaved} onToast={onToast} {...props}
-    />
+    <AuthContext.Provider value={{ user }}>
+      <EventTermsSection
+        showId="show-1" eventId="ev-1" event={EVENT} locked={false}
+        putEvent={putEvent} onSaved={onSaved} onToast={onToast} {...rest}
+      />
+    </AuthContext.Provider>
   );
   return { putEvent, onSaved, onToast };
 }
@@ -477,6 +482,17 @@ describe('EventTermsSection', () => {
       expect(screen.queryByLabelText('Remove Tagged post')).toBeNull();
     });
 
+    test('a non-admin gets no approve button, only who can; the earlier steps keep their buttons', async () => {
+      renderTerms({ locked: true, user: { id: 'u2', groups: ['editor'] } });
+      await waitFor(() => expect(screen.getByText('Tagged post')).toBeTruthy());
+      expect(screen.getByTestId('terms-deliverable-advance-p1').textContent).toBe('Mark completed');
+      expect(screen.getByTestId('terms-deliverable-advance-c1').textContent).toBe('Mark submitted');
+      expect(screen.queryByTestId('terms-deliverable-advance-s1')).toBeNull();
+      expect(screen.getByTestId('terms-deliverable-approve-admin-s1').textContent).toBe('Only an admin can approve (approval books the fee)');
+      expect(screen.queryByTestId('terms-deliverable-approve-admin-p1')).toBeNull();
+      expect(vi.mocked(api.post)).not.toHaveBeenCalled();
+    });
+
     test('advancing posts the next status to the status route and shows the saved row', async () => {
       vi.mocked(api.post).mockResolvedValue({
         data: { success: true, deliverable: { ...LOCKED[0], status: 'completed', completed_at: '2026-09-24T09:00:00Z' } },
@@ -534,5 +550,41 @@ describe('EventTermsSection', () => {
     fireEvent.click(screen.getByTestId('terms-restriction-open'));
     expect(screen.getByTestId('terms-restriction-input')).toBeTruthy();
     expect(restrictions.className).not.toContain('is-empty');
+  });
+});
+
+// A2 (Evoni, 2026-11-14): approval and the fee are separate. After Start the
+// row says what was booked, or that nothing was and why.
+describe('EventTermsSection: the fee beside the approval (A2)', () => {
+  const row = (extra) => ({ ...DELIVERABLES[0], id: 'd1', status: 'approved', approved_at: '2026-11-14T10:00:00.000Z', fee: 120, ...extra });
+  const show = async (deliverables, props = { locked: true }) => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockResolvedValue({ data: { success: true, deliverables, locked: true } });
+    renderTerms(props);
+    await waitFor(() => expect(screen.getByTestId('terms-deliverable-d1')).toBeTruthy());
+  };
+
+  test('approved and booked: says the amount booked', async () => {
+    await show([row({ proposed_fee: 120, booked_fee: 120, fee_state: 'booked' })]);
+    expect(screen.getByTestId('terms-deliverable-booking-d1').textContent).toBe('Booked 120');
+    expect(screen.getByTestId('terms-deliverable-status-d1')).toBeTruthy();
+  });
+
+  test('approved and not owed: still Approved, and the fee reads not booked, with why and what was proposed', async () => {
+    await show([row({ proposed_fee: 120, booked_fee: null, fee_state: 'not_owed', fee_reason: 'owner_closed' })]);
+    const note = screen.getByTestId('terms-deliverable-booking-d1');
+    expect(note.textContent).toBe('Fee not booked: the offer was declined or closed (proposed 120)');
+    expect(note.textContent).not.toMatch(/earned|paid|income/i);
+    expect(screen.getByTestId('terms-deliverable-status-d1').className).toContain('is-approved');
+  });
+
+  test('the offers need resolving: says the fee cannot be booked until they are', async () => {
+    await show([row({ status: 'submitted', approved_at: null, proposed_fee: 120, booked_fee: null, fee_state: 'unresolved', fee_reason: 'no_owner' })]);
+    expect(screen.getByTestId('terms-deliverable-booking-d1').textContent).toBe('The fee cannot be booked until the offers on this event are resolved');
+  });
+
+  test('nothing is added for a fee that simply books on approval, a row with no fee, or before Start Episode', async () => {
+    await show([row({ status: 'submitted', approved_at: null, proposed_fee: 120, booked_fee: null, fee_state: 'expected' })]);
+    expect(screen.queryByTestId('terms-deliverable-booking-d1')).toBeNull();
   });
 });

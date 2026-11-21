@@ -20,7 +20,9 @@ const {
   snapshotFrozen, peekFrozen, isFreezeError, changedFields, startRecordError, intentPendingAuditError,
   START_RECORD_FIELDS, FROZEN_INTENT_FIELDS,
 } = require('../utils/snapshotFreeze');
-const { assertEventRelinkAllowed, isFrozenEpisodeError } = require('../utils/frozenEpisode');
+const { assertEventRelinkAllowed, assertEpisodeAcceptsEventLink, isFrozenEpisodeError } = require('../utils/frozenEpisode');
+
+const { readsAsAdmin } = require('../services/publicSocialProfile');
 
 const SHOW_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -38,11 +40,19 @@ router.get('/:episodeId', requireAuth, async (req, res) => {
       const episode = await Episode.findByPk(episodeId);
       if (!episode) return res.status(404).json({ error: 'Episode not found' });
 
-      brief = await EpisodeBrief.create({
-        episode_id: episodeId,
-        show_id: episode.show_id,
-        status: 'draft',
-      });
+      // A read must not write for a reader who may not write (Evoni, 2026-11-16): only an ADMIN's read
+      // makes the episode's brief. Anyone else is shown the same empty draft, unsaved.
+      if (readsAsAdmin(req)) {
+        brief = await EpisodeBrief.create({
+          episode_id: episodeId,
+          show_id: episode.show_id,
+          status: 'draft',
+        });
+      } else {
+        // The model's own defaults for an unsaved brief, with no id: there is no row.
+        const unsaved = { ...EpisodeBrief.build({ episode_id: episodeId, show_id: episode.show_id, status: 'draft' }).toJSON(), id: null };
+        brief = { ...unsaved, toJSON: () => unsaved };
+      }
     }
 
     // Her goal this episode (Evoni, 2026-10-25; services/episodeMainGoal):
@@ -139,7 +149,12 @@ router.put('/:episodeId', requireAuth, async (req, res) => {
     if (linking || guarded.some((f) => updates[f] !== undefined)) {
       const { sequelize } = models;
       const saved = await sequelize.transaction(async (transaction) => {
-        if (linking) await assertEventRelinkAllowed(sequelize, updates.event_id, { transaction, episodeIds: [episodeId] });
+        if (linking) {
+          await assertEventRelinkAllowed(sequelize, updates.event_id, { transaction, episodeIds: [episodeId] });
+          // A filmed episode whose brief names no event takes no new source event (Evoni, 2026-11-12);
+          // an event whose own link already points at this episode is not new.
+          await assertEpisodeAcceptsEventLink(sequelize, { eventId: updates.event_id, episodeId, transaction, fields: ['event_id'] });
+        }
         const held = await lockEpisodes(sequelize, [episodeId], { transaction });
         const fresh = await EpisodeBrief.findOne({ where: { id: brief.id }, transaction, lock: transaction.LOCK.UPDATE });
         if (fresh.status === 'locked') return { refused: { status: 409, body: { error: 'Brief is locked. Unlock before editing.' } } };
@@ -394,6 +409,8 @@ router.get('/:episodeId/performance-clips', requireAuth, async (req, res) => {
 router.put('/:episodeId/performance-clips', requireAuth, async (req, res) => {
   try {
     const { attachClip } = require('../services/performanceClipsService');
+    const { anyDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
+    if (await anyDocumentPresentation(req.body && req.body.asset_id, { sequelize: models.sequelize })) return refuseDocumentPresentation(res);
     const result = await attachClip(models.sequelize, req.params.episodeId, req.body || {});
     return res.status(result.replaced ? 200 : 201).json({ success: true, data: result.clip, replaced: result.replaced });
   } catch (err) {

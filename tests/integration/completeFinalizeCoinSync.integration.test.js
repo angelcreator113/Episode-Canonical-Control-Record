@@ -36,7 +36,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   beforeAll(() => {
     token = TokenService.generateTokenPair({
       id: 'test-user-coin-sync', email: 'test@coin-sync.dev', name: 'Coin Sync Test',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      // Finalize is admin only, like completion (2026-11-13).
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 

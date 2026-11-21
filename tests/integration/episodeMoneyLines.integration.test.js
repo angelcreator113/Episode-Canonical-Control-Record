@@ -38,7 +38,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   beforeAll(() => {
     token = TokenService.generateTokenPair({
       id: 'test-user-money-lines', email: 'test@money-lines.dev', name: 'Money Lines',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      // Approving a deliverable books its fee: admin only (2026-11-13).
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {

@@ -62,7 +62,8 @@ describe('deleting an event: one way, one lock', () => {
     const fn = link.slice(link.indexOf('async function lockLiveEvent'), link.indexOf('module.exports'));
     expect(fn).toMatch(/FROM world_events WHERE id = :eventId FOR UPDATE/);
     expect(fn).toMatch(/!row \|\| row\.deleted_at/);
-    expect(code(read('src/services/episodeGeneratorService.js'))).toMatch(/await lockLiveEvent\(models\.sequelize, eventId, \{ transaction \}\)/);
+    // The Start's event and its other events (2026-11-12), each locked the same way, in id order.
+    expect(code(read('src/services/episodeGeneratorService.js'))).toMatch(/for \(const id of \[eventId, \.\.\.secondaryEvents\.map\(\(e\) => e\.id\)\]\.map\(String\)\.sort\(\)\) \{\s+await lockLiveEvent\(models\.sequelize, id, \{ transaction \}\)/);
     expect(code(read('src/routes/worldEvents/inject.js'))).toMatch(/await lockLiveEvent\(models\.sequelize, eventId, \{ transaction: t \}\)/);
     // No writer that links an event to an episode locks it another way.
     for (const rel of ['src/services/episodeGeneratorService.js', 'src/routes/worldEvents/inject.js']) {

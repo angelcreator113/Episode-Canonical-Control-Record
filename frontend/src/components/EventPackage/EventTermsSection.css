@@ -21,3 +21,9 @@
 
 /* An Undo notice in a term that reads as one line (no rows left) takes its own line. */
 .epp-term.is-empty > .eun-region.has-notice { order: 3; flex-basis: 100%; margin: 4px 0 0; }
+
+/* A2: the fee beside the approval. Booked, or not booked and why; never worded as earned. */
+.epp-term-fee-state { font-size: 12px; overflow-wrap: anywhere; }
+.epp-term-fee-state.is-booked { color: var(--success-text); }
+.epp-term-fee-state.is-not_owed { color: var(--lala-ink-muted); }
+.epp-term-fee-state.is-unresolved { color: var(--warning-text); }

@@ -11,6 +11,7 @@ const path = require('path');
 const request = require('supertest');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
+const { writeStatus } = require('../helpers/writeGuard');
 
 const ROOT = path.join(__dirname, '../..');
 const token = (role) => TokenService.generateTokenPair({
@@ -45,8 +46,13 @@ describe('YouTube training API is disabled', () => {
       let req = request(app)[method](url);
       if (role) req = req.set('Authorization', `Bearer ${token(role)}`);
       const res = body ? await req.send(body) : await req;
-      expect(res.status).toBe(410);
-      expect(res.body).toMatchObject({ code: 'YOUTUBE_TRAINING_DISABLED' });
+      // A read, and any request of an ADMIN's, gets the block's 410. A write by anyone else gets that 410, or
+      // the ADMIN write guard's refusal before it (401 signed out, 403 signed in). No route code runs either way:
+      // the last tests here show the router and the service are never loaded.
+      const expected = method === 'get' ? 410 : writeStatus(role, 410);
+      expect(res.status).toBe(expected);
+      if (expected === 410) expect(res.body).toMatchObject({ code: 'YOUTUBE_TRAINING_DISABLED' });
+      else expect(res.body).toMatchObject({ code: role ? 'AUTH_GROUP_REQUIRED' : 'AUTH_REQUIRED' });
     });
   }
 

@@ -23,7 +23,7 @@ export function howItWent({ brief = null, evaluation = null } = {}) {
   return { designed, actual, score: evaluation?.score ?? null, done: !!actual };
 }
 
-const STATE_TEXT = { planned: 'planned', pending: 'pending', posted: 'posted', not_earned: 'not earned', covered: 'covered' };
+const STATE_TEXT = { planned: 'planned', pending: 'pending', posted: 'posted', not_earned: 'not earned', covered: 'covered', not_owed: 'not owed' };
 
 /**
  * Money settled: a row per money line ({ key, label, amount, note }), and
@@ -34,7 +34,8 @@ export function moneyRows(money) {
   const rows = (money.lines || []).map((l) => ({
     key: l.key,
     label: l.label,
-    amount: l.covered ? 0 : Number(l.signed) || 0,
+    // A compensation line that is not owed is not money (A2).
+    amount: l.covered || l.state === 'not_owed' ? 0 : Number(l.signed) || 0,
     note: l.covered ? 'covered' : STATE_TEXT[l.state] || l.state || null,
   }));
   const p = money.projection || null;

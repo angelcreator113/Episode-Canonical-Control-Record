@@ -44,5 +44,10 @@ export const sceneSetPath = (showId, setId, opts = {}) =>
 export const sceneSetsPath = (showId, opts = {}) =>
   `/shows/${showId}/world?tab=scene-sets${handoffParams(opts)}`;
 
-/** A "from" path that stays in this app: one leading slash, not two. */
-export const isAppPath = (p) => typeof p === 'string' && /^\/(?!\/)/.test(p);
+/**
+ * A "from" path that stays in this app: one leading slash, not followed by
+ * another slash or a backslash (browsers read "/\\host" as "//host"), and no
+ * control characters.
+ */
+// eslint-disable-next-line no-control-regex
+export const isAppPath = (p) => typeof p === 'string' && /^\/(?![\/\\])/.test(p) && !/[\u0000-\u001f]/.test(p);

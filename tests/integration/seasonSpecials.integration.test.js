@@ -41,6 +41,9 @@ const SCHEDULE = { day: 'sun', time: '10:00', cadence: 'weekly', first_release: 
   const shows = [];
   let token;
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
+  // Completing an episode is admin only (Evoni, 2026-11-12).
+  const adminToken = () => TokenService.generateTokenPair({ id: 'test-admin-specials', email: 'admin@specials.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken()}`);
 
   async function seedSeason() {
     const show = uuid();
@@ -305,7 +308,7 @@ const SCHEDULE = { day: 'sun', time: '10:00', cadence: 'weekly', first_release: 
     expect(cov.slots.filter((s) => s.event_id === ev).length).toBeLessThanOrEqual(1);
 
     // Part 1 alone: to be continued.
-    const p1 = await auth(request(app).post(`/api/v1/world/${show}/episodes/${partOne}/complete`));
+    const p1 = await asAdmin(request(app).post(`/api/v1/world/${show}/episodes/${partOne}/complete`));
     expect(p1.status).toBe(409);
     expect(p1.body.code).toBe('TWO_PART_TO_BE_CONTINUED');
     expect(p1.body.error).toMatch(/Part 1 of a two-parter: to be continued/);
@@ -313,7 +316,7 @@ const SCHEDULE = { day: 'sun', time: '10:00', cadence: 'weekly', first_release: 
     expect(stillOpen.evaluation_status).not.toBe('accepted');
 
     // Part 2 completes the event: one completion, on Part 1; both done.
-    const p2 = await auth(request(app).post(`/api/v1/world/${show}/episodes/${partTwo}/complete`));
+    const p2 = await asAdmin(request(app).post(`/api/v1/world/${show}/episodes/${partTwo}/complete`));
     expect(p2.status).toBe(200);
     expect(p2.body.data.two_part).toEqual(expect.objectContaining({ completed: true, part_one_episode_id: partOne, part_two_episode_id: partTwo }));
     const done = await rows('SELECT id, evaluation_status, evaluation_json FROM episodes WHERE id IN (:ids)', { ids: [partOne, partTwo] });

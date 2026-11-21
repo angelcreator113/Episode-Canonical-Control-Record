@@ -103,18 +103,27 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(await episodeEventId(sequelize, none)).toBeNull();
   });
 
-  it('a WorldAdmin reassign (POST .../inject) leaves the episode tabs and the services on one event', async () => {
+  it('WorldAdmin inject: another event is not injected into an episode that has its event; the brief\'s own event is, and every reader names it', async () => {
     const token = TokenService.generateTokenPair({ id: 'test-user-one-rule', email: 'evoni@one-rule.dev', name: 'One Rule', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
     const ep = await episode();
     // The episode's brief names an event whose stamp is gone (an unlink or a
-    // merge cleared it); WorldAdmin's fix injects another event into it.
+    // merge cleared it). Injecting another event would make it a second
+    // event of the episode and replace the script's event tag, so it is
+    // refused (Evoni, 2026-11-12; services/episodeSecondaryEvents); the fix
+    // is the brief's own event, injected again.
     const briefEvent = await event('Started from');
     await brief(ep, briefEvent);
-    const injected = await event('Injected by WorldAdmin');
-    const inject = await request(app).post(`/api/v1/world/${show}/events/${injected}/inject`)
+    const other = await event('Injected by WorldAdmin');
+    const refused = await request(app).post(`/api/v1/world/${show}/events/${other}/inject`)
+      .set('Authorization', `Bearer ${token}`).send({ episode_id: ep });
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('SECONDARY_EVENTS_NOT_ENABLED');
+    expect((await run('SELECT used_in_episode_id FROM world_events WHERE id = :other', { other }))[0][0].used_in_episode_id).toBeNull();
+    await run('UPDATE world_events SET used_in_episode_id = NULL WHERE id = :briefEvent', { briefEvent });
+    const inject = await request(app).post(`/api/v1/world/${show}/events/${briefEvent}/inject`)
       .set('Authorization', `Bearer ${token}`).send({ episode_id: ep });
     expect(inject.status).toBe(200);
-    expect((await run('SELECT used_in_episode_id FROM world_events WHERE id = :injected', { injected }))[0][0].used_in_episode_id).toBe(ep);
+    expect((await run('SELECT used_in_episode_id FROM world_events WHERE id = :briefEvent', { briefEvent }))[0][0].used_in_episode_id).toBe(ep);
 
     const tabs = await request(app).get(`/api/v1/episodes/${ep}/events`).set('Authorization', `Bearer ${token}`);
     expect(tabs.status).toBe(200);

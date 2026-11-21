@@ -25,8 +25,11 @@ jest.unmock('uuid');
  * check whether that path was taken.
  */
 const request = require('supertest');
+const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
+const { sequelize } = require('../../src/models');
+const { enforcing, readOnlyTokens, expectWriteRefused } = require('../helpers/writeGuard');
 
 const shouldSkip =
   !process.env.DATABASE_URL ||
@@ -34,19 +37,23 @@ const shouldSkip =
   !process.env.DATABASE_URL?.includes('episode_metadata_test');
 
 const SHOW_ID = '11111111-1111-1111-1111-111111111111';
+// The refusal tests need the ADMIN write guard enforcing; with it off they are skipped.
+const guardIt = enforcing() ? it : it.skip;
 
 (shouldSkip ? describe.skip : describe)('Wardrobe money paths', () => {
+  // Production writes are an ADMIN's (Evoni, 2026-11-15); an editor and a viewer are refused them (the refusal test below).
   let token;
+  const readOnly = readOnlyTokens('wardrobe');
 
   const auth = () => `Bearer ${token}`;
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-wardrobe',
-      email: 'test@wardrobe.dev',
-      name: 'Wardrobe Test',
-      groups: ['USER', 'EDITOR'],
-      role: 'USER',
+      id: 'test-admin-wardrobe',
+      email: 'admin@wardrobe.dev',
+      name: 'Wardrobe Admin',
+      groups: ['ADMIN'],
+      role: 'ADMIN',
     }).accessToken;
   });
 
@@ -98,6 +105,27 @@ const SHOW_ID = '11111111-1111-1111-1111-111111111111';
 
       expect(res.status).toBe(404);
       expect(res.body.error).toMatch(/not found/i);
+    });
+
+    guardIt('a viewer and an editor cannot purchase or select: the piece is not owned and nothing is charged', async () => {
+      const id = crypto.randomUUID();
+      const select = (sql) => sequelize.query(sql, { replacements: { id, show: SHOW_ID }, type: sequelize.QueryTypes.SELECT });
+      await sequelize.query(`INSERT INTO wardrobe (id, name, clothing_category, lock_type, coin_cost, is_owned, created_at, updated_at)
+                             VALUES (:id, 'Refused gown', 'dress', 'coin', 10, false, NOW(), NOW())`, { replacements: { id } });
+      try {
+        const state = async () => JSON.stringify({
+          piece: await select('SELECT is_owned, coin_cost, deleted_at, updated_at FROM wardrobe WHERE id = :id'),
+          ledger: await select('SELECT id FROM financial_transactions WHERE show_id = :show OR source_id = :id ORDER BY id'),
+          lala: await select('SELECT character_key, coins, updated_at FROM character_state WHERE show_id = :show ORDER BY character_key'),
+        });
+        const before = await state();
+        await expectWriteRefused(() => request(app).post('/api/v1/wardrobe/purchase').send({ wardrobe_id: id, show_id: SHOW_ID }), readOnly);
+        await expectWriteRefused(() => request(app).post('/api/v1/wardrobe/select').send({ wardrobe_id: id, show_id: SHOW_ID }), readOnly);
+        expect(await state()).toBe(before);
+        expect(JSON.parse(before).piece).toMatchObject([{ is_owned: false }]);
+      } finally {
+        await sequelize.query('DELETE FROM wardrobe WHERE id = :id', { replacements: { id } });
+      }
     });
   });
 

@@ -84,8 +84,8 @@ export function formFromArc(arc) {
 /** A part's mood that is too long, in words (the server's rule); null when every mood fits. */
 export function moodProblem(phases) {
   for (const [i, p] of (phases || []).entries()) {
-    if ((p.emotional_arc || '').trim().length > MOOD_MAX.emotional_arc) return `Part ${i + 1}'s emotional arc is longer than ${MOOD_MAX.emotional_arc} characters.`;
-    if ((p.feed_tone || '').trim().length > MOOD_MAX.feed_tone) return `Part ${i + 1}'s feed tone is longer than ${MOOD_MAX.feed_tone} characters.`;
+    if ((p.emotional_arc || '').trim().length > MOOD_MAX.emotional_arc) return `Phase ${i + 1}'s emotional arc is longer than ${MOOD_MAX.emotional_arc} characters.`;
+    if ((p.feed_tone || '').trim().length > MOOD_MAX.feed_tone) return `Phase ${i + 1}'s feed tone is longer than ${MOOD_MAX.feed_tone} characters.`;
   }
   return null;
 }
@@ -99,8 +99,8 @@ export function datesProblem(startsOn, endsOn) {
 /** What is wrong with a split, in words; null when it is three whole numbers ≥ 1 adding up to 24 (the server's rule). */
 export function splitProblem(split) {
   const nums = split.map((n) => (n === '' || n == null ? NaN : Number(n)));
-  if (nums.some((n) => !Number.isInteger(n))) return 'Each part takes a whole number of episodes.';
-  if (nums.some((n) => n < 1)) return 'Each part needs at least one episode.';
+  if (nums.some((n) => !Number.isInteger(n))) return 'Each phase takes a whole number of episodes.';
+  if (nums.some((n) => n < 1)) return 'Each phase needs at least one episode.';
   const total = nums.reduce((a, b) => a + b, 0);
   if (total !== SEASON_SLOTS) return `These add up to ${total}; the season has ${SEASON_SLOTS} episodes.`;
   return null;
@@ -122,7 +122,7 @@ export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = n
   const [error, setError] = useState(null);
   const problem = splitProblem(form.split);
   const missing = !form.title.trim() ? 'The season needs a title.'
-    : form.phases.findIndex((p) => !p.title.trim()) >= 0 ? `Part ${form.phases.findIndex((p) => !p.title.trim()) + 1} needs a name.`
+    : form.phases.findIndex((p) => !p.title.trim()) >= 0 ? `Phase ${form.phases.findIndex((p) => !p.title.trim()) + 1} needs a name.`
       : datesProblem(form.starts_on, form.ends_on) || moodProblem(form.phases);
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const ranges = problem ? null : splitRanges(form.split);
@@ -164,8 +164,8 @@ export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = n
         </h3>
         <p className="sst-about">
           {mode === 'edit'
-            ? 'Rename the season and its parts, or move where the parts begin and end. An episode that has started keeps its part.'
-            : 'Name the season and its three parts, and choose how its 24 episodes split between them. You can change all of it later.'}
+            ? 'Rename the season and its phases, or move where the phases begin and end. An episode that has started keeps its phase.'
+            : 'Name the season and its three phases, and choose how its 24 episodes split between them. You can change all of it later.'}
         </p>
       </header>
 
@@ -211,7 +211,7 @@ export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = n
       <div className="sst-parts" role="group" aria-label="The three parts">
         {form.phases.map((p, i) => (
           <fieldset key={i} className="sst-part" data-testid={`sst-part-${i + 1}`}>
-            <legend className="sst-legend">Part {i + 1}{ranges ? <span className="sst-range"> · {ranges[i]}</span> : null}</legend>
+            <legend className="sst-legend">Phase {i + 1}{ranges ? <span className="sst-range"> · {ranges[i]}</span> : null}</legend>
             <label className="sst-field">
               <span>Name</span>
               <input type="text" value={p.title} maxLength={100} onChange={(e) => setPart(i, 'title', e.target.value)} data-testid={`sst-part-title-${i + 1}`} />
@@ -227,7 +227,7 @@ export function SeasonSetupForm({ mode = 'create', seasonNumber = 1, initial = n
             </label>
             <div className="sst-field">
               <span>Picture <em>(optional)</em></span>
-              <SeasonPicturePicker showId={showId} label={`Part ${i + 1} picture`} value={p.picture_url || null} disabled={busy}
+              <SeasonPicturePicker showId={showId} label={`Phase ${i + 1} picture`} value={p.picture_url || null} disabled={busy}
                 onChange={(url) => setPart(i, 'picture_url', url)} />
             </div>
             <label className="sst-field">
@@ -348,7 +348,7 @@ export function SeasonPlacement({ showId, api, onSaved, onClose }) {
               const slot = slotById.get(it.slot_id);
               return (
                 <li key={it.key} className={`sst-row is-${it.kind}`} data-testid={`sst-place-${it.key}`}>
-                  <span className="sst-slot">{slot?.label?.split(' · ')[1] || slot?.label}<span className="sst-slot-part">Part {slot?.phase}</span></span>
+                  <span className="sst-slot">{slot?.label?.split(' · ')[1] || slot?.label}<span className="sst-slot-part">Phase {slot?.phase}</span></span>
                   <div className="sst-row-body">
                     <span className="sst-row-title">
                       {it.kind === 'episode' ? <Film size={14} aria-hidden="true" /> : <CalendarDays size={14} aria-hidden="true" />}
@@ -458,7 +458,7 @@ export function SeasonDraft({ showId, api, phases = [], onSaved, onClose }) {
   };
   const skip = (d) => setDrafts((ds) => ds.filter((x) => x.slot_id !== d.slot_id));
 
-  const scopeName = scope ? `Part ${scope}${phases.find((p) => Number(p.phase) === scope)?.title ? `: ${phases.find((p) => Number(p.phase) === scope).title}` : ''}` : 'the whole season';
+  const scopeName = scope ? `Phase ${scope}${phases.find((p) => Number(p.phase) === scope)?.title ? `: ${phases.find((p) => Number(p.phase) === scope).title}` : ''}` : 'the whole season';
   const notOffered = info?.skipped || [];
 
   return (
@@ -478,7 +478,7 @@ export function SeasonDraft({ showId, api, phases = [], onSaved, onClose }) {
           <button key={p.phase} type="button" role="radio" aria-checked={scope === Number(p.phase)}
             className={`sst-scope-btn${scope === Number(p.phase) ? ' is-on' : ''}`} onClick={() => setScope(Number(p.phase))} disabled={drafting}
             data-testid={`sst-scope-${p.phase}`}>
-            Part {p.phase}{p.title ? `: ${p.title}` : ''}
+            Phase {p.phase}{p.title ? `: ${p.title}` : ''}
           </button>
         ))}
       </div>
@@ -510,7 +510,7 @@ export function SeasonDraft({ showId, api, phases = [], onSaved, onClose }) {
           <ol className="sst-list" aria-label="Drafted slots">
             {drafts.map((d) => (
               <li key={d.slot_id} className="sst-row is-draft" data-testid={`sst-draft-${d.slot_number}`}>
-                <span className="sst-slot">E{d.slot_number}<span className="sst-slot-part">Part {d.phase}</span></span>
+                <span className="sst-slot">E{d.slot_number}<span className="sst-slot-part">Phase {d.phase}</span></span>
                 <div className="sst-row-body">
                   <span className="sst-row-purpose">{d.story_purpose}</span>
                   <span className="sst-tags">

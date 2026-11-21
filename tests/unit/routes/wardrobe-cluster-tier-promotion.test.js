@@ -142,12 +142,23 @@ describe('Step 3 CP5 — Wardrobe cluster Tier 1 sweep + AI POST + Item 16 + aud
     });
 
     test('outfitSets.js imports requireAuth via destructuring (NEW import)', () => {
-      expect(src).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+      expect(src).toMatch(/const\s*\{\s*requireAuth(?:,\s*authorize)?\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+    });
+
+    // The two reads are an ADMIN's (Evoni, 2026-11-15: the production wardrobe is the studio's to read).
+    const ADMIN_READS = [
+      ["router.get('/'", 'listOutfitSets'],
+      ["router.get('/:id'", 'getOutfitSet'],
+    ];
+    ADMIN_READS.forEach(([prefix, ctrl]) => {
+      test(`${prefix} wraps requireAuth + authorize(['ADMIN']) + outfitSetController.${ctrl}`, () => {
+        const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(`${escapedPrefix},\\s*requireAuth,\\s*authorize\\(\\['ADMIN'\\]\\),\\s*outfitSetController\\.${ctrl}`);
+        expect(src).toMatch(re);
+      });
     });
 
     const ROUTES = [
-      ["router.get('/'", 'listOutfitSets'],
-      ["router.get('/:id'", 'getOutfitSet'],
       ["router.post('/'", 'createOutfitSet'],
       ["router.put('/:id'", 'updateOutfitSet'],
       ["router.delete('/:id'", 'deleteOutfitSet'],
@@ -205,11 +216,25 @@ describe('Step 3 CP5 — Wardrobe cluster Tier 1 sweep + AI POST + Item 16 + aud
     });
   });
 
+  describe("The production wardrobe's reads are an ADMIN's (Evoni, 2026-11-15)", () => {
+    // Every router.get in these files, the brand list included: it gives the whole brand record.
+    const ADMIN_GETS = { 'wardrobe.js': 10, 'wardrobeLibrary.js': 14, 'outfitSets.js': 2, 'wardrobeEventRoutes.js': 1, 'wardrobeBrands.js': 2 };
+    const OPEN_GETS = { 'wardrobe.js': 0, 'wardrobeLibrary.js': 0, 'outfitSets.js': 0, 'wardrobeEventRoutes.js': 0, 'wardrobeBrands.js': 0 };
+    Object.keys(ADMIN_GETS).forEach((f) => {
+      test(`${f}: ${ADMIN_GETS[f]} reads ask for an ADMIN, ${OPEN_GETS[f]} for a signed-in account only`, () => {
+        const gets = readSrc(f).split('\n').filter((l) => /^router\.get\(/.test(l));
+        const admin = gets.filter((l) => /requireAuth,\s*authorize\(\['ADMIN'\]\),/.test(l));
+        expect(admin.length).toBe(ADMIN_GETS[f]);
+        expect(gets.length - admin.length).toBe(OPEN_GETS[f]);
+      });
+    });
+  });
+
   describe('Direct destructuring imports (post-WP1 lazy-noop removal)', () => {
     CP5_FILES.forEach((f) => {
       test(`${f} imports requireAuth via destructuring`, () => {
         const src = readSrc(f);
-        expect(src).toMatch(/const\s*\{\s*requireAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+        expect(src).toMatch(/const\s*\{\s*requireAuth(?:,\s*authorize)?\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
       });
     });
   });

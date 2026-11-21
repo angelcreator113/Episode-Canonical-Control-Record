@@ -1,0 +1,125 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadInfra",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:Describe*",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSecurityGroupRules",
+        "ec2:DescribeInstances",
+        "ec2:DescribeNetworkInterfaces",
+        "rds:DescribeDBInstances",
+        "rds:DescribeDBSnapshots"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ChangeTheOneLoadBalancer",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:ModifyListener",
+        "elasticloadbalancing:CreateRule",
+        "elasticloadbalancing:ModifyRule",
+        "elasticloadbalancing:DeleteRule",
+        "elasticloadbalancing:SetRulePriorities",
+        "elasticloadbalancing:SetSecurityGroups"
+      ],
+      "Resource": [
+        "arn:aws:elasticloadbalancing:us-east-1:637423256673:loadbalancer/app/primepisodes-alb/75ba68945d7aa0bf",
+        "arn:aws:elasticloadbalancing:us-east-1:637423256673:listener/app/primepisodes-alb/75ba68945d7aa0bf/*",
+        "arn:aws:elasticloadbalancing:us-east-1:637423256673:listener-rule/app/primepisodes-alb/75ba68945d7aa0bf/*"
+      ]
+    },
+    {
+      "Sid": "ChangeTheOneTargetGroup",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:ModifyTargetGroup",
+        "elasticloadbalancing:ModifyTargetGroupAttributes",
+        "elasticloadbalancing:RegisterTargets",
+        "elasticloadbalancing:DeregisterTargets"
+      ],
+      "Resource": "arn:aws:elasticloadbalancing:us-east-1:637423256673:targetgroup/primepisodes-backend/44bf124db474bed5"
+    },
+    {
+      "Sid": "ChangeRulesOnNamedSecurityGroups",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupEgress",
+        "ec2:ModifySecurityGroupRules"
+      ],
+      "Resource": [
+        "arn:aws:ec2:us-east-1:637423256673:security-group/sg-05c3a6ed6eee7b3a6",
+        "arn:aws:ec2:us-east-1:637423256673:security-group/sg-06651e212aefa8a66",
+        "arn:aws:ec2:us-east-1:637423256673:security-group/sg-03dc4aac6053670b5",
+        "arn:aws:ec2:us-east-1:637423256673:security-group/sg-0bbe523f9dd31661a",
+        "arn:aws:ec2:us-east-1:637423256673:security-group-rule/*"
+      ]
+    },
+    {
+      "Sid": "SnapshotProductionDatabase",
+      "Effect": "Allow",
+      "Action": [
+        "rds:CreateDBSnapshot",
+        "rds:AddTagsToResource"
+      ],
+      "Resource": [
+        "arn:aws:rds:us-east-1:637423256673:db:episode-control-dev",
+        "arn:aws:rds:us-east-1:637423256673:snapshot:agent-*"
+      ]
+    },
+    {
+      "Sid": "NeverThese",
+      "Effect": "Deny",
+      "Action": [
+        "iam:*",
+        "organizations:*",
+        "sts:AssumeRole*",
+        "cognito-idp:*",
+        "cognito-identity:*",
+        "kms:*",
+        "rds:Delete*",
+        "rds:Restore*",
+        "rds:Modify*",
+        "rds:Stop*",
+        "rds:Start*",
+        "rds:Reboot*",
+        "rds:Failover*",
+        "rds:RemoveTagsFromResource",
+        "ec2:Terminate*",
+        "ec2:StopInstances",
+        "ec2:RebootInstances",
+        "ec2:DeleteVolume",
+        "ec2:DeleteSnapshot",
+        "ec2:DeregisterImage",
+        "ec2:CreateSecurityGroup",
+        "ec2:DeleteSecurityGroup",
+        "ec2:ModifyInstanceAttribute",
+        "elasticloadbalancing:DeleteLoadBalancer",
+        "elasticloadbalancing:DeleteListener",
+        "elasticloadbalancing:DeleteTargetGroup",
+        "elasticloadbalancing:CreateLoadBalancer",
+        "elasticloadbalancing:CreateListener",
+        "elasticloadbalancing:ModifyLoadBalancerAttributes",
+        "elasticloadbalancing:AddListenerCertificates",
+        "elasticloadbalancing:RemoveListenerCertificates",
+        "s3:Put*",
+        "s3:Delete*",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:Put*",
+        "secretsmanager:Update*",
+        "secretsmanager:Delete*",
+        "secretsmanager:Create*",
+        "ssm:GetParameter*",
+        "ssm:PutParameter",
+        "ssm:DeleteParameter*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

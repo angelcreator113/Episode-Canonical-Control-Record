@@ -178,6 +178,21 @@ const logger = {
     }
   },
 
+  /**
+   * The same one call, for an operation that must not happen without its
+   * entry (Evoni, 2026-11-12): written inside the caller's transaction, so
+   * the entry commits or rolls back with the work, and a failure REJECTS so
+   * the caller's transaction rolls back. Same limits on what an entry holds.
+   */
+  logActionInTransaction: async (transaction, userId, action, resourceType, resourceId, options = {}) => {
+    if (!transaction) throw new Error('logActionInTransaction needs the caller\'s transaction');
+    const { ActivityLog } = models;
+    if (!ActivityLog) throw new Error('the ActivityLog model is not loaded');
+    return ActivityLog.logActivity({
+      userId, action, resourceType, resourceId, changes: changesFrom(options || {}),
+    }, { transaction });
+  },
+
   /** A user's entries, newest first ([] when they cannot be read). */
   getUserHistory: async (userId, limit) => {
     try {

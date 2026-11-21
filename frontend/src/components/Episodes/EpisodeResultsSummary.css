@@ -3,6 +3,12 @@
 .ers-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 6px 0 14px; }
 .ers .ers-title { margin: 0; font-family: var(--font-prose); font-size: 26px !important; font-weight: 600; color: var(--lala-ink); }
 .ers-sub { font-size: 14px; color: var(--lala-ink-muted); }
+/* Where the results came from: the event and the Roadmap slot (2026-11-15). */
+.ers-context { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: -6px 0 14px; font-size: 14px; color: var(--lala-ink-muted); }
+.ers-context-part { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ers-context-label { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lala-lavender-text); }
+.ers-context .ers-link { min-height: 24px; overflow-wrap: anywhere; }
+.ers-context-none { color: var(--lala-ink-muted); }
 .ers-btn { margin-left: auto; padding: 7px 14px; border: 1px solid var(--accent-light); border-radius: 999px; background: var(--surface-card); color: var(--accent-dark); font-size: 13px; font-weight: 600; cursor: pointer; }
 .ers-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
 .ers-card { min-width: 0; padding: 18px 22px; border: 1px solid var(--lala-lavender-line); border-radius: 14px; background: var(--surface-card); }
@@ -118,3 +124,27 @@
 @media (max-width: 480px) {
   .ers-format.is-chip { flex: 1 1 100%; }
 }
+
+/* Complete the episode, and a refusal that stays until dismissed (Evoni, 2026-11-12). */
+.ers-complete { display: grid; gap: 10px; justify-items: start; margin-top: 4px; min-width: 0; }
+.ers-complete-btn { min-height: 44px; padding: 10px 20px; border: 2px solid var(--lala-gold); border-radius: 999px; background: var(--surface-card); color: var(--lala-gold-text); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.ers-complete-btn:disabled { opacity: .6; cursor: default; }
+.ers-complete-btn:focus-visible, .ers-refusal-close:focus-visible { outline: 3px solid var(--lala-lavender-text); outline-offset: 2px; }
+.ers-refusal { display: grid; gap: 6px; width: 100%; min-width: 0; padding: 12px 14px; border: 1px solid currentColor; border-radius: 12px; background: var(--warning-bg); color: var(--warning-text); }
+.ers-refusal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.ers-refusal-text { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.ers-refusal-close { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 44px; min-height: 44px; border: none; border-radius: 8px; background: none; color: inherit; cursor: pointer; }
+
+/* Milestone attribution (Evoni, 2026-11-13): the decision form inside a
+   refusal, and the stored record on the evaluation. */
+.ers-milestones { display: grid; gap: 10px; min-width: 0; margin-top: 4px; }
+.ers-milestone-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.ers-milestone { display: grid; gap: 4px; min-width: 0; }
+.ers-milestone-name { font-size: 14px; overflow-wrap: anywhere; }
+.ers-milestone-select { width: 100%; max-width: 320px; min-height: 44px; padding: 8px 10px; border: 1px solid currentColor; border-radius: 8px; background: var(--lala-parchment); color: var(--lala-ink); font: inherit; }
+.ers-milestone-select:focus-visible { outline: 3px solid var(--lala-lavender-text); outline-offset: 2px; }
+.ers-attribution { margin-top: 16px; }
+.ers-attribution-status { margin: 0 0 4px; font-weight: 600; }
+.ers-attribution-status.is-unverified { color: var(--warning-text); }
+.ers-attribution-rows li { align-items: flex-start; gap: 12px; }
+.ers-attribution-rows strong { flex: none; text-align: right; }

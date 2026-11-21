@@ -53,7 +53,7 @@ describe('SeasonThreads', () => {
     expect(api.get).toHaveBeenCalledWith(`${BASE}/inbox?season=2`);
     expect(card.getByText('New · opened by itself')).toBeTruthy();
     expect(card.getByText('From the Velour Gala\'s seeds')).toBeTruthy();
-    expect(card.getByText('Part 1: Foundation')).toBeTruthy();
+    expect(card.getByText('Phase 1: Foundation')).toBeTruthy();
     expect(card.getByText(/Her first repeat client/)).toBeTruthy();
     expect(card.getByText('Suggested plan')).toBeTruthy();
     expect(card.getByTestId('sth-carry').value).toBe('s4');

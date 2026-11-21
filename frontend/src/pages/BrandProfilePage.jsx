@@ -28,6 +28,7 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdmin } from '../utils/authGroups';
 import { rememberedShowId } from '../utils/activeShow';
+import { seasonPageHref } from '../lib/seasonPage';
 import { atHandle } from './feed/feedConstants';
 import PostingSchedule from '../components/PostingSchedule/PostingSchedule';
 import DeliverableProgress from '../components/Deliverables/DeliverableProgress';
@@ -234,7 +235,20 @@ function Pulse({ data, admin, onChanged }) {
   );
 }
 
+/**
+ * The shows these deals belong to, once each: where "Open Opportunities"
+ * goes. The Opportunities tab is on a show's Season page (it was a tab of
+ * /admin until the Season page took it), so a company with deals in two
+ * shows gets a link for each, and one with none gets no link.
+ */
+export function dealShows(deals = []) {
+  const seen = new Map();
+  for (const d of deals) if (d?.show_id && !seen.has(String(d.show_id))) seen.set(String(d.show_id), d.show || null);
+  return [...seen].map(([id, name]) => ({ id, name }));
+}
+
 function Business({ deals }) {
+  const shows = dealShows(deals);
   return (
     <div className="bp-tab" data-testid="bp-business">
       {deals.length ? (
@@ -253,7 +267,11 @@ function Business({ deals }) {
           ))}
         </ul>
       ) : <p className="bp-muted">No deals yet.</p>}
-      <Link className="bp-link" to="/admin?tab=opportunities">Open Opportunities</Link>
+      {shows.map((s) => (
+        <Link key={s.id} className="bp-link" to={seasonPageHref(s.id, 'opportunities')} data-testid={`bp-opportunities-${s.id}`}>
+          Open Opportunities{shows.length > 1 && s.name ? ` · ${s.name}` : ''}
+        </Link>
+      ))}
     </div>
   );
 }
@@ -432,7 +450,10 @@ export default function BrandProfilePage() {
   if (error && !data) return <div className="bp"><p className="bp-error" role="alert">{error}</p><Link className="bp-link" to="/universe?tab=brands">← LalaVerse › Brands</Link></div>;
   if (!data) return <div className="bp"><p className="bp-muted">Loading…</p></div>;
 
-  const { company, sections } = data;
+  const { company } = data;
+  // Pictures reads the studio's picture library, which is an ADMIN's to read (Evoni, 2026-11-20): anyone else has no
+  // Pictures tab, so nothing asks for it, and an address that names it opens the first tab they do have.
+  const sections = admin ? data.sections : data.sections.filter((s) => s.key !== 'pictures');
   const tab = sections.some((s) => s.key === params.get('tab')) ? params.get('tab') : sections[0].key;
   const open = (key) => setParams((p) => { const next = new URLSearchParams(p); next.set('tab', key); return next; }, { replace: true });
 
@@ -461,7 +482,7 @@ export default function BrandProfilePage() {
         {tab === 'people' && data.people && <People people={data.people} />}
         {tab === 'pulse' && data.pulse && <Pulse data={data} admin={admin} onChanged={load} />}
         {tab === 'business' && data.business && <Business deals={data.business} />}
-        {tab === 'pictures' && <Pictures company={company} admin={admin} />}
+        {tab === 'pictures' && admin && <Pictures company={company} admin={admin} />}
         {tab === 'wardrobe' && data.wardrobe && <Wardrobe pieces={data.wardrobe} />}
         {tab === 'press' && data.press && <Press press={data.press} kind={company.kind} />}
         {tab === 'relationships' && data.relationships && <Relationships list={data.relationships} />}

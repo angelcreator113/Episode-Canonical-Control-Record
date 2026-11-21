@@ -451,7 +451,13 @@ const SCRIPT = [
       expect(off.status).toBe(404);
       expect(off.body.code).toBe('EPISODE_EDIT_OFF');
       process.env.EPISODE_EDIT = 'on';
-      const read = await request(app).get(`/api/v1/episodes/${w.ep}/edit`).set('Authorization', `Bearer ${userToken}`);
+      // Evoni, 2026-11-16: reads are an ADMIN's too (they answered any signed-in user until then).
+      for (const path of ['', '/layout?t=0', '/mix', '/findings', '/sources', '/versions']) {
+        const refused = await request(app).get(`/api/v1/episodes/${w.ep}/edit${path}`).set('Authorization', `Bearer ${userToken}`);
+        expect([path, refused.status]).toEqual([path, 403]);
+        expect(refused.body.data).toBeUndefined();
+      }
+      const read = await request(app).get(`/api/v1/episodes/${w.ep}/edit`).set('Authorization', `Bearer ${adminToken}`);
       expect(read.status).toBe(200);
       expect(read.body.data.edit_revision).toBe('0');
       const forbidden = await request(app).post(`/api/v1/episodes/${w.ep}/edit/beats/2/mode`).set('Authorization', `Bearer ${userToken}`).send({ edit_revision: '0', prime_mode: 'gameplay_only' });
@@ -462,9 +468,9 @@ const SCRIPT = [
       const stale = await request(app).post(`/api/v1/episodes/${w.ep}/edit/beats/2/mode`).set('Authorization', `Bearer ${adminToken}`).send({ edit_revision: '0', prime_mode: 'required' });
       expect(stale.status).toBe(409);
       expect(stale.body).toMatchObject({ code: 'EDIT_CHANGED', current_revision: '1' });
-      const layout = await request(app).get(`/api/v1/episodes/${w.ep}/edit/layout?t=0`).set('Authorization', `Bearer ${userToken}`);
+      const layout = await request(app).get(`/api/v1/episodes/${w.ep}/edit/layout?t=0`).set('Authorization', `Bearer ${adminToken}`);
       expect(layout.status).toBe(200);
-      const findings = await request(app).get(`/api/v1/episodes/${w.ep}/edit/findings`).set('Authorization', `Bearer ${userToken}`);
+      const findings = await request(app).get(`/api/v1/episodes/${w.ep}/edit/findings`).set('Authorization', `Bearer ${adminToken}`);
       expect(findings.body.data.findings.filter((f) => f.code === 'scene_missing')).toHaveLength(14);
       // Beat timing and dialogue routes: a dry run by any admin writes nothing; the lock is one write; a line mark is refused.
       await fillBeats(w);

@@ -1,6 +1,6 @@
 /** The Season page's pure helpers (lib/seasonPage, 2026-10-25). */
 import { describe, test, expect } from 'vitest';
-import { SEASON_TABS, seasonPageHref, tabFrom, dateRange, dayLabel, seasonStats, slotPicture, filterSlots, revealMatrix, heroChips } from './seasonPage';
+import { SEASON_TABS, seasonPageHref, tabFrom, dateRange, dayLabel, seasonStats, slotPicture, filterSlots, revealMatrix, seasonLifecycle } from './seasonPage';
 
 const slot = (n, state, extra = {}) => ({ id: `s${n}`, slot_number: n, phase: n <= 8 ? 1 : n <= 16 ? 2 : 3, state, ...extra });
 
@@ -18,9 +18,11 @@ describe('seasonPage helpers', () => {
     for (const t of SEASON_TABS) expect(t.note).toMatch(/\.$/);
   });
 
-  test('seasonPageHref: the tab, then any extra values; Overview has no ?tab=', () => {
+  test('seasonPageHref: the tab, then any extra values; the Overview is named, and no tab leaves the page to choose', () => {
+    // No tab: the page opens its default (defaultSeasonTab), the Roadmap once the season is under way.
     expect(seasonPageHref('show-1')).toBe('/shows/show-1/season');
-    expect(seasonPageHref('show-1', 'overview')).toBe('/shows/show-1/season');
+    // The Overview is asked for by name, so it is not replaced by that default (2026-11-12).
+    expect(seasonPageHref('show-1', 'overview')).toBe('/shows/show-1/season?tab=overview');
     expect(seasonPageHref('show-1', 'results')).toBe('/shows/show-1/season?tab=results');
     expect(seasonPageHref('show 1', 'opportunities', { deal_with: 'The Column', empty: '' })).toBe('/shows/show%201/season?tab=opportunities&deal_with=The+Column');
   });
@@ -54,7 +56,7 @@ describe('seasonPage helpers', () => {
     expect(slotPicture(slot(9, 'needs_event'), { episodes, events, arc })).toBeNull();
   });
 
-  test('filters, the reveal matrix, the hero chips', () => {
+  test('filters, the reveal matrix, the lifecycle', () => {
     const slots = [slot(1, 'done'), slot(9, 'event_ready'), slot(10, 'needs_event')];
     expect(filterSlots(slots, { part: '2' }).map((s) => s.slot_number)).toEqual([9, 10]);
     expect(filterSlots(slots, { status: 'event_ready' }).map((s) => s.slot_number)).toEqual([9]);
@@ -62,7 +64,10 @@ describe('seasonPage helpers', () => {
       secrets: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }],
       reveals: [{ secret_id: 'a', slot_number: 8, intent: 'hint' }, { secret_id: 'a', slot_number: 4, intent: 'hint' }, { secret_id: 'a', slot_number: 21, intent: 'reveal' }],
     })).toEqual([{ id: 'a', name: 'A', who: null, hints: [4, 8], reveal: 21 }]);
-    expect(heroChips({ roadmap: { slot_count: 24 }, arc: { phases: [1, 2, 3], starts_on: '2026-01-05', ends_on: '2026-03-29' } }))
-      .toEqual(['24 Episodes', '3 Parts', 'Jan 5, 2026 – Mar 29, 2026']);
+    // The header's lifecycle (S2): the season's own status, named; anything else is not named.
+    expect(seasonLifecycle({ status: 'upcoming' })).toEqual({ key: 'upcoming', label: 'Upcoming' });
+    expect(seasonLifecycle({ status: 'active' })).toEqual({ key: 'active', label: 'Active' });
+    expect(seasonLifecycle({ status: 'completed' })).toEqual({ key: 'completed', label: 'Completed' });
+    for (const arc of [null, {}, { status: 'paused' }, { status: 'toString' }, { status: '' }]) expect(seasonLifecycle(arc)).toBeNull();
   });
 });

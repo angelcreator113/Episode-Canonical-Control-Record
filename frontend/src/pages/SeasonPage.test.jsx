@@ -96,8 +96,10 @@ function Where() {
   return <span data-testid="where">{loc.pathname}{loc.search}</span>;
 }
 function renderPage(search = '') {
+  // These tests are about a named tab. With no ?tab= the page picks its own default (SeasonPage.defaultTab.test.jsx), so the Overview is named here.
+  const at = /[?&]tab=/.test(search) ? search : `${search ? `${search}&` : '?'}tab=overview`;
   return render(
-    <MemoryRouter initialEntries={[`/shows/show-1/season${search}`]}>
+    <MemoryRouter initialEntries={[`/shows/show-1/season${at}`]}>
       <Routes>
         <Route path="/shows/:showId/season" element={<><SeasonPage /><Where /></>} />
         <Route path="*" element={<Where />} />
@@ -175,24 +177,47 @@ describe('The tabs', () => {
 });
 
 describe('The hero', () => {
-  test('with a cover: the picture, "Season 1", the title, the tagline and the chips', async () => {
+  test('with a cover: a small picture (never a background), the show, "Season 1", the title, lifecycle, health, phase and dates', async () => {
     renderPage();
     const hero = await screen.findByTestId('szn-hero');
-    expect(hero.className).toContain('has-cover');
-    expect(hero.style.backgroundImage).toContain('https://cdn.example.com/cover.jpg');
+    // S2: the cover is a small picture beside the title; the full cover and the tagline are the Overview card's.
+    expect(hero.className).not.toContain('has-cover');
+    expect(hero.style.backgroundImage).toBe('');
+    const thumb = within(hero).getByTestId('szn-hero-thumb');
+    expect(thumb.getAttribute('src')).toBe('https://cdn.example.com/cover.jpg');
+    expect(thumb.getAttribute('loading')).toBe('lazy');
+    expect(thumb.getAttribute('alt')).toBe('');
     expect(within(hero).getByText('Season 1')).toBeTruthy();
-    expect(within(hero).getByRole('heading', { level: 1 }).textContent).toBe('Soft Luxury Ascension');
+    const title = within(hero).getByRole('heading', { level: 1 });
+    expect(title.textContent).toBe('Soft Luxury Ascension');
+    expect(title.getAttribute('title')).toBe('Soft Luxury Ascension');
     expect(within(hero).getByText('Styling Adventures with Lala')).toBeTruthy();
-    expect(within(hero).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['24 Episodes', '3 Parts', 'Jan 5, 2026 – Mar 29, 2026']);
+    expect(within(hero).getByTestId('szn-lifecycle').textContent).toBe('Active');
+    expect(within(hero).getByTestId('szn-hero-phase').textContent).toMatch(/^Phase 1/);
+    expect(within(hero).getByTestId('szn-hero-dates').textContent).toBe('Jan 5, 2026 – Mar 29, 2026');
+    // Health is named as health, apart from the lifecycle.
+    const health = await within(hero).findByTestId('szn-health');
+    expect(health.textContent).toMatch(/^Health/);
+    expect(within(health).getByTestId('szn-health-tone').textContent).not.toBe('Active');
+    // Said elsewhere now: the episode and phase counts (the stat cards, the phases card), the tagline (the season card).
+    expect(hero.textContent).not.toContain('24 Episodes');
+    expect(hero.textContent).not.toContain('3 Phases');
+    expect(hero.textContent).not.toContain(ARC.tagline);
+    const card = screen.getByTestId('szn-overview-card');
+    expect(within(card).getByTestId('szn-overview-cover').getAttribute('src')).toBe('https://cdn.example.com/cover.jpg');
+    expect(within(card).getByTestId('szn-overview-cover').getAttribute('loading')).toBe('lazy');
+    expect(within(card).getByTestId('szn-tagline').textContent).toBe(ARC.tagline);
   });
 
-  test('with no cover: the gradient, no picture', async () => {
+  test('with no cover and no dates: no picture anywhere, and the dates say so', async () => {
     state.arc = { ...ARC, cover_url: null, starts_on: null, ends_on: null };
     renderPage();
     const hero = await screen.findByTestId('szn-hero');
-    expect(hero.className).not.toContain('has-cover');
     expect(hero.style.backgroundImage).toBe('');
-    expect(within(hero).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['24 Episodes', '3 Parts']);
+    expect(within(hero).queryByTestId('szn-hero-thumb')).toBeNull();
+    expect(hero.querySelector('img')).toBeNull();
+    expect(within(hero).getByTestId('szn-hero-dates').textContent).toBe('No dates set');
+    expect(screen.queryByTestId('szn-overview-cover')).toBeNull();
   });
 
   test('the ⋯ menu: Use events and episodes, Draft with AI, and Start next season only once complete', async () => {
@@ -200,8 +225,10 @@ describe('The hero', () => {
     fireEvent.click(await screen.findByTestId('szn-hero-more'));
     const menu = screen.getByTestId('szn-hero-menu');
     const items = within(menu).getAllByRole('menuitem');
-    expect(items.map((b) => b.textContent)).toEqual(['Use events and episodes', 'Draft with AI', 'Start Season 2 (when this one is complete)']);
+    // S2: Print plan is the menu's fourth item, a link.
+    expect(items.map((b) => b.textContent.trim())).toEqual(['Use events and episodes', 'Draft with AI', 'Start Season 2 (when this one is complete)', 'Print plan']);
     expect(items[2].disabled).toBe(true);
+    expect(items[3].tagName).toBe('A');
     fireEvent.click(items[0]);
     expect(await screen.findByTestId('season-placement')).toBeTruthy();
   });
@@ -248,7 +275,7 @@ describe('The Episode Roadmap', () => {
   test('Grid: three part columns of cards, each card with its picture, E#, title and status', async () => {
     renderPage('?tab=roadmap');
     const grid = await screen.findByTestId('szn-roadmap-grid');
-    expect(within(grid).getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Part 1: Foundation', 'Part 2: Ascension', 'Part 3: Legacy']);
+    expect(within(grid).getAllByRole('region').map((r) => r.getAttribute('aria-label'))).toEqual(['Phase 1: Foundation', 'Phase 2: Ascension', 'Phase 3: Legacy']);
     const e1 = screen.getByTestId('szn-slot-1');
     expect(e1.textContent).toContain('I Designed My Outfit');
     expect(e1.textContent).toContain('In Production');
@@ -259,7 +286,10 @@ describe('The Episode Roadmap', () => {
     expect(screen.getByTestId('szn-slot-5').querySelector('img').getAttribute('src')).toBe('https://cdn.example.com/part1.jpg');
     expect(screen.getByTestId('szn-slot-12').querySelector('img')).toBeNull();
     expect(screen.getByTestId('szn-slot-12').textContent).toContain('Open');
-    expect(screen.getByTestId('szn-add-episode-part-3').textContent).toBe(' Add Episode to Part 3');
+    // "Add Episode to Part N" is gone (2026-11-12): it opened the same new-episode page whatever the part. One Add Episode stays, in the toolbar.
+    expect(screen.queryByTestId('szn-add-episode-part-3')).toBeNull();
+    expect(screen.getAllByRole('button', { name: /Add Episode/ })).toHaveLength(1);
+    expect(screen.getByTestId('szn-add-episode').textContent).toBe(' Add Episode');
   });
 
   test('the filters: one part, one status, and the address holds them', async () => {
@@ -278,7 +308,7 @@ describe('The Episode Roadmap', () => {
     const tl = await screen.findByTestId('szn-roadmap-timeline');
     expect([...tl.querySelectorAll('[data-testid^="szn-slot-"]')].map((el) => el.dataset.testid).filter((id) => /^szn-slot-\d+$/.test(id)))
       .toEqual(['szn-slot-2', 'szn-slot-3', 'szn-slot-4', 'szn-slot-10']);
-    expect(within(tl).getByText(/Part 1 · Foundation · Jan 19, 2026/)).toBeTruthy();
+    expect(within(tl).getByText(/Phase 1 · Foundation · Jan 19, 2026/)).toBeTruthy();
     expect(screen.getByTestId('szn-view-calendar').textContent).toBe(' Calendar');
     fireEvent.click(screen.getByTestId('szn-view-grid'));
     expect(await screen.findByTestId('szn-roadmap-grid')).toBeTruthy();
@@ -348,21 +378,29 @@ describe('Edit season', () => {
     expect((await screen.findByTestId('szn-setup-note')).textContent).toBe('Season saved.');
   });
 
-  test("the Overview card's Edit opens the same form", async () => {
+  test("the Overview card has no second Edit: Edit Season on the hero is the one way in", async () => {
     renderPage();
-    fireEvent.click(await screen.findByTestId('szn-overview-edit'));
+    const card = await screen.findByTestId('szn-overview-card');
+    expect(within(card).queryByTestId('szn-overview-edit')).toBeNull();
+    expect(within(card).queryByRole('button', { name: /edit/i })).toBeNull();
+    fireEvent.click(screen.getByTestId('szn-edit-season'));
     expect(await screen.findByTestId('season-setup-form')).toBeTruthy();
   });
 });
 
 describe('The Overview', () => {
-  test('the season card: logline, dates, status from the current part, Ep x of 24, description', async () => {
+  test('the season card: logline, status from the current part, Ep x of 24, description; the title and dates are the hero\'s', async () => {
     renderPage();
     const card = await screen.findByTestId('szn-overview-card');
-    expect(card.textContent).toContain('Season 1: Soft Luxury Ascension');
-    expect(card.textContent).toContain('Jan 5, 2026 – Mar 29, 2026');
+    // Said once, on the hero (2026-11-20): the card no longer repeats the title and the dates.
+    expect(card.textContent).not.toContain('Soft Luxury Ascension');
+    expect(card.textContent).not.toContain('Jan 5, 2026 – Mar 29, 2026');
+    const hero = screen.getByTestId('szn-hero');
+    expect(hero.textContent).toContain('Soft Luxury Ascension');
+    expect(hero.textContent).toContain('Jan 5, 2026 – Mar 29, 2026');
+    expect(card.textContent).toContain('Lala earns her');
     expect(within(card).getByTestId('szn-temp').textContent).toBe('Rising');
-    expect(within(card).getByTestId('szn-current-arc').textContent).toBe('Part 1: curiosity → first stumble → finding her footing');
+    expect(within(card).getByTestId('szn-current-arc').textContent).toBe('Phase 1: curiosity → first stumble → finding her footing');
     expect(card.textContent).toContain('Ep 1 of 24');
     expect(within(card).getByTestId('szn-description').textContent).toBe('From bold fits to bigger opportunities.');
   });
@@ -539,12 +577,47 @@ describe('Events, Episodes, Opportunities, Results', () => {
   });
 });
 
-describe('The way back', () => {
-  test('"Producer Mode" goes to its Overview, not the retired Season Plan tab', async () => {
+describe('Producer Mode\'s tabs on the Season page', () => {
+  test('the six tabs, Season open; Overview goes to Producer Mode\'s Overview; the "← Producer Mode" link is gone', async () => {
     renderPage();
-    const back = await screen.findByTestId('szn-back');
-    expect(back.textContent.trim()).toBe('Producer Mode');
-    expect(back.getAttribute('href')).toBe('/shows/show-1/world?tab=overview');
+    const nav = await screen.findByRole('navigation', { name: 'Producer Mode' });
+    const tabs = within(nav).getAllByRole('link');
+    expect(tabs.map((a) => a.textContent)).toEqual(['Overview', 'Season', 'Assets', 'Cast & Continuity', 'World', 'Release']);
+    expect(tabs.map((a) => a.getAttribute('href'))).toEqual([
+      '/shows/show-1/world?tab=overview',
+      '/shows/show-1/season',
+      '/shows/show-1/world?tab=scene-sets',
+      '/shows/show-1/world?tab=characters-list',
+      '/shows/show-1/world?tab=feed',
+      '/shows/show-1/world?tab=release-next',
+    ]);
+    // Season is the open one, and the only one.
+    expect(tabs.filter((a) => a.getAttribute('aria-current') === 'page').map((a) => a.textContent)).toEqual(['Season']);
+    expect(within(nav).queryByRole('button')).toBeNull();
+    // No count is drawn here: the Season page reads nothing for this bar.
+    expect(nav.querySelector('.wa-tab-count')).toBeNull();
+    expect(screen.queryByTestId('szn-back')).toBeNull();
+    // Two navigations, each with its own name; the season's own sections come second.
+    const sections = screen.getByRole('tablist', { name: 'Season sections' });
+    expect(nav.compareDocumentPosition(sections) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(nav.compareDocumentPosition(screen.getByTestId('szn-hero')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test.each(['', '?tab=roadmap', '?tab=events&show=unplaced', '?tab=results&seasons=all', '?slot=2'])('Season stays the open tab at %s', async (query) => {
+    renderPage(query);
+    const nav = await screen.findByRole('navigation', { name: 'Producer Mode' });
+    await screen.findByTestId('szn-hero');
+    expect(within(nav).getByRole('link', { name: 'Season' }).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getByRole('link', { name: 'Overview' }).getAttribute('href')).toBe('/shows/show-1/world?tab=overview');
+  });
+
+  test('a show with no season yet still has the six tabs, Season open', async () => {
+    state.arc = null;
+    renderPage();
+    await screen.findByTestId('szn-empty');
+    const nav = screen.getByRole('navigation', { name: 'Producer Mode' });
+    expect(within(nav).getByRole('link', { name: 'Season' }).getAttribute('aria-current')).toBe('page');
+    expect(within(nav).getAllByRole('link')).toHaveLength(6);
   });
 });
 
@@ -591,8 +664,11 @@ describe('The Goals tab', () => {
       }
       return { data: {} };
     });
-    renderPage('?tab=goals');
+    // The stat card is the Overview's (2026-11-20): read there first, then again after the goal is made.
+    renderPage('?tab=overview');
     expect((await screen.findByTestId('szn-stat-goals')).textContent).toContain('1 complete · 2 remaining');
+    fireEvent.click(screen.getByTestId('szn-tab-goals'));
+    expect(screen.queryByTestId('szn-stat-goals')).toBeNull();
     fireEvent.click(await screen.findByTestId('cg-new'));
     const editor = screen.getByTestId('cg-editor');
     expect(within(editor).getByTestId('cg-save').disabled).toBe(true);
@@ -608,7 +684,8 @@ describe('The Goals tab', () => {
     expect(screen.getByTestId('cg-note').textContent).toBe('Goal created.');
     expect(screen.queryByTestId('cg-editor')).toBeNull();
     expect(screen.getByTestId('cg-counts').textContent).toBe('3 active · 1 complete');
-    expect(screen.getByTestId('szn-stat-goals').textContent).toContain('1 complete · 3 remaining');
+    fireEvent.click(screen.getByTestId('szn-tab-overview'));
+    expect((await screen.findByTestId('szn-stat-goals')).textContent).toContain('1 complete · 3 remaining');
   });
 
   test('a goal edits in place through PUT; a refusal says so in the page', async () => {
@@ -718,5 +795,74 @@ describe('No season yet', () => {
     renderPage();
     expect(await screen.findByTestId('szn-empty')).toBeTruthy();
     expect(screen.getByTestId('season-setup-form')).toBeTruthy();
+  });
+});
+
+// PR-04 (Evoni, 2026-11-18): the show being worked on follows the Season
+// page, in the show's existing key, once the show itself has been read.
+describe('The Season page remembers its show', () => {
+  const SHOW_KEY = 'primeStudios.activeShowId';
+  beforeEach(() => { window.localStorage.clear(); });
+
+  test('once the show has loaded, it is the remembered show; no other key is written', async () => {
+    renderPage();
+    await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1'));
+    expect(Object.keys(window.localStorage).filter((k) => /activeShow|working-episode/.test(k))).toEqual([SHOW_KEY]);
+  });
+
+  test('it replaces a show remembered before', async () => {
+    window.localStorage.setItem(SHOW_KEY, 'show-9');
+    renderPage('?tab=roadmap');
+    await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1'));
+  });
+
+  test('a show that cannot be read is not remembered, and the one remembered before stays', async () => {
+    window.localStorage.setItem(SHOW_KEY, 'show-9');
+    const base = vi.mocked(api.get).getMockImplementation();
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/shows/show-1') throw Object.assign(new Error('Request failed with status code 500'), { response: { status: 500 } });
+      return base(url);
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderPage();
+      await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalledWith('/api/v1/world/show-1/season/roadmap'));
+      await screen.findByTestId('where');
+      await waitFor(() => expect(vi.mocked(api.get)).toHaveBeenCalledWith('/api/v1/opportunities/show-1'));
+      expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-9');
+    } finally { error.mockRestore(); }
+  });
+
+  test('it is not remembered before the show has answered', async () => {
+    window.localStorage.setItem(SHOW_KEY, 'show-9');
+    const base = vi.mocked(api.get).getMockImplementation();
+    let answer;
+    vi.mocked(api.get).mockImplementation((url) => (url === '/api/v1/shows/show-1'
+      ? new Promise((resolve) => { answer = () => resolve({ data: { data: { id: 'show-1', name: 'Styling Adventures with Lala' } } }); })
+      : base(url)));
+    renderPage();
+    await waitFor(() => expect(typeof answer).toBe('function'));
+    expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-9');
+    answer();
+    await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1'));
+  });
+
+  test('it is written once: a later choice of show elsewhere is not put back by moving between tabs', async () => {
+    renderPage();
+    await waitFor(() => expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-1'));
+    // Another window chooses another show.
+    window.localStorage.setItem(SHOW_KEY, 'show-2');
+    fireEvent.click(screen.getByRole('tab', { name: /Roadmap/ }));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toContain('tab=roadmap'));
+    expect(window.localStorage.getItem(SHOW_KEY)).toBe('show-2');
+  });
+
+  test('storage that cannot be written does not stop the page', async () => {
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderPage();
+      expect(await screen.findByText('Soft Luxury Ascension')).toBeTruthy();
+    } finally { set.mockRestore(); error.mockRestore(); }
   });
 });

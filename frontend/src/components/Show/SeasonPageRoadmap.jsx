@@ -53,6 +53,7 @@ import { packageHref } from '../../lib/eventFlow';
 import { SpecialsBar, SpecialCard, WillBeSpecial } from './SeasonSpecials';
 import { seasonIsFull } from '../../lib/seasonFull';
 import { useSeasonSpecials, specialsAfter, canMakeTwoParter, slotCode } from '../../lib/seasonSpecials';
+import { slotEvent, slotEventNote, NEEDS_REVIEW } from '../../lib/seasonSlotEvent';
 
 // The roadmap's view, remembered per browser (the URL's ?view= wins); storage can be blocked.
 export const ROADMAP_VIEW_STORAGE_KEY = 'szn-roadmap-view';
@@ -82,7 +83,7 @@ function SlotDrawer({ controls, plan, S, api, showId, setToast, episodes, events
 }
 
 /** A slot card's ⋯ menu: its panel, its episode or event package, its intention. */
-function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart = null }) {
+function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart = null, season = null }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -105,8 +106,13 @@ function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart
           <button type="button" role="menuitem" onClick={() => { setOpen(false); onOpen(); }}>Open the slot</button>
           {editable && <button type="button" role="menuitem" onClick={() => { setOpen(false); onIntention(); }}>Edit intention</button>}
           {slot.episode && <Link role="menuitem" to={`/episodes/${slot.episode.id}`}>Open the episode</Link>}
-          {/* ?from= keeps the way back to this slot on the Roadmap (2026-10-25). */}
-          {!slot.episode && slot.event && <Link role="menuitem" to={packageHref(showId, slot.event.id, { kind: 'roadmap', slot: slot.slot_number })}>Open the event package</Link>}
+          {/* ?from= keeps the way back to this slot on the Roadmap (2026-10-25). A started slot keeps its package link (2026-11-12). */}
+          {slotEvent(slot) && <Link role="menuitem" to={packageHref(showId, slotEvent(slot).id, { kind: 'roadmap', slot: slot.slot_number, season })} data-testid={`szn-slot-package-${slot.slot_number}`}>Open the event package</Link>}
+          {/* A started slot whose event is not linked to the slot. The episode has its events; it is the slot's link that is missing, so the wording says that and never that there is no event or package (Evoni, 2026-11-12). Nothing is guessed. */}
+          {/* A started slot shows its episode's own event (derived on read, lib/seasonSlotEvent). What is said here is only what is left to say: no primary event, or an association that needs review. */}
+          {slot.episode && slotEventNote(slot) && (
+            <Link role="menuitem" to={`/episodes/${slot.episode.id}?tab=overview`} data-testid={`szn-slot-no-event-${slot.slot_number}`}>{slotEventNote(slot).label}{slotEventNote(slot).reasons ? `: ${slotEventNote(slot).reasons}` : ''}. View the episode's events.</Link>
+          )}
           {!readOnly && twoPart?.canMake && (
             <button type="button" role="menuitem" onClick={() => { setOpen(false); twoPart.make(); }} data-testid={`szn-slot-two-part-${slot.slot_number}`}>
               Make it a two-parter (Part 2 in E{slot.slot_number + 1})
@@ -129,7 +135,7 @@ function CardMenu({ slot, showId, onOpen, onIntention, readOnly = false, twoPart
  * schedule, or a hand-set date), title, status chip, the goals its event
  * moves, ⋯. Clicking opens its panel.
  */
-export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, moves = [], when = null, readOnly = false, twoPart = null }) {
+export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention, nextSlot, producing = false, moves = [], when = null, readOnly = false, twoPart = null, season = null }) {
   return (
     <div className={`szn-slot is-${slot.state}${selected ? ' is-selected' : ''}${slot.two_part ? ' is-two-part' : ''}`} data-testid={`szn-slot-${slot.slot_number}`}>
       <button type="button" className="szn-slot-open" onClick={onOpen} aria-pressed={selected}
@@ -138,20 +144,25 @@ export function SlotCard({ slot, picture, showId, selected, onOpen, onIntention,
           {picture && <img src={picture} alt="" loading="lazy" />}
         </span>
         <span className="szn-slot-body">
-          <span className="szn-slot-num">{slotCode(slot)}{nextSlot && <span className="szn-slot-next">Next</span>}
+          <span className="szn-slot-num">{slotCode(slot)}
+            {/* Two different things, never on one slot: the episode being made now, and the next slot nothing has started in. */}
+            {producing && <span className="szn-slot-now" data-testid={`szn-slot-now-${slot.slot_number}`}>Now producing</span>}
+            {nextSlot && !producing && <span className="szn-slot-next" data-testid={`szn-slot-next-${slot.slot_number}`}>Next open slot</span>}
+            {/* A started slot whose event association needs a look says so on the card; the why is in its menu and panel. */}
+            {slot.episode && slotEventNote(slot)?.label === NEEDS_REVIEW && <span className="szn-slot-review" data-testid={`szn-slot-review-${slot.slot_number}`}>{NEEDS_REVIEW}</span>}
             {when && <span className={`szn-slot-when${when.source === 'preview' ? ' is-preview' : ''}`} data-testid={`szn-slot-when-${slot.slot_number}`}>{when.text}</span>}
           </span>
-          <span className={`szn-slot-title${slot.episode || slot.event || slot.intention?.story_purpose ? '' : ' is-empty'}`}>{slotCardTitle(slot)}</span>
+          <span className={`szn-slot-title${slot.episode || slotEvent(slot) || slot.intention?.story_purpose ? '' : ' is-empty'}`}>{slotCardTitle(slot)}</span>
           <StatusChip state={slot.state} />
           <MovesChips goals={moves} testId={`szn-slot-moves-${slot.slot_number}`} />
         </span>
       </button>
-      <CardMenu slot={slot} showId={showId} onOpen={onOpen} onIntention={onIntention} readOnly={readOnly} twoPart={twoPart} />
+      <CardMenu slot={slot} showId={showId} onOpen={onOpen} onIntention={onIntention} readOnly={readOnly} twoPart={twoPart} season={season} />
     </div>
   );
 }
 
-export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, events, arc, params, goTab, setParams, readOnly = false, opps = [] }) {
+export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, events, arc, params, goTab, setParams, readOnly = false, opps = [], producingEpisodeId = null }) {
   const navigate = useNavigate();
   const controls = useSlotDrawer({ plan, api, showId, setToast });
   const { roadmap } = plan;
@@ -192,7 +203,13 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
   };
   const card = (slot) => (
     <SlotCard key={slot.id} slot={slot} showId={showId} picture={slotPicture(slot, { episodes, events, arc })}
-      selected={controls.sheetOpen && controls.selected?.id === slot.id} nextSlot={!slot.locked && slot.slot_number === roadmap.next_slot_number}
+      // The package's way back returns to this season's Roadmap (lib/eventFlow).
+      season={roadmap?.season_number ?? null}
+      selected={controls.sheetOpen && controls.selected?.id === slot.id}
+      // Next open slot: the roadmap's own next_slot_number, and only while nothing has started in it.
+      nextSlot={!slot.locked && !slot.episode && slot.slot_number === roadmap.next_slot_number}
+      // Now producing: the slot whose episode is the show's episode in production (Producer Mode's rule), when that is known.
+      producing={Boolean(producingEpisodeId) && slot.episode?.id === producingEpisodeId}
       onOpen={() => openSlot(slot)} onIntention={() => editIntention(slot)} moves={movesBySlot[slot.id] || []} when={slotWhen(release.view, slot, roadmap.season_number)} readOnly={readOnly}
       twoPart={twoPartOf(slot)} />
   );
@@ -225,9 +242,9 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
             </div>
             {/* This week and Calendar pick their own slots: the part and status filters are the grid's and the timeline's. */}
             {view !== 'week' && view !== 'calendar' && (<>
-            <select className="szn-select" aria-label="Part" value={part} onChange={(e) => setFilter({ part: e.target.value })} data-testid="szn-filter-part">
-              <option value="all">All Parts</option>
-              {phases.map((p) => <option key={p.phase} value={String(p.phase)}>Part {p.phase}: {p.title}</option>)}
+            <select className="szn-select" aria-label="Phase" value={part} onChange={(e) => setFilter({ part: e.target.value })} data-testid="szn-filter-part">
+              <option value="all">All Phases</option>
+              {phases.map((p) => <option key={p.phase} value={String(p.phase)}>Phase {p.phase}: {p.title}</option>)}
             </select>
             <select className="szn-select" aria-label="Status" value={status} onChange={(e) => setFilter({ status: e.target.value })} data-testid="szn-filter-status">
               <option value="all">All Statuses</option>
@@ -261,20 +278,15 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
               const slots = filterSlots(phase.slots, { status });
               const prog = partProgress(phase);
               return (
-                <section key={phase.phase} className={`szn-part is-part-${phase.phase}`} aria-label={`Part ${phase.phase}: ${phase.title}`} data-testid={`szn-part-col-${phase.phase}`}>
+                <section key={phase.phase} className={`szn-part is-part-${phase.phase}`} aria-label={`Phase ${phase.phase}: ${phase.title}`} data-testid={`szn-part-col-${phase.phase}`}>
                   <header className="szn-part-head">
-                    <h3 className="szn-part-title"><span className="szn-part-num">Part {phase.phase}</span> {phase.title}
+                    <h3 className="szn-part-title"><span className="szn-part-num">Phase {phase.phase}</span> {phase.title}
                       <span className="szn-part-range">E{phase.episode_start} – E{phase.episode_end}</span></h3>
                     <span className="szn-part-count">{prog.done} of {prog.total} completed</span>
                   </header>
                   <div className="szn-slot-list">
                     {slots.length ? slots.flatMap(withSpecials) : <p className="szn-muted">No slot here is {SLOT_STATUS[status]?.toLowerCase()}.</p>}
                   </div>
-                  {!readOnly && (
-                    <button type="button" className="szn-add-row" onClick={newEpisode} data-testid={`szn-add-episode-part-${phase.phase}`}>
-                      <Plus size={16} aria-hidden="true" /> Add Episode to Part {phase.phase}
-                    </button>
-                  )}
                 </section>
               );
             })}
@@ -283,12 +295,12 @@ export function SeasonRoadmapTab({ plan, S, api, showId, setToast, episodes, eve
           <ol className="szn-timeline" data-testid="szn-roadmap-timeline" aria-label="Every slot in order">
             {timeline.map((slot) => {
               const p = arcPart(arc, slot.phase);
-              const ev = slot.event ? events.find((e) => e.id === slot.event.id) : null;
+              const ev = slotEvent(slot) ? events.find((e) => e.id === slotEvent(slot).id) : null;
               const when = dayLabel(ev?.event_date) || (ev?.event_date ? String(ev.event_date) : null);
               return (
                 <li key={slot.id} className={`szn-tl-item is-${slot.state}`}>
                   <span className="szn-tl-dot" aria-hidden="true" />
-                  <span className="szn-tl-part">Part {slot.phase}{p?.title ? ` · ${p.title}` : ''}{when ? ` · ${when}` : ''}</span>
+                  <span className="szn-tl-part">Phase {slot.phase}{p?.title ? ` · ${p.title}` : ''}{when ? ` · ${when}` : ''}</span>
                   {card(slot)}
                   {specialCards(slot.slot_number)}
                 </li>
@@ -428,7 +440,7 @@ export function SeasonEventsTab({ plan, S, api, showId, setToast, episodes, even
             </button>
           ))}
         </div>
-        <span className="szn-muted" data-testid="szn-events-slots">{slots.filter((s) => s.event).length} of {slots.length} slots have an event{full ? ' · the season is full' : ''}</span>
+        <span className="szn-muted" data-testid="szn-events-slots">{slots.filter((s) => slotEvent(s)).length} of {slots.length} slots have an event{full ? ' · the season is full' : ''}</span>
         {!readOnly && (
           <button type="button" className="szn-btn" onClick={() => setPlacing((p) => !p)} aria-expanded={placing} data-testid="szn-events-place">
             Use events and episodes

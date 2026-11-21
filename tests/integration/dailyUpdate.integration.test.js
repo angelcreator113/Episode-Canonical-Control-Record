@@ -199,7 +199,7 @@ const HOUR = 60 * 60 * 1000;
     const auth = { Authorization: `Bearer ${admin}` };
     expect((await request(app).post(`/api/v1/pulse-voices/${ids.voice}/approve`).set(auth)).status).toBe(200);
     expect((await request(app).put(`/api/v1/cast/characters/${ids.maren}/secrets/${ids.secret}`).set(auth).send({ status: 'confirmed' })).status).toBe(200);
-    expect((await request(app).post(`/api/v1/opportunities/${ids.show}/${ids.deal}/advance`).set(auth).send({ to_status: 'declined' })).status).toBe(200);
+    expect((await request(app).post(`/api/v1/opportunities/${ids.show}/${ids.deal}/advance`).set(auth).send({ to_status: 'declined', reason: 'Not a fit for this season' })).status).toBe(200);
     expect((await request(app).put(`/api/v1/feed-posts/${ids.draft}`).set(auth).send({ status: 'live' })).status).toBe(200);
     const { body } = await get();
     expect(has(group(body, 'voices').items, ids.voice)).toBe(false);

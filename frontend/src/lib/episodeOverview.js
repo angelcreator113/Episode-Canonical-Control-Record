@@ -49,7 +49,13 @@ export function fromEventItems(plan) {
  * The banner's next step: generate the script while there is none, then
  * work through production; done when every check is. { title, why, action, tab }.
  */
-export function nextStep({ hasScript, brief = null, plan = null, checks = null }) {
+export function nextStep({ hasScript, brief = null, plan = null, checks = null, script = null, briefStatus = null, checksStatus = null }) {
+  // What is not known yet is not guessed (the Overview's loading states).
+  // `script`, `briefStatus` and `checksStatus` are 'loading', 'failed' or
+  // null (known, which is also what a caller that does not say gets). A
+  // step with no `action` has no button: where it leads is not known yet.
+  if (script === 'loading') return { key: 'checking', title: 'Checking for a script…', why: 'Your next step shows as soon as that is known.', action: null, tab: null };
+  if (script === 'failed') return { key: 'unknown', title: "Couldn't check for a script", why: 'Retry above to see your next step.', action: null, tab: null };
   const look = plan?.items?.find((i) => i.key === 'look');
   // The beat is the script's closet beat (Task #2880), when it has one.
   const lookLater = look && !look.done
@@ -57,10 +63,18 @@ export function nextStep({ hasScript, brief = null, plan = null, checks = null }
     : '';
   if (!hasScript) {
     const b = briefState(brief);
-    const why = b && !b.complete
-      ? `The brief is missing ${b.missing.map((m) => m.label.toLowerCase()).join(', ')}; the script fills the gap and flags it.`
-      : 'The brief is done.';
+    const why = briefStatus === 'loading' ? 'Checking the brief…'
+      : briefStatus === 'failed' ? "The brief couldn't be loaded."
+        : b && !b.complete
+          ? `The brief is missing ${b.missing.map((m) => m.label.toLowerCase()).join(', ')}; the script fills the gap and flags it.`
+          : 'The brief is done.';
     return { key: 'script', title: 'Generate the script', why: `${why}${lookLater}`, action: 'Generate Script', tab: 'scripts' };
+  }
+  if (!checks && checksStatus === 'loading') {
+    return { key: 'checking', title: 'Checking the production checklist…', why: `The script is written.${lookLater}`, action: null, tab: null };
+  }
+  if (!checks && checksStatus === 'failed') {
+    return { key: 'production', title: 'Work through production', why: `The production checklist couldn't be checked. Open the Checklist tab to check again.${lookLater}`, action: 'Open Checklist', tab: 'checklist' };
   }
   if (checks && checks.total > 0 && checks.done >= checks.total) {
     return { key: 'results', title: 'Complete the episode', why: 'Every production check is done.', action: 'Open Results', tab: 'results' };
@@ -70,7 +84,8 @@ export function nextStep({ hasScript, brief = null, plan = null, checks = null }
     key: 'production',
     title: 'Work through production',
     why: left != null ? `${left} production check${left === 1 ? '' : 's'} left.${lookLater}` : `The script is written.${lookLater}`,
-    action: 'Open Production',
+    // The button names where it goes: Production › Checklist (2026-11-12; it said "Open Production").
+    action: 'Open Checklist',
     tab: 'checklist',
   };
 }

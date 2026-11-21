@@ -7,11 +7,13 @@
  *     another is picked in the Season / Episode switcher), its title,
  *     description and thumbnail (Edit Thumbnail opens Templates › YouTube
  *     thumbnails), its production checklist as one card per section (the
- *     same checks as the episode's Production tab), and Continue Episode,
- *     Open Script, Lala's Phone, Open Files;
+ *     same checks as the episode's Production tab), and its next action
+ *     (primaryAction: Generate Script, Continue: <first open section>, Open
+ *     Results), Open Script, Lala's Phone, Open Files;
+ *   - Needs your attention: events whose setup is incomplete, this
+ *     episode's event first;
  *   - Episode Assets: the episode's raw clips, scene sets, images, music
- *     cues, phone screens and overlays, each a tab with its count;
- *   - Needs your attention: events whose setup is incomplete.
+ *     cues, phone screens and overlays, each a tab with its count.
  * Beside them: Lala now (her stats; History), the episode's money (the
  * linked event's forecast), Main Characters (Lala, JustAWoman, the show's
  * supporting cast and the episode's guests; Manage Cast) and Up next (the
@@ -31,13 +33,25 @@ import {
 import api from '../../services/api';
 import { thumbnailStudioHref } from '../../lib/thumbnailStudioHref';
 import { currentThumbnail } from '../../lib/youtubeThumbnailsApi';
-import { episodeName } from '../../lib/episodePipeline';
+import { episodeCode, episodeName } from '../../lib/episodePipeline';
 import { computeEventPackageReadiness, computeEventState, describeMissing } from '../../utils/eventReadinessSections';
-import { CHECKLIST_SECTIONS, computeSectionState, checklistFixTarget, loadProductionChecks } from '../Episodes/EpisodeProductionChecklist';
+import { checklistFixTarget, loadProductionChecks } from '../Episodes/EpisodeProductionChecklist';
+import { checklistSummary, primaryAction } from '../../lib/episodeNextAction';
+import useNextSlot from '../../hooks/useNextSlot';
+import { IN_PRODUCTION, episodesInProduction, resumeEpisode, rememberedEpisodeId } from '../../utils/activeEpisode';
 import './ShowOverview.css';
 import { packageHref } from '../../lib/eventFlow';
 
-export const IN_PRODUCTION = ['draft', 'scripted', 'in_build', 'in_review'];
+// The checklist at a glance and the card's next action live in
+// lib/episodeNextAction, and the season's next slot in hooks/useNextSlot, so
+// other pages can use them without importing this one. They are exported
+// from here as before.
+export { checklistSummary, primaryAction };
+// The working statuses and the episodes in production live in
+// utils/activeEpisode (the official production episode and the episode to
+// resume are worked out there). They are exported from here as before.
+export { IN_PRODUCTION, episodesInProduction };
+
 const STATUS_LABEL = { draft: 'Draft', scripted: 'Scripted', in_build: 'In build', in_review: 'In review', scheduled: 'Scheduled', published: 'Published', archived: 'Archived' };
 const STAT_LABEL = { coins: 'Coins', reputation: 'Reputation', brand_trust: 'Brand Trust', influence: 'Influence', stress: 'Stress' };
 const STAT_ORDER = ['coins', 'reputation', 'brand_trust', 'influence', 'stress'];
@@ -45,13 +59,6 @@ const STAT_ICON = { coins: Coins, reputation: Star, brand_trust: Heart, influenc
 const SECTION_ICON = { brief: ClipboardList, world: MapPin, scene: Clapperboard, wardrobe: Shirt, lookbook: Sparkles, overlays: Smartphone, onscreen: Layers, social: Hash, intelligence: Brain };
 
 const time = (d) => (d ? new Date(d).getTime() || 0 : 0);
-
-/** The episodes in production, in episode order. */
-export function episodesInProduction(episodes) {
-  return (episodes || [])
-    .filter((e) => IN_PRODUCTION.includes(e.status) && e.evaluation_status !== 'accepted')
-    .sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
-}
 
 /** Events whose setup is incomplete, with what each is missing. */
 export function eventsNeedingAttention(events) {
@@ -74,31 +81,6 @@ export function nextReadyEvent(events) {
   })[0] || null;
 }
 
-/** The checklist's sections that report a state (a section may still set unavailableReason). */
-const LIVE_SECTIONS = CHECKLIST_SECTIONS.filter((sec) => !sec.unavailableReason);
-
-/**
- * The checklist at a glance: items done of all items, and each section's
- * state with a short label: "Complete", "Not started" when nothing in it is
- * done, else its required items done ("0 of 1" while only optional items
- * are), or all its items for a section with none required. first_missing is
- * the first required item still open (for the card's fix link).
- */
-export function checklistSummary(checks) {
-  const items = LIVE_SECTIONS.flatMap((sec) => sec.items);
-  const done = items.filter((item) => checks[item.id]).length;
-  const sections = LIVE_SECTIONS.map((sec) => {
-    const { state } = computeSectionState(sec, checks);
-    const required = sec.items.filter((item) => item.required);
-    const counted = required.length ? required : sec.items;
-    const n = counted.filter((item) => checks[item.id]).length;
-    const label = state === 'complete' ? 'Complete' : state === 'needs_setup' ? 'Not started' : `${n} of ${counted.length}`;
-    const firstMissing = (required.length ? required : sec.items).find((item) => !checks[item.id]) || null;
-    return { id: sec.id, title: sec.label, state, label, first_missing: firstMissing?.id || null };
-  });
-  return { done, total: items.length, sections };
-}
-
 /** The seasons the show's episodes are in (1 when none says), ascending. */
 export function seasonsOf(episodes) {
   const set = new Set((episodes || []).map((e) => Number(e.season_number) || 1));
@@ -110,6 +92,26 @@ export function defaultEpisode(episodes) {
   const producing = episodesInProduction(episodes);
   if (producing[0]) return producing[0];
   return [...(episodes || [])].sort((a, b) => (b.episode_number || 0) - (a.episode_number || 0))[0] || null;
+}
+
+/**
+ * How the episode is named everywhere in Producer Mode: its code and its
+ * title ("S1 · E1 · Wearable Experiments"). The header chip and the Now
+ * producing card both use this, so they cannot name it differently.
+ */
+export function episodeIdentity(ep) {
+  if (!ep) return '';
+  const title = typeof ep.title === 'string' ? ep.title.trim() : '';
+  return [episodeCode(ep), title].filter(Boolean).join(' · ');
+}
+
+/**
+ * Needs your attention, in one list: the event of the episode on the card
+ * first (marked), then the rest in their own order. Nothing is dropped.
+ */
+export function orderAttention(attention, linkedEventId = null) {
+  const rows = (attention || []).map((a) => ({ ...a, current: Boolean(linkedEventId) && a.event?.id === linkedEventId }));
+  return [...rows.filter((r) => r.current), ...rows.filter((r) => !r.current)];
 }
 
 /**
@@ -153,25 +155,6 @@ export function assetTabs({ clips = [], sceneSets = [], images = [], cues = [], 
     { key: 'phone', label: 'Phone Screens', items: phone.filter((p) => p.generated !== false && (p.url || p.image_url)).map((p) => ({ id: p.id || p.name, title: p.name || p.overlay_type || 'Screen', image: imgOf(p.url, p.image_url), tags: [] })) },
     { key: 'overlays', label: 'Overlays', items: placements.map((p) => ({ id: p.id, title: p.asset?.name || p.label || p.placement_type || 'Overlay', image: imgOf(p.asset?.s3_url_processed, p.asset?.s3_url_raw), tags: [p.placement_type].filter(Boolean) })) },
   ];
-}
-
-function useNextSlot(showId) {
-  const [state, setState] = useState({ loading: true, slot: null, failed: false });
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, failed: false }));
-    try {
-      const r = await api.get(`/api/v1/world/${showId}/season/roadmap`);
-      const roadmap = r.data?.roadmap || null;
-      const slots = (roadmap?.phases || []).flatMap((p) => p.slots || []);
-      const slot = roadmap?.next_slot_number ? slots.find((s) => s.slot_number === roadmap.next_slot_number) || null : null;
-      setState({ loading: false, slot, failed: false, hasSeason: Boolean(roadmap) });
-    } catch (err) {
-      console.error('[ShowOverview] season roadmap load failed:', err);
-      setState({ loading: false, slot: null, failed: true });
-    }
-  }, [showId]);
-  useEffect(() => { load(); }, [load]);
-  return { ...state, reload: load };
 }
 
 function useProductionChecks(episode, showId) {
@@ -281,7 +264,7 @@ const fmtLength = (s) => {
   return Number.isFinite(n) && n > 0 ? `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}` : null;
 };
 
-function NowProducing({ showId, episodes, episode, onPick, checksState }) {
+function NowProducing({ showId, episodes, episode, onPick, checksState, producingId = null, resume = null }) {
   const [menu, setMenu] = useState(false);
   const thumb = useThumbnail(episode);
   const seasons = seasonsOf(episodes);
@@ -298,8 +281,11 @@ function NowProducing({ showId, episodes, episode, onPick, checksState }) {
   }
   const summary = checksState.checks ? checklistSummary(checksState.checks) : null;
   const pct = summary && summary.total ? Math.round((summary.done / summary.total) * 100) : 0;
-  const producing = IN_PRODUCTION.includes(episode.status);
+  // "Now producing" is the show's episode in production (the one the header
+  // names). Another episode picked in the switcher is only being viewed.
+  const producing = producingId ? episode.id === producingId : IN_PRODUCTION.includes(episode.status);
   const status = String(episode.status || 'draft');
+  const action = primaryAction({ episode, showId, summary, producing });
   const fix = (sec) => {
     const target = sec.first_missing ? checklistFixTarget(sec.first_missing, { episode, showId }) : null;
     return target?.href || `/episodes/${episode.id}?tab=checklist`;
@@ -308,8 +294,15 @@ function NowProducing({ showId, episodes, episode, onPick, checksState }) {
     <section className="pov-card pov-now" data-testid="sov-producing">
       <div className="pov-now-top">
         <div className="pov-chips">
-          <span className={`pov-chip ${producing ? 'is-live' : ''}`}>{producing ? 'Now producing' : 'Episode'}</span>
+          <span className={`pov-chip ${producing ? 'is-live' : ''}`} data-testid="sov-producing-chip">{producing ? 'Now producing' : 'Viewing'}</span>
           <span className="pov-chip is-status">{STATUS_LABEL[status] || status}</span>
+          {!producing && producingId && (
+            <button type="button" className="pov-link" onClick={() => onPick(null)} data-testid="sov-back-to-producing">Back to the episode in production</button>
+          )}
+          {/* The episode last opened, when it is a later unfinished one: a way back to it, never "Now producing". */}
+          {resume && (
+            <Link className="pov-link" to={`/episodes/${resume.id}`} data-testid="sov-resume">Resume {episodeCode(resume)} (last opened)</Link>
+          )}
         </div>
         <div className="pov-switch">
           <select aria-label="Season" value={season}
@@ -324,13 +317,36 @@ function NowProducing({ showId, episodes, episode, onPick, checksState }) {
 
       <div className="pov-now-body">
         <div className="pov-now-text">
-          <h2 className="pov-now-title">{episode.title || 'Untitled'}</h2>
+          <p className="pov-now-code" data-testid="sov-episode-code">{episodeCode(episode)}</p>
+          <h2 className="pov-now-title" data-testid="sov-episode-title">{episode.title || 'Untitled'}</h2>
           {(episode.logline || episode.description) && <p className="pov-now-logline">{episode.logline || episode.description}</p>}
         </div>
         <Link className="pov-thumb" to={thumbnailStudioHref({ showId, episodeId: episode.id })} data-testid="sov-thumbnail">
           {thumb ? <img src={thumb} alt={`Thumbnail for ${episode.title || 'the episode'}`} /> : <span className="pov-thumb-empty"><ImageOff size={24} aria-hidden /> No thumbnail yet</span>}
           <span className="pov-thumb-edit"><Pencil size={14} aria-hidden /> {thumb ? 'Edit Thumbnail' : 'Make Thumbnail'}</span>
         </Link>
+      </div>
+
+      {/* The next action sits with the episode's name, above the checklist, so it is on the first screen of a phone. */}
+      {action.why && <p className="pov-next-why" data-testid="sov-primary-why">Next: {action.why}</p>}
+      <div className="pov-actions">
+        <Link className="pov-btn is-primary" to={action.href} data-testid="sov-primary" data-step={action.key}><Play size={18} aria-hidden /> {action.label}</Link>
+        <Link className="pov-btn" to={`/episodes/${episode.id}?tab=scripts`}><FileText size={18} aria-hidden /> Open Script</Link>
+        <Link className="pov-btn" to={`/episodes/${episode.id}?tab=phone`}><Smartphone size={18} aria-hidden /> Lala's Phone</Link>
+        <Link className="pov-btn" to={`/episodes/${episode.id}?tab=files`}><FolderOpen size={18} aria-hidden /> Open Files</Link>
+        <div className="pov-more">
+          <button type="button" className="pov-btn is-icon" aria-label="More for this episode" aria-expanded={menu} aria-haspopup="menu" onClick={() => setMenu((m) => !m)}>
+            <MoreHorizontal size={18} aria-hidden />
+          </button>
+          {menu && (
+            <div className="pov-menu" role="menu">
+              <Link role="menuitem" to={`/episodes/${episode.id}?tab=overview`} onClick={() => setMenu(false)}>Episode overview</Link>
+              <Link role="menuitem" to={`/episodes/${episode.id}?tab=scenes`} onClick={() => setMenu(false)}>Scenes</Link>
+              <Link role="menuitem" to={`/episodes/${episode.id}?tab=wardrobe`} onClick={() => setMenu(false)}>Wardrobe</Link>
+              <Link role="menuitem" to={`/episodes/${episode.id}/editor`} onClick={() => setMenu(false)}>Editor</Link>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="pov-checklist" data-testid="sov-checklist">
@@ -365,25 +381,6 @@ function NowProducing({ showId, episodes, episode, onPick, checksState }) {
         )}
       </div>
 
-      <div className="pov-actions">
-        <Link className="pov-btn is-primary" to={`/episodes/${episode.id}?tab=production`}><Play size={18} aria-hidden /> Continue Episode</Link>
-        <Link className="pov-btn" to={`/episodes/${episode.id}?tab=scripts`}><FileText size={18} aria-hidden /> Open Script</Link>
-        <Link className="pov-btn" to={`/episodes/${episode.id}?tab=phone`}><Smartphone size={18} aria-hidden /> Lala's Phone</Link>
-        <Link className="pov-btn" to={`/episodes/${episode.id}?tab=files`}><FolderOpen size={18} aria-hidden /> Open Files</Link>
-        <div className="pov-more">
-          <button type="button" className="pov-btn is-icon" aria-label="More for this episode" aria-expanded={menu} aria-haspopup="menu" onClick={() => setMenu((m) => !m)}>
-            <MoreHorizontal size={18} aria-hidden />
-          </button>
-          {menu && (
-            <div className="pov-menu" role="menu">
-              <Link role="menuitem" to={`/episodes/${episode.id}?tab=overview`} onClick={() => setMenu(false)}>Episode overview</Link>
-              <Link role="menuitem" to={`/episodes/${episode.id}?tab=scenes`} onClick={() => setMenu(false)}>Scenes</Link>
-              <Link role="menuitem" to={`/episodes/${episode.id}?tab=wardrobe`} onClick={() => setMenu(false)}>Wardrobe</Link>
-              <Link role="menuitem" to={`/episodes/${episode.id}/editor`} onClick={() => setMenu(false)}>Editor</Link>
-            </div>
-          )}
-        </div>
-      </div>
     </section>
   );
 }
@@ -436,7 +433,7 @@ function EpisodeMoney({ episode, showId, linkedEvent, checksLoading, goTo }) {
     <section className="pov-card" data-testid="sov-money">
       <div className="pov-card-head">
         <span className="pov-eyebrow">{name} money</span>
-        <button type="button" className="pov-link" onClick={() => goTo('finances')}>View Details</button>
+        <Link className="pov-link" to={`/episodes/${episode.id}?tab=money`} data-testid="sov-money-link">Open episode money</Link>
       </div>
       {checksLoading || loading ? <p className="pov-empty">Working out the money…</p>
         : !linkedEvent ? <p className="pov-empty">No event is linked to this episode yet, so there is no deal to count. <button type="button" className="pov-link" onClick={() => goTo('events')}>Events</button></p>
@@ -489,7 +486,15 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
   const isNew = episodes.length === 0 && events.length === 0;
   const [pickedId, setPickedId] = useState(null);
   const episode = useMemo(() => episodes.find((e) => e.id === pickedId) || defaultEpisode(episodes), [episodes, pickedId]);
+  // The show's episode in production: the same rule the header chip uses.
+  const producingId = useMemo(() => episodesInProduction(episodes)[0]?.id || null, [episodes]);
+  // The episode to resume, offered on the card only when it is not the one in production.
+  const resume = useMemo(() => {
+    const ep = resumeEpisode(episodes, rememberedEpisodeId());
+    return ep && producingId && ep.id !== producingId ? ep : null;
+  }, [episodes, producingId]);
   const checksState = useProductionChecks(episode, showId);
+  const attentionRows = useMemo(() => orderAttention(attention, checksState.linkedEvent?.id), [attention, checksState.linkedEvent?.id]);
   const state = charState?.state || {};
   const stats = [...STAT_ORDER.filter((k) => k in state), ...Object.keys(state).filter((k) => !STAT_ORDER.includes(k))];
 
@@ -508,31 +513,39 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
 
       <div className="pov-layout">
         <div className="pov-col">
-          <NowProducing showId={showId} episodes={episodes} episode={episode} onPick={setPickedId} checksState={checksState} />
-          <EpisodeAssets episode={episode} showId={showId} />
+          <NowProducing showId={showId} episodes={episodes} episode={episode} onPick={setPickedId} checksState={checksState} producingId={producingId} resume={resume} />
 
           <section className="pov-card" data-testid="sov-attention">
             <div className="pov-card-head">
-              <h3 className="pov-h3"><AlertTriangle size={18} aria-hidden /> Needs Your Attention ({attention.length})</h3>
-              {attention.length > 0 && <button type="button" className="pov-link" onClick={() => goTo('events')}>View All</button>}
+              <h3 className="pov-h3"><AlertTriangle size={18} aria-hidden /> Needs Your Attention ({attentionRows.length})</h3>
+              {attentionRows.length > 0 && <button type="button" className="pov-link" onClick={() => goTo('events')}>Open Events</button>}
             </div>
-            {attention.length === 0 ? (
+            {attentionRows.length === 0 ? (
               <p className="pov-empty">Nothing needs attention.</p>
             ) : (
-              <ul className="pov-attention">
-                {attention.slice(0, 3).map(({ event, missing }) => (
-                  <li key={event.id}>
-                    <span className="pov-attention-icon"><AlertTriangle size={18} aria-hidden /></span>
-                    <span className="pov-attention-text">
-                      <strong>{event.name || 'Untitled event'}</strong>
-                      <span>Missing: {missing.join(', ')}</span>
-                    </span>
-                    <Link className="pov-btn is-small" to={packageHref(showId, event.id, 'producer')}>Finish setup</Link>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="pov-attention">
+                  {attentionRows.slice(0, 3).map(({ event, missing, current }) => (
+                    <li key={event.id} className={current ? 'is-current' : undefined}>
+                      <span className="pov-attention-icon"><AlertTriangle size={18} aria-hidden /></span>
+                      <span className="pov-attention-text">
+                        <strong>{event.name || 'Untitled event'}{current && <span className="pov-tag pov-attention-tag" data-testid="sov-attention-current">This episode</span>}</strong>
+                        <span>Missing: {missing.join(', ')}</span>
+                      </span>
+                      <Link className="pov-btn is-small" to={packageHref(showId, event.id, 'producer')}>Finish setup</Link>
+                    </li>
+                  ))}
+                </ul>
+                {attentionRows.length > 3 && (
+                  <p className="pov-empty" data-testid="sov-attention-more">
+                    {attentionRows.length - 3} more event{attentionRows.length - 3 === 1 ? '' : 's'} need setup. <button type="button" className="pov-link" onClick={() => goTo('events')}>See them in Events</button>
+                  </p>
+                )}
+              </>
             )}
           </section>
+
+          <EpisodeAssets episode={episode} showId={showId} />
         </div>
 
         <aside className="pov-side">
@@ -565,7 +578,6 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
           <section className="pov-card" data-testid="sov-next">
             <div className="pov-card-head">
               <h3 className="pov-h3"><Sparkles size={18} aria-hidden /> Up Next</h3>
-              <Link className="pov-link" to={seasonPageHref(showId)} data-testid="sov-view-plan">View Plan</Link>
             </div>
             <ul className="pov-next">
               <li data-testid="sov-next-slot">
@@ -573,9 +585,9 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
                   : next.failed ? (
                     <span className="pov-empty">Couldn't load the season. <button type="button" className="pov-link" onClick={next.reload}>Retry</button></span>
                   ) : next.slot ? (
-                    <Link className="pov-next-row" to={seasonPageHref(showId, 'roadmap')} data-testid="sov-next-slot-link">
+                    <Link className="pov-next-row" to={seasonPageHref(showId, 'roadmap', { slot: next.slot.slot_number })} data-testid="sov-next-slot-link">
                       <span className="pov-next-text">
-                        <strong>Next slot: {next.slot.label}</strong>
+                        <strong>Next open slot: {next.slot.label}</strong>
                         {next.slot.intention?.story_purpose && <span>{next.slot.intention.story_purpose}</span>}
                       </span>
                       <ChevronRight size={20} aria-hidden />
@@ -589,7 +601,7 @@ export default function ShowOverview({ showId, episodes = [], events = [], charS
                       <strong>{nextEvent.name}</strong>
                       <span>Ready{nextEvent.event_date ? ` · ${new Date(nextEvent.event_date).toLocaleDateString()}` : ''}</span>
                     </span>
-                    <Link className="pov-btn is-small" to={packageHref(showId, nextEvent.id, 'producer')}>Start Episode</Link>
+                    <Link className="pov-btn is-small" to={packageHref(showId, nextEvent.id, 'producer')}>Open event package</Link>
                   </div>
                 ) : (
                   <span className="pov-empty">No event is ready yet. <button type="button" className="pov-link" onClick={() => goTo('events')}>Pick an event</button></span>

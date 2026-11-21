@@ -16,7 +16,8 @@ const slice = (from, to) => { const a = routes.indexOf(from); return routes.slic
 describe('feed comments contract', () => {
   test('the routes and their guards', () => {
     expect(routes).toMatch(/router\.get\('\/:postId\/comments',\s*optionalAuth,\s*async/);
-    expect(routes).toMatch(/router\.get\('\/:postId\/comments\/reactors',\s*requireAuth,\s*async/);
+    // Who would react, and why, is the studio's (2026-11-15): an ADMIN's.
+    expect(routes).toMatch(/router\.get\('\/:postId\/comments\/reactors',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*async/);
     expect(routes).toMatch(/router\.post\('\/:postId\/comments',\s*requireAuth,\s*async/);
     expect(routes).toMatch(/router\.post\('\/:postId\/comments\/draft',\s*requireAuth,\s*aiRateLimiter,\s*async/);
     expect(routes).toMatch(/router\.patch\('\/comments\/:commentId',\s*requireAuth,\s*async/);
@@ -24,7 +25,12 @@ describe('feed comments contract', () => {
   });
   test('the list is live by default; a live comment is locked; approving dates it; deletes recount', () => {
     const list = slice("router.get('/:postId/comments'", "router.get('/:postId/comments/reactors'");
-    expect(list).toMatch(/statusWhere\(req\.query\.status\)/);
+    // By who is reading (2026-11-15): draft comments, and an unpublished post's comments, are an ADMIN's.
+    expect(list).toMatch(/readableStatusWhere\(req\.query\.status, admin\)/);
+    expect(list).toMatch(/if \(!admin && \(!post \|\| !isLive\(post\)\)\) return res\.json\(\{ data: \[\], count: 0 \}\)/);
+    // And none for a post the story has not released to this reader, or after their moment (2026-11-15).
+    expect(list).toMatch(/readerBoundary\(req, post\.show_id, req\.query\.at\)/);
+    expect(list).toMatch(/if \(!released \|\| state !== 'revealed'\) return res\.json\(\{ data: \[\], count: 0 \}\)/);
     const patch = slice("router.patch('/comments/:commentId'", "router.delete('/comments/:commentId'");
     expect(patch).toMatch(/if \(comment\.status === 'live'\) return res\.status\(409\)\.json\(\{ error: COMMENT_LOCKED/);
     expect(patch).toMatch(/updates\.status = 'live'; updates\.posted_at = comment\.posted_at \|\| new Date\(\)/);
@@ -64,7 +70,7 @@ describe('the wall\'s routes (2026-10-04)', () => {
     expect(create).toMatch(/ai_generated: false/);
   });
   test('GET /feed-posts/comments/pending lists a show\'s draft reactions with their posts, requireAuth, before the param routes', () => {
-    expect(routes).toMatch(/router\.get\('\/comments\/pending',\s*requireAuth,\s*async/);
+    expect(routes).toMatch(/router\.get\('\/comments\/pending',\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*async/);
     expect(routes.indexOf("router.get('/comments/pending'")).toBeLessThan(routes.indexOf("router.get('/:showId/timeline'"));
     expect(routes.indexOf("router.get('/comments/pending'")).toBeLessThan(routes.indexOf("router.get('/:postId/comments'"));
     const pending = slice("router.get('/comments/pending'", '// ── GENERATE FEED POSTS');

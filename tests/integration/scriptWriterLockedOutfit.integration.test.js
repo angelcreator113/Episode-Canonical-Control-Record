@@ -57,7 +57,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     expect(prompt).toContain('LOCKED OUTFIT (2 pieces)');
     expect(prompt).not.toContain('Pending clutch');
 
-    const token = TokenService.generateTokenPair({ id: 'test-locked-outfit', email: 'test@locked-outfit.dev', name: 'Locked Outfit', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    // The outfit read is an ADMIN's (Evoni, 2026-11-15; wardrobeReadAuthorization): an editor is refused it.
+    const editor = TokenService.generateTokenPair({ id: 'test-locked-outfit', email: 'test@locked-outfit.dev', name: 'Locked Outfit', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    expect((await request(app).get(`/api/v1/wardrobe/outfit/${ids.ep}`).set('Authorization', `Bearer ${editor}`)).status).toBe(403);
+    const token = TokenService.generateTokenPair({ id: 'test-locked-outfit-admin', email: 'admin@locked-outfit.dev', name: 'Locked Outfit', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     const res = await request(app).get(`/api/v1/wardrobe/outfit/${ids.ep}`).set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.items.map((w) => w.name).sort()).toEqual(context.wardrobe.map((w) => w.name).sort());
