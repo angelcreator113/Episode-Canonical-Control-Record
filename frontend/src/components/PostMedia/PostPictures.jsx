@@ -154,7 +154,7 @@ export default function PostPictures({ postId, onSaved }) {
             </li>
           ))}
         </ul>
-      ) : data.poster && <p className="pp-muted">Their library is empty. Add pictures in their Places &amp; Gallery tab.</p>}
+      ) : data.poster && <p className="pp-muted">Their library is empty. Add pictures in their Media Gallery tab.</p>}
 
       {goingOut && chosen.some(notPublic) && !blocked && <p className="pp-muted">This post is {data.post.status === 'live' ? 'on The Pulse' : 'scheduled'}, so its pictures must be approved and public.</p>}
       {error && <p className="pp-error" role="alert">{error}</p>}

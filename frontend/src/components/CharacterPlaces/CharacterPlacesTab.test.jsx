@@ -78,7 +78,14 @@ describe('CharacterPlacesTab', () => {
     vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
     vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
     renderIt();
-    expect(await screen.findByTestId('hosted-event-ev-1')).toBeTruthy();
+    // A summary until asked for; an event's photos open on their own.
+    expect((await screen.findByTestId('hosted-events-summary')).textContent).toBe('Wearable Experiments');
+    expect(screen.queryByTestId('hosted-event-ev-1')).toBeNull();
+    fireEvent.click(screen.getByTestId('hosted-events-toggle'));
+    expect(screen.getByTestId('hosted-event-ev-1')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Wearable Experiments' }).getAttribute('href')).toBe('/shows/show-1/events/ev-1');
+    expect(screen.queryByTestId('event-photos-ev-1')).toBeNull();
+    fireEvent.click(screen.getByTestId('hosted-event-photos-toggle-ev-1'));
     expect(screen.getByTestId('event-photos-ev-1')).toBeTruthy();
     expect(screen.queryByTestId('hosted-event-ev-2')).toBeNull();
 
@@ -164,6 +171,16 @@ describe('CharacterPlacesTab', () => {
       return { data: {} };
     });
     const posts = () => vi.mocked(api.post).mock.calls.map((c) => c[0]);
+    // Views, descriptions and event photos are closed until asked for (2026-11-21).
+    const openMore = async (role, setId) => {
+      fireEvent.click(await screen.findByTestId(`place-more-${role}-${setId}`));
+      return screen.findByTestId(`set-angles-${setId}`);
+    };
+    const openEvent = async (eventId) => {
+      fireEvent.click(await screen.findByTestId('hosted-events-toggle'));
+      fireEvent.click(screen.getByTestId(`hosted-event-photos-toggle-${eventId}`));
+      return screen.findByTestId(`event-photos-angles-${eventId}`);
+    };
 
     test('several photos make one set: the first its main photo, the others its angles', async () => {
       routeGets();
@@ -188,7 +205,7 @@ describe('CharacterPlacesTab', () => {
       vi.mocked(api.post).mockImplementation(async (url) => (url === '/api/v1/scene-sets/set-1/angles'
         ? { data: { success: true, data: { id: 'ang-9' } } } : { data: { success: true } }));
       renderIt();
-      const grid = await screen.findByTestId('set-angles-set-1');
+      const grid = await openMore('work', 'set-1');
       expect(grid.textContent).toMatch(/Angles · 1/);
       fireEvent.change(screen.getByTestId('set-angles-input-set-1'), { target: { files: [file('mirror.jpg')] } });
       await waitFor(() => expect(posts()).toContain('/api/v1/scene-sets/set-1/angles/ang-9/upload'));
@@ -204,7 +221,7 @@ describe('CharacterPlacesTab', () => {
       });
       vi.mocked(api.put).mockResolvedValue({ data: { success: true } });
       renderIt();
-      expect((await screen.findByTestId('event-photos-angles-ev-1')).textContent).toMatch(/Studio dressed for this event/);
+      expect((await openEvent('ev-1')).textContent).toMatch(/Studio dressed for this event/);
       fireEvent.change(screen.getByTestId('event-photos-input-ev-1'), { target: { files: [file('stage.jpg'), file('bar.jpg')] } });
       await waitFor(() => expect(api.put).toHaveBeenCalledWith('/api/v1/scene-sets/set-ev/version', { everyday_set_id: 'set-1', event_id: 'ev-1' }));
       expect(vi.mocked(api.post).mock.calls[0]).toEqual(['/api/v1/scene-sets', { name: 'Gala photos', scene_type: 'EVENT_LOCATION', show_id: 'show-1' }]);
@@ -221,7 +238,7 @@ describe('CharacterPlacesTab', () => {
       });
       vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
       renderIt();
-      await screen.findByTestId('set-angles-set-1');
+      await openMore('work', 'set-1');
       fireEvent.change(screen.getByTestId('set-angles-input-set-1'), { target: { files: [file('wide.jpg'), file('big.jpg')] } });
       await waitFor(() => expect(api.delete).toHaveBeenCalledTimes(1));
       const labels = vi.mocked(api.post).mock.calls.filter((c) => c[0] === '/api/v1/scene-sets/set-1/angles').map((c) => c[1].angle_label);
@@ -234,7 +251,7 @@ describe('CharacterPlacesTab', () => {
     test('a photo over 10 MB is not sent', async () => {
       routeGets();
       renderIt();
-      await screen.findByTestId('set-angles-set-1');
+      await openMore('work', 'set-1');
       const huge = file('huge.jpg');
       Object.defineProperty(huge, 'size', { value: 11 * 1024 * 1024 });
       fireEvent.change(screen.getByTestId('set-angles-input-set-1'), { target: { files: [huge] } });
@@ -248,7 +265,7 @@ describe('CharacterPlacesTab', () => {
       vi.mocked(api.put).mockRejectedValueOnce({ response: { data: { error: "Its episode is accepted: the event's place is locked." } } });
       vi.mocked(api.delete).mockResolvedValue({ data: { success: true } });
       renderIt();
-      await screen.findByTestId('event-photos-angles-ev-1');
+      await openEvent('ev-1');
       fireEvent.change(screen.getByTestId('event-photos-input-ev-1'), { target: { files: [file('stage.jpg')] } });
       expect((await screen.findByTestId('places-note')).textContent).toMatch(/place is locked/);
       expect(posts()).not.toContain('/api/v1/scene-sets/set-ev/upload-base');
@@ -276,6 +293,8 @@ describe('CharacterPlacesTab', () => {
       vi.mocked(api.post).mockImplementation(async (url) => (url === '/api/v1/scene-sets/set-1/angles'
         ? { data: { success: true, data: { id: 'ang-1' } } } : { data: { success: true } }));
       renderIt();
+      fireEvent.click(await screen.findByTestId('place-more-home-set-1'));
+      fireEvent.click(screen.getByTestId('place-more-closet-set-1'));
       await waitFor(() => expect(screen.getAllByTestId('set-angles-set-1')).toHaveLength(2));
       expect(screen.getByTestId('place-describe-home-set-1')).toBeTruthy();
       expect(screen.getByTestId('place-describe-closet-set-1')).toBeTruthy();
@@ -291,9 +310,141 @@ describe('CharacterPlacesTab', () => {
         { id: 'ev-2', show_id: 'show-1', name: 'Brunch', role: 'host', scene_set_id: null },
       ] });
       renderIt();
+      await openEvent('ev-1');
+      fireEvent.click(screen.getByTestId('hosted-event-photos-toggle-ev-2'));
       expect(await screen.findByTestId('set-angles-set-ev')).toBeTruthy();
       expect(screen.queryByTestId('event-photos-upload-ev-1')).toBeNull();
       expect(screen.getByTestId('event-photos-no-place-ev-2').textContent).toMatch(/Choose where it is held/);
+    });
+  });
+  // Evoni, 2026-11-21: Life & Locations. Each role is one compact row; what
+  // is under a place opens when asked for; "Other places" is here too.
+  describe('Life & Locations', () => {
+    const empty = () => vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/cast/characters/c-1/places') return { data: { success: true, show_id: 'show-1', places } };
+      if (url === '/api/v1/cast/characters/c-1/appearances') return { data: { success: true, events: [] } };
+      // Every scene type is offered as another place: a café, a venue, a studio.
+      if (url === '/api/v1/scene-sets') return { data: { success: true, data: [
+        { id: 'set-1', name: 'Studio', scene_type: 'OTHER' }, { id: 'set-cafe', name: 'Café Lune', scene_type: 'EVENT_LOCATION' },
+        { id: 'set-loft', name: 'Loft', scene_type: 'HOME_BASE' }, { id: 'set-park', name: 'Park', scene_type: 'TRANSITION' },
+      ] } };
+      return { data: {} };
+    });
+
+    test('every role is one row; an empty one says so beside its two buttons; nothing under a place is read until opened', async () => {
+      empty();
+      renderIt();
+      const other = await screen.findByTestId('places-role-other');
+      expect(within(other).getByText('No other places yet.')).toBeTruthy();
+      expect(within(other).getByTestId('place-pick-other')).toBeTruthy();
+      expect(within(other).getByTestId('place-upload-other')).toBeTruthy();
+      expect(['home', 'closet', 'work', 'other'].map((r) => screen.getByTestId(`places-role-${r}`).querySelector('h3').textContent.trim()))
+        .toEqual(['Home', 'Closet', 'Place of work', 'Other places']);
+      expect((await screen.findByTestId('places-hosted-events')).textContent).toMatch(/They host no events yet\./);
+      expect(screen.queryByTestId('hosted-events-toggle')).toBeNull();
+      const more = screen.getByTestId('place-more-work-set-1');
+      expect(more.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByTestId('set-angles-set-1')).toBeNull();
+      expect(screen.queryByTestId('place-describe-work-set-1')).toBeNull();
+      expect(api.get).not.toHaveBeenCalledWith('/api/v1/scene-sets/set-1');
+      fireEvent.click(more);
+      expect(more.getAttribute('aria-expanded')).toBe('true');
+      expect(document.getElementById(more.getAttribute('aria-controls'))).toBeTruthy();
+      expect(await screen.findByTestId('place-describe-work-set-1')).toBeTruthy();
+    });
+
+    test('another place: a set of any scene type, linked as role other with its name', async () => {
+      empty();
+      vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+      renderIt();
+      fireEvent.click(await screen.findByTestId('place-pick-other'));
+      const select = screen.getByTestId('place-pick-select-other');
+      await waitFor(() => expect(within(select).getByText('Café Lune')).toBeTruthy());
+      expect(within(select).getByText('Café Lune').disabled).toBe(false);
+      expect(within(select).getByText('Loft').disabled).toBe(false);
+      expect(within(select).getByText('Park').disabled).toBe(false);
+      expect(within(select).getByText('Studio (their place of work)').disabled).toBe(true);
+      const name = screen.getByTestId('place-name-other');
+      expect(name.getAttribute('maxlength')).toBe('80');
+      fireEvent.change(name, { target: { value: '  Morning café ' } });
+      fireEvent.change(select, { target: { value: 'set-cafe' } });
+      fireEvent.click(screen.getByTestId('place-pick-save-other'));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/shows/show-1/character-places',
+        { character_id: 'c-1', scene_set_id: 'set-cafe', role: 'other', label: 'Morning café' }));
+      expect((await screen.findByTestId('places-note')).textContent).toBe('Morning café added');
+    });
+
+    test('another place with no name sends none; no other role ever sends one', async () => {
+      empty();
+      vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+      renderIt();
+      fireEvent.click(await screen.findByTestId('place-pick-other'));
+      const select = screen.getByTestId('place-pick-select-other');
+      await waitFor(() => expect(within(select).getByText('Park')).toBeTruthy());
+      fireEvent.change(select, { target: { value: 'set-park' } });
+      fireEvent.click(screen.getByTestId('place-pick-save-other'));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/shows/show-1/character-places', { character_id: 'c-1', scene_set_id: 'set-park', role: 'other' }));
+      expect(screen.queryByTestId('place-name-home')).toBeNull();
+      fireEvent.click(screen.getByTestId('place-pick-home'));
+      expect(screen.queryByTestId('place-name-home')).toBeNull();
+    });
+
+    test('another place from photos: named first, one set made, linked as other with that name', async () => {
+      empty();
+      vi.mocked(api.post).mockImplementation(async (url) => (url === '/api/v1/scene-sets' ? { data: { success: true, data: { id: 'set-new' } } } : { data: { success: true } }));
+      renderIt();
+      fireEvent.click(await screen.findByTestId('place-upload-other'));
+      fireEvent.change(screen.getByTestId('place-name-other'), { target: { value: 'Pottery studio' } });
+      expect(screen.getByTestId('place-upload-choose-other')).toBeTruthy();
+      fireEvent.change(screen.getByTestId('place-upload-input-other'), { target: { files: [new File(['img'], 'kiln.jpg', { type: 'image/jpeg' })] } });
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/shows/show-1/character-places',
+        { character_id: 'c-1', scene_set_id: 'set-new', role: 'other', label: 'Pottery studio' }));
+      expect(vi.mocked(api.post).mock.calls[0]).toEqual(['/api/v1/scene-sets', { name: "Sable Okonkwo-Reyes's Pottery studio", scene_type: 'OTHER', show_id: 'show-1' }]);
+      expect((await screen.findByTestId('places-note')).textContent).toBe('Pottery studio made from your photos');
+    });
+
+    test('an other place linked before (from Scene Sets) shows with its name, or its set\'s when it has none, and can be unlinked', async () => {
+      places = [
+        { role: 'other', label: 'Rehearsal room', scene_set_id: 'set-7', scene_set_name: 'Warehouse B', image_url: 'https://x/w.jpg' },
+        { role: 'other', label: null, scene_set_id: 'set-8', scene_set_name: 'Rooftop', image_url: null },
+      ];
+      empty();
+      vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+      renderIt();
+      const other = await screen.findByTestId('places-role-other');
+      expect(within(other).getByTestId('place-label-set-7').textContent).toBe('Rehearsal room');
+      expect(within(other).getByAltText('Rehearsal room: Warehouse B')).toBeTruthy();
+      expect(within(other).getByText('Rooftop')).toBeTruthy();
+      expect(within(other).queryByTestId('place-label-set-8')).toBeNull();
+      expect(within(other).queryByText('No other places yet.')).toBeNull();
+      // More than one, so another can still be added.
+      expect(within(other).getByTestId('place-pick-other')).toBeTruthy();
+      fireEvent.click(within(other).getByRole('button', { name: 'Unlink Warehouse B' }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/shows/show-1/character-places/unlink', { character_id: 'c-1', scene_set_id: 'set-7', role: 'other' }));
+    });
+
+    test('Share to The Pulse is on the place it shares: only with a Pulse profile and a picture', async () => {
+      places = [
+        { role: 'home', scene_set_id: 'set-1', scene_set_name: 'Loft', image_url: 'https://x/l.jpg' },
+        { role: 'closet', scene_set_id: 'set-2', scene_set_name: 'Closet', image_url: null },
+      ];
+      empty();
+      vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
+      renderIt();
+      fireEvent.click(await screen.findByTestId('place-share-home-set-1'));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/cast/characters/c-1/places/share', { scene_set_id: 'set-1' }));
+      const note = await screen.findByTestId('places-note');
+      expect(note.textContent).toBe("A draft of their home is waiting in The Pulse's Review. Open Review");
+      expect(within(note).getByRole('link', { name: 'Open Review' }).getAttribute('href')).toBe('/admin?tab=pulse&sub=review');
+      expect(screen.queryByTestId('place-share-closet-set-2')).toBeNull();
+    });
+
+    test('with no Pulse profile no place is shared, and the tab says why', async () => {
+      places = [{ role: 'home', scene_set_id: 'set-1', scene_set_name: 'Loft', image_url: 'https://x/l.jpg' }];
+      empty();
+      renderIt({ ...sable, feed_profile_id: null });
+      expect(await screen.findByText('Sharing a place on The Pulse needs a Pulse profile.')).toBeTruthy();
+      expect(screen.queryByTestId('place-share-home-set-1')).toBeNull();
     });
   });
 });
