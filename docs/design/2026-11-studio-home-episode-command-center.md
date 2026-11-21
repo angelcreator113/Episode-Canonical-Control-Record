@@ -7,8 +7,9 @@
 | State | Pull requests |
 |---|---|
 | Merged to `main` | PR-00 (#3872, these documents), PR-01 (#3873, request-count pins), PR-02 (#3874, shared next action and next slot), PR-03 (#3875, the production episode and the episode to resume), PR-04 (#3876, the resume location, the show, a deleted episode), PR-05 (#3877, return paths A; a race in its tests was corrected in #3879), PR-06 (#3880, return paths B; `main` at `a597e9a60d3ce72670af9c2bafdcac4347311b55`, where Validate passed), PR-07 (#3882, the production checklist's loader makes its reads together with the same results; `main` at `a233b4487bc7b45731edf41576ea6fd91df6b969`, where Validate passed; its timings have not been measured on development, and no performance claim is made), PR-08 (#3884, the Episode page hands the checklist's loader the event, brief and scene sets it already read; a default open makes three requests fewer, 28 to 25 and 34 to 31; `main` at `843e3866b63299b11d9bd252f1be760ee20227a8`, where Validate passed; not measured on development, and no performance claim is made) |
+| Merged to `main`, outside the PR-00 to PR-22 sequence | Episode Overview Loading & Checklist Accuracy — PR #3886 (the Overview says what is still loading, the next step waits for the read that decides it, and the production checks are kept with their episode and say which could not be read; §13.9; `main` at `fc14fc8b2e00c7b217cc3dd789ae26ad2640ed1e`, where Validate passed; no request count changed; not yet run in a browser or deployed to development) |
 | Open, awaiting Evoni's review; not merged | None |
-| Planned, not started | PR-09 (the rest of R1); PR-10 to PR-13 (R2, slot-aware planning); PR-14 to PR-16 (R3, Studio Home); PR-17 and PR-18 (R4, Episode Command Center); PR-19 to PR-22 (R5, sidebar and show navigation) |
+| Planned, not started | N1 to N6 (the Episode page's navigation, §6.4 and §9; approved to go before PR-09, and each still needs its own approval); PR-09 (the rest of R1); PR-10 to PR-13 (R2, slot-aware planning); PR-14 to PR-16 (R3, Studio Home); PR-17 and PR-18 (R4, Episode Command Center); PR-19 to PR-22 (R5, sidebar and show navigation) |
 
 Merged means merged to `main`; nothing here says any of it is deployed to production. Studio Home, the Episode Command Center, slot-aware planning and the sidebar changes do not exist yet. Where what was built differs from the design below, §4's clarification says how; known limits are in §13.
 
@@ -309,6 +310,8 @@ Same route. Order:
 
 An existing test requires the text "Producer Mode" to be absent from the Overview; the route to Producer Mode lives on Home and in the sidebar.
 
+**Amended 2026-11-19 (Evoni).** The Episode page's tabs become Overview, Prepare, Produce and Finish (§6.4). Row 3 above, the step bar on the Overview, stays with PR-17 and is decided there together with its request-count cost; the navigation work does not add progress to the Overview.
+
 ### 6.3 Sidebar and show navigation
 
 ```
@@ -327,6 +330,76 @@ Search · Settings · Admin
 - **The `/shows/:id` redirect and its old-tab mapping are untouched,** so saved links keep working.
 - Naming: four leftover "feed" strings become The Pulse wording; the breadcrumb "Universe" becomes "LalaVerse". "Lala's posts", "JustAWoman's Feed" and "Phone" are different things and keep their names.
 - See §3.1 for the conflict with the blueprint's workspace headings.
+
+---
+
+### 6.4 The Episode page's navigation: Overview, Prepare, Produce, Finish
+
+Approved by Evoni on 2026-11-19, after a read-only audit on `main` at `fc14fc8b2e00c7b217cc3dd789ae26ad2640ed1e`. Nothing in this section is built; each pull request in §9 (N1 to N6) needs its own approval.
+
+**What makes this a regrouping.** Every deep link names a tab by its own `?tab=` key (`wardrobe`, `checklist`), not by its parent. One list, `EP_TABS` in `utils/episodeTabs.js`, drives the page's tabs, the return-path labels (`tabOrigin`) and the resume location (`utils/activeEpisode.js`). The keys do not change; their parents do.
+
+**Where each tab goes.**
+
+| New place | `?tab=` key (unchanged) | Existing component |
+|---|---|---|
+| **Overview** | `overview` | `EpisodeOverviewTab` |
+| Overview, Money view | `money` | `EpisodeMoneyTab` |
+| **Prepare** › Story & Script | `scripts` | `EpisodeScriptTab` |
+| Prepare › Scenes | `scenes` | `EpisodeSceneWorkspace` |
+| Prepare › Scenes, Plan view | `beatplan` | `EpisodeScenesTab` |
+| Prepare › Wardrobe | `wardrobe` | `EpisodeWardrobeGameplay` |
+| Prepare › Wardrobe, Style Page view | `lookbook` | `EpisodeStylePage` |
+| Prepare › Phone & Overlays | `phone` | `EpisodeLalasPhoneTab` |
+| Prepare › Phone & Overlays, Overlays view | `overlays` | `EpisodeOverlaysTab` |
+| Prepare › Assets & Files | `files` | `EpisodeFilesTab`, kept whole (pose photos and raw footage) |
+| Prepare › Checklist | `checklist` | `EpisodeProductionChecklist`, its 24 rules unchanged |
+| **Produce** › command center | `studio` (new) | composed from existing parts, below |
+| Produce › Voice | `voice` | `VoiceStudio`, behind the gate it has today |
+| Produce › Edit | `edit` | `EpisodeEditTab`, the launcher to the one editor at `/episodes/:id/editor` |
+| **Finish** › Summary | `summary`, `evaluation` | `EpisodeResultsSummary` |
+| Finish › Story | `story` | `EpisodeResultsStory` |
+| Finish › Distribution | `distribution` | `EpisodeDistributionTab` |
+
+**Where an address lands.**
+
+| Address | Lands on |
+|---|---|
+| no `tab`, or one that is not a tab | Overview |
+| `?tab=prepare` | Story & Script |
+| `?tab=produce` | the command center (`studio`) |
+| `?tab=finish` | Summary |
+| `?tab=production` (older links) | Scenes, as today |
+| `?tab=results` (older links) | Summary, as today |
+| `?tab=assets` (older links) | Scenes, as today |
+| `?tab=brief` (older links) | Overview, as today |
+| any tab's own key | that tab, wherever it now sits |
+| `/episodes/:id/voice` | Voice, as today |
+
+Resume opens the workspace that was saved, as it does today; "Prepare opens Story & Script" is only where the Prepare tab itself opens.
+
+**Money.** The Overview already reads the episode's money plan once, for its money card, which links to `?tab=money`. The Money tab reads the same address once for itself and holds the event-spending editor. As a view beside the Overview it adds no request to a default open of the Overview and changes no financial code. It is not embedded in the Overview. Money stays a place Resume can return to; the rule that skips everything under the Overview is adjusted for it, with a test.
+
+**The Produce command center** (`studio`), from what exists; no second editor:
+
+1. Status: the Produce steps, the episode's status and Mark Ready. Mark Ready keeps its behaviour and its rule (`canMarkReady`).
+2. Record: opens the existing Teleprompter for the episode, with Produce as the way back. Story & Script keeps its own Teleprompter buttons.
+3. Footage: the takes count, opening the existing Files workspace (`files`) with a clear way back to Produce.
+4. Voice: opens Produce › Voice, shown only where its gate is open.
+5. Edit: opens Produce › Edit.
+
+**Progress, without a second navigation.** The seven steps of `productionSteps` stay as they are and are shown where they belong, as status: Event & Brief, Script and Scenes on Prepare; Files and Edit & Assemble on Produce; Thumbnail and Review & Publish on Finish. A step links only inside its own phase; moving between phases is the four main tabs. The checklist's "N left" badge moves to Prepare, where the Checklist is.
+
+**Request counts** (from the code and the PR-01 pins; nothing here is a timing):
+
+- A default open of the Overview stays at 25 and 31 requests. No progress is added to the Overview by this work.
+- Today every Production tab shows the step strip, which makes two reads of its own (raw clips, thumbnail). Prepare's three steps need neither, so a Prepare tab is expected to make two requests fewer once N4 lands. These opens are not pinned today; N1 pins some first.
+- The command center makes the two reads the strip makes today.
+- The Checklist tab's second loader run (§13.8) is not touched.
+
+**Kept as they are:** every `?tab=` key and older alias; the Voice gate; the admin-only actions inside Edit and Results; the checklist's 24 rules and its loader; the editor, recording, voice and footage systems; the request pins. The checklist is redesigned separately, under its own approval.
+
+**PR-17 and PR-18.** PR-17's step bar on the Overview is the same question as the progress above and is decided in PR-17, not here. PR-18's "What's ready" waits for the checklist redesign. PR-09 is Home only and follows this sequence.
 
 ---
 
@@ -415,6 +488,20 @@ Every pull request follows the repo's loop (`DEVELOPMENT_WORKFLOW.md`) and the e
 | 08 | The episode page shares events, brief and scene sets with the Overview tab and the checklist | 07 |
 | 09 | Home uses the shared show rule, asks for its own show's episodes, shares the `/shows` read | 01, 03 |
 
+### N — the Episode page's navigation (approved 2026-11-19, before PR-09)
+
+§6.4. Each needs its own approval.
+
+| PR | Change | Depends on |
+|---|---|---|
+| N0 | These documents | — |
+| N1 | Tests only: pin today's tab contract (every key and alias, the Voice gate, return-path labels, resume keys) and the request counts of a few tabs that are not the Overview | — |
+| N2 | The page chooses each tab's body by its own key; no visible change | N1 |
+| N3 | Regroup into Overview, Prepare, Produce, Finish with the older aliases; Money as a view of the Overview. **Interim state:** the existing step strip stays, unchanged, on the tabs that show it today, and Produce has Voice and Edit only | N2 |
+| N4 | The Produce command center (`studio`) and progress shown by phase, replacing the interim strip | N3 |
+| N5 | Wording: return-path labels, the Teleprompter entry from Produce, the checklist's Fix labels (labels only, no rule) | N4 |
+| N6 | Documents, and a walk of the built page in a browser at desktop and 375px | N5 |
+
 ### R2 — slot-aware planning
 
 | PR | Change | Depends on |
@@ -436,8 +523,8 @@ Every pull request follows the repo's loop (`DEVELOPMENT_WORKFLOW.md`) and the e
 
 | PR | Change | Depends on |
 |---|---|---|
-| 17 | Three state lines; the step bar without "Mark Ready" | 08 |
-| 18 | Named next action; Resume; "What's ready" | 03, 04, 17 |
+| 17 | Three state lines; the step bar without "Mark Ready" (with N4's progress by phase in mind; decides the Overview's request-count cost) | 08, N4 |
+| 18 | Named next action; Resume; "What's ready" (after the checklist redesign) | 03, 04, 17 |
 
 ### R5 — sidebar and show navigation
 
@@ -546,7 +633,7 @@ Recorded on 2026-11-18. **None of the items in §13 is implemented.** Listing on
 
 | Class | Items |
 |---|---|
-| Confirmed defect (behaviour that is wrong today) | §13.9: "Venue image generated" cannot tell a failed read from no image (the other §13.9 defects are corrected by the change that records them). §13.3: the separate episode pages still open a deleted episode. §13.3: two windows writing the locations key at once can lose one update. §13.2: the Shows card counts treat an unrecognised status as in production, while Continue does not |
+| Confirmed defect (behaviour that is wrong today) | §13.9: "Venue image generated" cannot tell a failed read from no image (the other §13.9 defects were corrected by PR #3886). §13.3: the separate episode pages still open a deleted episode. §13.3: two windows writing the locations key at once can lose one update. §13.2: the Shows card counts treat an unrecognised status as in production, while Continue does not |
 | Deferred UX improvement (works, could be better) | §13.8: the Episode Overview has no loading feedback for its brief and scene-sets reads; the Checklist tab runs the loader twice. All of §13.4 (ways back that return to the episode instead of where they were opened from, including the two added from PR-06). §13.2: story order ignores the season number. §13.1: `useNextSlot` does not guard against a late or out-of-order answer (to settle before PR-16 uses it). §13.3: the show is remembered after its read answers, not when the page opens |
 | Observed behaviour, no change decided | §13.5: the Teleprompter's "Start at" after Exit |
 | Tooling limitation | §13.6: the frontend ESLint configuration does not load |
@@ -559,15 +646,17 @@ The classes are this document's reading of each item, made on 2026-11-18 (the §
 Recorded on 2026-11-19. None of these is built; each needs its own approval.
 
 - **Loading feedback on the Episode Overview** (Evoni, 2026-11-19): "Episode Overview currently lacks visible loading feedback for its brief and scene-sets reads. While requests are pending, sections may appear empty or display no scene sets. The production checklist and related counts may also be temporarily absent. Improve these loading and empty states in a separate, focused UI task." This predates PR-08 and is not a regression of it. Since PR-08 the checklist line and counts on the Overview wait for the Overview's brief and scene-sets reads before they appear.
-  - **Correction (2026-11-19, from the audit that followed).** The Overview reads the episode's scene sets but does not show them anywhere: `EpisodeOverviewTab` keeps them only to hand to the page's checklist (PR-08). So there is no "displays no scene sets" state. What the audit confirmed instead is in §13.9.
+  - **Correction (2026-11-19, from the audit that followed).** The Overview reads the episode's scene sets but does not show them anywhere: `EpisodeOverviewTab` keeps them only to hand to the page's checklist (PR-08). So there is no "displays no scene sets" state. What the audit confirmed instead is in §13.9, and was corrected by PR #3886.
 - **The Checklist tab runs the loader twice.** On the Checklist tab `loadProductionChecks` runs once from the Episode page (`EpisodeDetail`, for the Production badge and step bar) and once from `EpisodeProductionChecklist` itself: every read of the loader is made twice. The PR-01 pins measure the Overview, so they do not count this. Deferred by Evoni on 2026-11-19; PR-08 did not touch it.
 - **PR-07 and PR-08 are not measured.** No timing has been taken on development for either. A one-off reading of the browser's own Resource Timing entries was prepared; no instrumentation was added and nothing was deployed for it.
 
 ### 13.9 The Episode Overview's loading states and the checklist's correctness (audit of 2026-11-19)
 
-Found by a read-only audit on `main` at `9bdc574fcc63d27d31857c39dbaa981b3b1de895`, after PR-08. Decisions by Evoni, 2026-11-19. The change that carries this section corrects the first five; the last two are limits it keeps.
+**Episode Overview Loading & Checklist Accuracy — PR #3886.** A completed improvement outside the PR-00 to PR-22 sequence, merged to `main` on 2026-11-19 as `fc14fc8b2e00c7b217cc3dd789ae26ad2640ed1e`, where Validate passed.
 
-Confirmed wrong before that change:
+Found by a read-only audit on `main` at `9bdc574fcc63d27d31857c39dbaa981b3b1de895`, after PR-08. Decisions by Evoni, 2026-11-19. PR #3886 corrected the confirmed issues below; the two limits at the end remain.
+
+Confirmed wrong before PR #3886:
 
 - **Statements made before their read answered.** With no script text on the episode, the next step said "Generate the script. The brief is done." before the brief or the script check had answered. The Events card said "0" and "No events linked", the linker "No unlinked events available", the Prestige tile "Not set" and the Look tile "Not chosen", each before its read answered.
 - **No feedback.** The Story brief's fields and the checklist line, badge and count were simply absent while their reads were out.
@@ -575,7 +664,7 @@ Confirmed wrong before that change:
 - **A read that failed was counted as an open check.** `loadProductionChecks` leaves a check unticked when its read fails, so "N left" counted it with nothing to say it had not been read. It was never counted as done.
 - **Another episode's checklist after a switch.** The page kept the checks without the episode they were for, so the badge, the count, the checklist line and the next step showed the previous episode's until the new one's loader answered.
 
-What the correction does, with nothing added to the requests: each area says "Loading…" until its own read answers; the next step's button waits only for the read that decides where it leads (the script check when the episode has no script text, else the checklist); the checks are kept with their episode; and an unticked check is called "couldn't be checked" only when the loader's own `read` (PR-07) shows that a read it is worked out from did not answer (`CHECK_READS` and `checklistReadability` in `lib/episodeShell.js`). The badge still says "N left"; how many of those could not be checked is in its hover and spoken label. The Checklist tab's Check again remains the way to read the checklist again.
+What PR #3886 did, with nothing added to the requests: each area says "Loading…" until its own read answers; the next step's button waits only for the read that decides where it leads (the script check when the episode has no script text, else the checklist); the checks are kept with their episode; and an unticked check is called "couldn't be checked" only when the loader's own `read` (PR-07) shows that a read it is worked out from did not answer (`CHECK_READS` and `checklistReadability` in `lib/episodeShell.js`). The badge still says "N left"; how many of those could not be checked is in its hover and spoken label. The Checklist tab's Check again remains the way to read the checklist again. Three corrections from its final review are part of it: a locked outfit that cannot be read is named in the note with Retry and on the Look tile, and is no longer shown as "Not chosen"; a failed read is announced once, by the note with Retry, and the lines inside the Story brief and Events cards say it in place without being alerts of their own; and the Overview clears its script answer when its episode changes.
 
 Limits that remain, accepted by Evoni on 2026-11-19:
 
