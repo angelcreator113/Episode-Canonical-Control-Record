@@ -26,9 +26,10 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const cityOf = async (id) => (await q('SELECT city FROM world_locations WHERE id = :id', { id }))[0].city;
 
   beforeAll(() => {
+    // An ADMIN: POST and PUT /world/locations are an ADMIN's since 2026-11-22 (Evoni).
     token = TokenService.generateTokenPair({
       id: 'test-user-dream-city', email: 'test@dream-city.dev', name: 'Dream City Test',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 

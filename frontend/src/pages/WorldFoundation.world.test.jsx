@@ -128,3 +128,99 @@ describe('World tab', () => {
     expect(within(senses).getByLabelText('Atmosphere').value).toBe('');
   });
 });
+
+// Evoni, 2026-11-22: deleting a location is an admin's, and a location
+// anything still uses is refused with what uses it. The page shows the
+// server's sentence instead of "Delete failed".
+describe('Locations tab: deleting a location', () => {
+  const club = { id: 'loc-7', name: 'Club Neon', location_type: 'venue', venue_type: 'club', city: 'Echo Park' };
+  const refusal = (status, data) => Object.assign(new Error(`Request failed with status code ${status}`), { response: { status, data } });
+  const open = async () => {
+    vi.mocked(api.get).mockImplementation(async (url) => (url === '/api/v1/world/locations' ? { data: { locations: [club] } } : { data: { data: {}, locations: [], events: [] } }));
+    window.history.pushState({}, '', '/universe?tab=world&sub=locations');
+    renderAt('/universe?tab=world&sub=locations');
+    await screen.findByText('Club Neon');
+  };
+
+  beforeEach(() => {
+    vi.mocked(api.delete).mockReset();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    window.confirm = vi.fn(() => true);
+    globalThis.confirm = window.confirm;
+  });
+
+  test('it asks first, and does not call the server when the answer is no', async () => {
+    window.confirm.mockReturnValue(false);
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Del' }));
+    expect(window.confirm).toHaveBeenCalledWith('Delete this location?');
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('world-foundation-toast')).toBeNull();
+  });
+
+  test('deleted: it says so and reads the list again', async () => {
+    vi.mocked(api.delete).mockResolvedValue({ data: { deleted: true } });
+    await open();
+    const reads = vi.mocked(api.get).mock.calls.filter(([url]) => url === '/api/v1/world/locations').length;
+    fireEvent.click(screen.getByRole('button', { name: 'Del' }));
+    const toast = await screen.findByTestId('world-foundation-toast');
+    expect(api.delete).toHaveBeenCalledWith('/api/v1/world/locations/loc-7');
+    expect(toast.textContent).toBe('Deleted');
+    expect(toast.getAttribute('role')).toBe('status');
+    await vi.waitFor(() => expect(vi.mocked(api.get).mock.calls.filter(([url]) => url === '/api/v1/world/locations').length).toBe(reads + 1));
+  });
+
+  test('refused for someone who is not an admin (403): the admin-only sentence, not the middleware\'s wording', async () => {
+    vi.mocked(api.delete).mockRejectedValue(refusal(403, { error: 'Forbidden', message: 'User must be in one of these groups: ADMIN', code: 'AUTH_GROUP_REQUIRED' }));
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Del' }));
+    const toast = await screen.findByRole('alert');
+    expect(toast.textContent).toBe('Only an admin can add, change or delete a location.');
+    expect(toast.textContent).not.toMatch(/Forbidden|User must be/);
+    expect(screen.getByText('Club Neon')).toBeTruthy();
+  });
+
+  test('refused because it is in use (409): the server\'s sentence, which names what uses it', async () => {
+    vi.mocked(api.delete).mockRejectedValue(refusal(409, {
+      success: false, code: 'LOCATION_IN_USE', uses: { scene_sets: 2, events: 1, child_locations: 0 },
+      error: 'Club Neon is used by 2 scene sets and 1 event. Nothing was deleted.',
+    }));
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Del' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Club Neon is used by 2 scene sets and 1 event. Nothing was deleted.');
+    expect(screen.getByText('Club Neon')).toBeTruthy();
+  });
+
+  test('refused because its Place is locked (409): the server\'s sentence, which names the events', async () => {
+    vi.mocked(api.delete).mockRejectedValue(refusal(409, {
+      success: false, code: 'PLACE_LOCKED', locked_events: [{ id: 'e1', name: 'Neon Gala' }],
+      error: 'Neon Gala is held here and its episode is accepted: the place is locked, so this location stays. Nothing was deleted.',
+    }));
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Del' }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/^Neon Gala is held here .* Nothing was deleted\.$/);
+  });
+
+  test('a 409 that carries no sentence: one is made from its uses, or from its locked events', async () => {
+    vi.mocked(api.delete).mockRejectedValue(refusal(409, { code: 'LOCATION_IN_USE', uses: { scene_sets: 2, feed_posts: 1, events: 0 } }));
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Del' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('This location is in use (scene sets 2, feed posts 1). Nothing was deleted.');
+  });
+
+  test('the message is kept inside a phone\'s width: the toast is no wider than the screen less its margins, and long words wrap', async () => {
+    vi.mocked(api.delete).mockRejectedValue(refusal(409, { error: 'Club Neon is used by 2 scene sets. Nothing was deleted.' }));
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Del' }));
+    const toast = await screen.findByRole('alert');
+    expect(toast.style.maxWidth).toBe('calc(100vw - 48px)');
+    expect(toast.style.overflowWrap).toBe('anywhere');
+  });
+
+  test('any other failure: the page\'s plain message', async () => {
+    vi.mocked(api.delete).mockRejectedValue(new Error('Network Error'));
+    await open();
+    fireEvent.click(screen.getByRole('button', { name: 'Del' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Delete failed');
+  });
+});
