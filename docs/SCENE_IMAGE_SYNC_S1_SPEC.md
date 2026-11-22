@@ -162,7 +162,7 @@ No hook is placed inside code the worker runs (section 12).
    - **Guarded update:** `UPDATE scenes SET … WHERE id = :id AND deleted_at IS NULL AND background_url IS NOT DISTINCT FROM :seen AND <source still current>`.
    - **Source still current**, by where the URL came from: set base → `EXISTS (… scene_sets WHERE id = :setId AND base_still_url = :url AND deleted_at IS NULL)`; angle → `EXISTS (… scene_angles WHERE id = :angleId AND still_image_url = :url AND deleted_at IS NULL)`; look or dressed image → no predicate (those files are never deleted).
    - **Zero rows affected** is not an error: re-resolve that beat once; if it still does not apply, its outcome is `stale_source` or `changed_elsewhere`.
-   - **Insert** keeps the existing `ON CONFLICT (scene_plan_id) … DO NOTHING` (`beatScenesService.js:112`). A uniqueness conflict on the scene number is caught, named (`conflict`) and skipped; the other beats continue.
+   - **Insert** keeps the existing `ON CONFLICT (scene_plan_id) … DO NOTHING` (`beatScenesService.js:112`). A uniqueness conflict on the scene number is caught, named (`conflict`) and skipped; the other beats continue. That conflict is a violation of `idx_scenes_episode_scene_number`, which production has and a freshly migrated database does not (section 4A).
 8. **Commit.** Return the outcome object (section 10).
 
 `syncScenesForSet(sequelize, setId, where)`: lists the episodes with a live beat on that set (a read, outside any transaction), runs the per-episode sync for each in ascending id order, never throws, and returns the worst outcome. A `busy` episode is retried once after a short delay.
@@ -170,6 +170,41 @@ No hook is placed inside code the worker runs (section 12).
 `syncBeatScenesQuietly` stays as the never-throw wrapper and returns the outcome object (today it returns nothing useful).
 
 **Call sites today (M), none inside an open transaction:** Start Episode (`episodeGeneratorService.js:980`), Resume setup (`:393`), generate-plan (`episodeBriefRoutes.js:301`), beat save (`:499`–`:500`), export (`export.js:74`–`:75`). The three route callers of `generateEpisodeFromEvent` (`worldEvents/episodeGenerate.js:55`, `episodeBatch.js:101`, `:135`, `:291`) pass no transaction. No CLS namespace is configured, so a transaction is never attached implicitly.
+
+---
+
+## 4A. The scene-number unique index: production has it, a freshly migrated database does not
+
+**Recorded facts (M, from the repository's own records; no database was read for this document):**
+
+- **Production has** the partial unique index `idx_scenes_episode_scene_number` on `scenes (episode_id, scene_number) WHERE deleted_at IS NULL`. Two recorded reads say so: finding D9 of `docs/reads/2026-11-04-runtime-ddl-inventory.md` (a read of 2026-11-04: the index exists, owned by `postgres`), and the header of `tests/integration/beatScenesProductionShape.integration.test.js` (a read-only capture of production's `scenes` table on 2026-11-06, which lists a unique index on `(episode_id, scene_number) WHERE deleted_at IS NULL`).
+- **No file under `src/migrations` creates it.** The only code that names it is the scene delete handler, `sceneController.deleteScene` (`src/controllers/sceneController.js:405`, `:429`), which drops and re-creates it around renumbering at run time. So a freshly migrated test database has no such index until a test deletes a scene through that handler, after which the shared table has it for the rest of the run.
+- **A separately authorized fix, not part of S1,** removes that run-time index change from scene deletion without adding a migration. After it, a freshly migrated database never gains the index, and the difference from production remains.
+- **The development server:** not known. The read-only query in `docs/reads/2026-11-04-runtime-ddl-check.sql` (section D9) answers it.
+
+**What the sync does with a scene number today (M, `syncBeatScenes`, `src/services/beatScenesService.js:43`):**
+
+- It reads only the episode's **tied** live scenes (`scene_plan_id IS NOT NULL`). An untied scene is never read, so the sync does not know which numbers untied scenes hold.
+- A tied scene whose plan row was replaced by a re-plan (an "orphan") is reused by the new beat with the same number, so the sync steps round its own orphans.
+- A new scene is inserted with `scene_number = beat_number`. The insert's `ON CONFLICT (scene_plan_id) WHERE deleted_at IS NULL AND scene_plan_id IS NOT NULL DO NOTHING` (`:112`) guards the plan-link index **only**. It does not cover the scene-number index.
+- An existing tied scene whose beat number changed is updated to the new number with a plain `UPDATE` (no guard).
+
+**The per-beat conflict is a violation of this index.** The case: a legacy untied scene (or any live scene the sync did not read) already holds beat N's number in the episode.
+
+| Configuration | Today | Under S1 as specified |
+|---|---|---|
+| **Index present** (production; the production-shaped test table) | The `INSERT` (or the renumbering `UPDATE`) fails with a unique violation (SQLSTATE 23505). The error leaves `syncBeatScenes`, so every later beat is skipped; writes already made stay, because each statement is its own transaction. `syncBeatScenesQuietly` (`:128`) logs it and returns nothing. | The violation is caught inside that beat's savepoint; the beat's outcome is `conflict`; the other beats continue; the episode's outcome is `failure`; `warnings.scene_sync` names the beat and the scene holding the number. |
+| **Index absent** (freshly migrated test database) | No error. The insert succeeds and the episode has **two live scenes with the same number**; the sync reports the beat as created. | The same: no violation occurs, so there is no `conflict` outcome and no warning. The beat's outcome is `created`, and the duplicate number exists. |
+
+So the `conflict` outcome, and everything that follows from it (the warning, the partial-failure rule, Resume setup recovery), can be exercised **only** against a table that has the index. A test that runs only on the migrated database would pass without ever reaching that code.
+
+**Consequences for S1's tests (no change to S1's design, and no migration):**
+
+- Every test that depends on a scene-number collision runs in **both** configurations: index absent (the freshly migrated table) and production-shaped (index present), the latter built the way `beatScenesProductionShape.integration.test.js` builds it, in its own schema placed first on the connection's `search_path`.
+- **No S1 test creates or drops the index on the shared `public.scenes` table**, and none relies on another test having deleted a scene.
+- The expected result is stated per configuration (tests 47, 55, 59, 62, 71, 72, 76 and 90).
+
+**One point this raises, recorded as open (section 16):** in the index-absent configuration S1 would still create a duplicate scene number silently, as today. Production is not in that configuration by the recorded reads, so this is a test-environment and unknown-server concern, not a known production defect.
 
 ---
 
@@ -574,7 +609,7 @@ Mechanisms: `tests/helpers/lockTrace.js` (`gate()` pauses between two statements
 
 ### H. Locks, concurrency, contention
 46. Lock order: a sync, a Restore, a `from-angle` create and a legacy save each show episode `FOR UPDATE` → advisory (where used) → scene writes, by `byTransaction()`. *(addendum 1, amended for from-angle)*
-47. Two syncs of one episode at once: the second waits, then finds nothing to do; one live scene per beat. *(old 17, addendum 5, amended)*
+47. Two syncs of one episode at once: the second waits, then finds nothing to do; one live scene per beat. *(old 17, addendum 5, amended)* **Run in both configurations (section 4A).** Index present and index absent: the same result, because the second sync waits on the episode lock and the plan-link index exists in both.
 48. Base replacement and a multi-set episode sync started in each order, repeated → both finish; no 40P01. *(addendum 10)*
 49. Sync, acceptance, clip attach and episode delete on one episode, each pairwise order, repeated → all finish; no 40P01. *(old 43)*
 50. Writer timeout: the exclusive lock held by a test session → the sync returns `failure`/`busy`, writes nothing, is retried once, then records a warning. *(addendum 12)*
@@ -582,16 +617,16 @@ Mechanisms: `tests/helpers/lockTrace.js` (`gate()` pauses between two statements
 52. No convoy: a long sync and a base replacement at once do not delay a second sync on another episode. *(old 40)*
 53. Unrelated episodes: with one episode's sync gated under its lock, a sync, a clip attach and a scene create on another episode complete without waiting. *(old 50)*
 54. Bounded deleter hold: with the storage double at its limit, an unrelated sync waits no longer than that limit and then succeeds. *(old 51)*
-55. A scene create on an episode whose sync is gated completes after the sync commits, inside 10 s. *(old 49)*
+55. A scene create on an episode whose sync is gated completes after the sync commits, inside 10 s. *(old 49)* **Run in both configurations (section 4A).** Index present: a create that takes a number the sync has just used fails with the unique violation as it does today; index absent: it succeeds with a duplicate number. S1 changes neither; the test pins both.
 56. Key space: holding the S1 advisory lock does not block the rate-card or voice-footage locks, and the reverse. *(old 42)*
 
 ### I. Outcomes, warnings, Resume setup
 57. Each of `success`, `unchanged`, `protected` (accepted; filmed) and `failure` is returned with its documented fields. *(addendum 16)*
 58. A protected skip writes nothing and neither creates nor clears a warning. *(addendum 17)*
-59. One conflicting beat (an older untied scene holding its number): the other beats commit; outcome `failure`; the warning names the beat and scene; `steps` and `complete` byte-identical. *(old 16, addendum 18, 19)*
+59. One conflicting beat (an older untied scene holding its number): the other beats commit; outcome `failure`; the warning names the beat and scene; `steps` and `complete` byte-identical. *(old 16, addendum 18, 19)* **Run in both configurations (section 4A).** **Index present:** as written (`conflict`, `failure`, warning). **Index absent:** no conflict arises; the beat is `created`, the episode's outcome is `success`, no warning is written, and two live scenes share the number. Test 90 states both in full.
 60. A warning survives `recordSetupStatus`, including when written during that same Resume setup; and survives the season-slot writer. *(addendum 20, 21)*
 61. Warning write forced to fail: the outcome is still returned and logged; one retry; the next sync reproduces the failure. *(addendum 22)*
-62. A `success` while the named scene row still differs does not clear the warning; after the cause is fixed and Resume setup verifies the row, the entry is removed and the key goes when empty. *(old 16, addendum 23)*
+62. A `success` while the named scene row still differs does not clear the warning; after the cause is fixed and Resume setup verifies the row, the entry is removed and the key goes when empty. *(old 16, addendum 23)* **Run in both configurations (section 4A).** The warning being cleared exists only with the index present; with it absent this test asserts that no `scene_sync` warning was ever written.
 63. A newer warning is never cleared by an older clear. *(addendum 24)*
 64. Non-admin episode reads carry no `setup_status`. *(addendum 26)*
 
@@ -604,14 +639,14 @@ Mechanisms: `tests/helpers/lockTrace.js` (`gate()` pauses between two statements
 
 ### K. Legacy timeline save
 70. With `LEGACY_TIMELINE_WRITES=on`, a save and a sync on one episode in each order both finish; no 40P01. *(old 46)*
-71. Beat-tied scene, table-driven over `background_url`, `scene_set_id` and `scene_angle_id`, each sent as: a new value, a stale value, `null`, omitted, and all three together → the three stored columns are byte-identical after the save; the scene's title, duration, number, characters and dialogue clips **are** saved. *(old 47, extended; ruling 3)*
-72. The same inputs for an untied scene, and for a scene the save creates → written exactly as on main, including null when omitted. *(ruling 3)*
+71. Beat-tied scene, table-driven over `background_url`, `scene_set_id` and `scene_angle_id`, each sent as: a new value, a stale value, `null`, omitted, and all three together → the three stored columns are byte-identical after the save; the scene's title, duration, number, characters and dialogue clips **are** saved. *(old 47, extended; ruling 3)* **Run in both configurations (section 4A).** A sent `scene_number` that collides with another live scene: index present, the save fails as today with nothing written; index absent, it is saved as today.
+72. The same inputs for an untied scene, and for a scene the save creates → written exactly as on main, including null when omitted. *(ruling 3)* **Run in both configurations (section 4A).** The same collision rule as test 71.
 73. Look-alike and nested keys for a beat-tied scene (`backgroundUrl`, `background`, `sceneSetId`, `scene.scene.background_url`, `canvas_settings.background_source`) → none reaches the row, and the marker is unchanged. *(condition 2; ruling 3)*
 74. A stale save (older timeline basis) is still refused as today, with nothing written, for tied and untied scenes. *(condition 2)*
 
 ### L. Duplicate and from-angle
 75. A duplicated scene has no `scene_plan_id`, no `background_url` and no marker; every automatic path leaves it unchanged; duplicating during a gated sync waits, then succeeds. *(old 48, condition 3)*
-76. `from-angle` reads the angle's current still inside its insert; with a base replacement racing it, the created scene never holds a deleted URL. *(addendum lock table)*
+76. `from-angle` reads the angle's current still inside its insert; with a base replacement racing it, the created scene never holds a deleted URL. *(addendum lock table)* **Run in both configurations (section 4A).** If the created scene's number collides: index present, the insert fails as today; index absent, a duplicate number results as today.
 
 ### M. Worker
 77. Under the worker's restricted role: the advisory try succeeds, the scenes check is denied, no storage delete is issued. *(old 15, 65, addendum 14)*
@@ -632,7 +667,10 @@ Mechanisms: `tests/helpers/lockTrace.js` (`gate()` pauses between two statements
 88. P2b dependencies, asserted again in S1's suite so a regression is caught where it matters: on `generate-venue` a signed-out caller gets 401 and a non-admin 403, and an ADMIN with `force: true` on an accepted episode's event gets the Place-lock refusal, each with no provider call, no storage write, no new scene set, no event update and no plan change. An unlinked event, and an event linked to a draft episode, behave as before for an ADMIN. *(ruling 1; Place-lock ruling)*
 89. Reconciliation dry run lists the inconsistency for an affected episode and writes nothing; `--apply` does not move the plan. *(10A)*
 
-**Every earlier number 1–66 appears above.** Tests 71–74 are rewritten and 81–89 are new (rulings of 2026-11-22). **Total: 89.** Old 57 → 31; old 45 → 16; old 52/53 → 7; old 54 → 8.
+### P. Scene-number index configurations (section 4A)
+90. **Production-shaped table (index present):** given an episode whose beats 1 to 5 have sets, and a legacy untied live scene holding number 3, when the sync runs → beats 1, 2, 4 and 5 have their scenes (created or updated); beat 3's outcome is `conflict`; the episode's outcome is `failure`; `warnings.scene_sync` names beat 3 and the untied scene; the untied scene is byte-identical; `steps` and `complete` are unchanged; no other table is written. **Freshly migrated table (index absent):** the same setup → all five beats have scenes; beat 3's outcome is `created`; the episode's outcome is `success`; no `scene_sync` warning; two live scenes hold number 3 (asserted, so the difference is on record); the untied scene is byte-identical. In both: the test builds its own table or uses the shared one as migrated, and neither creates nor drops `idx_scenes_episode_scene_number` on `public.scenes`. Mechanism: the production-shaped schema of `beatScenesProductionShape.integration.test.js`; `lockTrace` for the write set. *(ruling of 2026-11-22 on the scene-number index)*
+
+**Every earlier number 1–66 appears above.** Tests 71–74 are rewritten and 81–90 are new (rulings of 2026-11-22). Tests 47, 55, 59, 62, 71, 72, 76 and 90 run in both index configurations. **Total: 90.** Old 57 → 31; old 45 → 16; old 52/53 → 7; old 54 → 8.
 
 ---
 
@@ -649,9 +687,11 @@ Mechanisms: `tests/helpers/lockTrace.js` (`gate()` pauses between two statements
 6. **Filmed-only location mismatch:** "APPROVED: Record the correction under S2. An episode with raw footage but without accepted status can still have unlocked beat assignments moved through ordinary event editing. This is an identified production-integrity risk. S1 must preserve stored scene images and detect the inconsistent event/episode location using the existing warning mechanism. S2 must investigate applying the existing filmed-episode freeze and explicit authorized location-change workflow to these plan mutations. Do not silently rewrite filmed scenes or expand P1 in this approval." → section 0 (S2 list), section 10A, tests 83 and 87.
 7. **Preserving this specification:** "AUTHORIZED: Save the complete consolidated S1 design in the existing repository documentation structure on a separate documentation-only branch." This document is that record.
 
+8. **Scene-number index:** "APPROVED: Add a focused note and acceptance-test clarification … documenting that the scene-number unique index exists in the recorded production schema but is absent from freshly migrated test databases. S1's per-beat uniqueness-conflict tests must include a production-shaped index configuration. Do not change S1 implementation code or add a migration. The S1 specification remains documentation only, and its implementation is not yet authorized." → section 4A; tests 47, 55, 59, 62, 71, 72, 76 and 90.
+
 ### Open
 
-None at this revision.
+1. **Index-absent behaviour.** Where `idx_scenes_episode_scene_number` is absent, S1 as specified still creates a duplicate scene number silently when an unread scene holds the beat's number, exactly as today (section 4A). The recorded reads say production has the index; the development server is not known. If any server lacks it, the choice is between leaving that as it is, or having the planner also check by a read for a live scene holding the number and report `conflict` without inserting. That would be a design change to S1 and is not made here.
 
 ### Outstanding environment and runtime verification gaps
 
@@ -665,7 +705,7 @@ None of these can be established from the repository. Each is to be checked on t
 | Whether Redis is running on each server | Whether the refinement queue accepts jobs (section 18) |
 | The value of `ADMIN_WRITE_GUARD` on each server | Not relied on by S1 or by the ADMIN-only PRs; recorded so nobody assumes it is on |
 | Stored scene data: backgrounds on a Studio path without the scene's own id (historical Studio layouts); backgrounds that are a look-variant URL from older code; backgrounds whose file no longer exists | Decides what the manual rule protects on old rows and what the first dry run lists. A single read-only aggregate count on the development database is authorized and has not been run |
-| Whether each server's `scenes` table has the unique index `idx_scenes_episode_scene_number` | The sync's per-beat conflict handling (section 4, step 7; test 59) assumes scene numbers are unique per episode. A separate audit of this index is in progress |
+| Whether each server's `scenes` table has the unique index `idx_scenes_episode_scene_number` | **Production: yes,** by two recorded reads (`docs/reads/2026-11-04-runtime-ddl-inventory.md`, finding D9, 2026-11-04; the header of `tests/integration/beatScenesProductionShape.integration.test.js`, 2026-11-06). Neither has been repeated since. **Development server: not known;** the read-only query in `docs/reads/2026-11-04-runtime-ddl-check.sql` (section D9) answers it. **Freshly migrated test databases: no** (section 4A). The sync's per-beat `conflict` outcome exists only where the index does |
 | PostgreSQL version: CI runs 15; the lock experiments ran on 16 | The lock modes used are long-standing; the acceptance tests run on 15 in CI |
 | The deployed database connection path (direct, or through a pooler) | Transaction-scoped advisory locks are safe under transaction pooling; session-level features are not used |
 | Historical Studio storage paths in older versions of the code | The repository history available when this was written was shallow |
@@ -714,11 +754,13 @@ None of these can be established from the repository. Each is to be checked on t
 | `generate-venue` is "in no approved scope" / "Gate: None" (first draft of this document) | ADMIN in P2b (ruled 2026-11-22); P2b is 47 routes, subject to verification |
 | `generate-venue`'s new-venue branch: "S1 syncs the event's previous set" so scenes stop showing a look that no longer applies (first draft) | S1 keeps the stored scenes, detects the event-location inconsistency and warns; no image sync for that branch (ruled 2026-11-22) |
 | "15 request-side hook paths on 14 routes, plus Restore" (first draft) | 14 image-sync hook paths and 1 detection path, on 14 routes, plus Restore |
-| 79 acceptance tests (first draft) | 89 |
+| 79 acceptance tests (first draft) | 90 |
 | Open decisions 1–4 (first draft) | Settled (section 16, items 1–4) |
 | "`generate-venue` with `force: true` bypasses the Place lock on an accepted episode's event" listed as an open decision | Settled: P2b adds the Place-lock refusal; S1's test 82 asserts the refusal, and the accepted-episode warning path is covered by test 87 |
 | Test 82: `generate-venue` `force: true` on an accepted episode "→ protected; scenes byte-identical; the warning is present" | After P2b the route is refused there; nothing changes and no warning is created |
 | "Filmed-only episodes and `syncEpisodeEventLocation`" listed as an open item "flagged for S2" | Recorded under S2 as an identified production-integrity risk, with what S2 must investigate (section 0) |
+| Test 59 (and the first draft's test 16): "one conflicting beat (an older untied scene holding its number)" stated without a database configuration, implying it could be shown on the migrated test database | The conflict is a violation of `idx_scenes_episode_scene_number`, which a freshly migrated database lacks; the test runs in both configurations and test 90 states each result (section 4A) |
+| "A uniqueness error gets one retry" / "at most one retry" for concurrent syncs (first draft) | Two syncs of one episode serialize on the episode lock; a scene-number violation is not retried, it is reported as `conflict` |
 
 ---
 
