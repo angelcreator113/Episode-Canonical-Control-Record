@@ -4,7 +4,7 @@
  * Provides search capabilities for activities, episodes, suggestions, and audit trails
  */
 const express = require('express');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const searchController = require('../controllers/searchController');
 
 const router = express.Router();
@@ -63,9 +63,11 @@ router.post('/reindex', requireAuth, searchController.reindexActivities);
  * GET /api/v1/search/scripts
  * Search episode scripts with full-text search
  * Searches content, notes, version labels, and author names
- * Requires authentication
+ * ADMIN only (Evoni, 2026-11-22): each hit carries the first 200 characters
+ * of the script's text, and a non-admin account is never sent script text
+ * (docs/audit/F-AUTH-1_ScriptReads_AdminOnly_Amendment2_2026-11-22.md).
  */
-router.get('/scripts', requireAuth, searchController.searchScripts);
+router.get('/scripts', requireAuth, authorize(['ADMIN']), searchController.searchScripts);
 
 /**
  * GET /api/v1/search/history

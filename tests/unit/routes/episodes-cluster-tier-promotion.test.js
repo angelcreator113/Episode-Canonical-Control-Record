@@ -84,6 +84,10 @@ const REQUIRE_AUTH_COUNTS = {
   // on the website, Task #3021, requireAuth + ADMIN).
   // +2 for GET /:id/script-versions and GET /:id/script-versions/:versionId (Script tab audit, 2026-10-15, requireAuth).
   // -1 for POST /:id/thumbnail, retired (one thumbnail editor, 2026-10-20).
+  // +0 on 2026-11-22: the four script reads (GET /:id/script-versions,
+  // /:id/script-versions/:versionId, /:episodeId/scripts and
+  // /:episodeId/scripts/:scriptType/versions) gained authorize(['ADMIN'])
+  // beside the requireAuth they had (Evoni; F-AUTH-1 Amendment 2).
   'episodes.js': 117, // +2 POST /:id/style-sheet/distribution/site/image/withdraw and /check (ADMIN; 2026-11-15); +1 PATCH /:id/style-sheet/distribution/site/links (ADMIN; a published product's availability, 2026-11-15); +1 POST /:id/lookbook/images/from-pose, +2 the designs' GETs (2026-10-22); -1 GET /test-create removed (SEC-6, 2026-10-29)
   // 12 at CP2 close; +1 for POST /:episodeId/feed-moments/retry (Task #2220, requireAuth);
   // +3 for POST /:episodeId/dressed-angles/:angleId/{brief,generate,upload} (L10, §8(hh), requireAuth).
@@ -94,11 +98,15 @@ const REQUIRE_AUTH_COUNTS = {
   // +1 for POST /:episodeId/regenerate-beat (one script beat, Task #2785, requireAuth).
   'episodeBriefRoutes.js': 25,
   'episodeOrchestrationRoute.js': 2,
+  // 8 as before 2026-11-22: its four GETs gained authorize(['ADMIN']) beside
+  // requireAuth, and the import names both (one requireAuth token, as it had).
   'episodeScriptWriterRoutes.js': 8,
   'gameShows.js': 7,
   'iconCues.js': 16,
   'cursorPaths.js': 12,
   'musicCues.js': 10,
+  // 7 as before 2026-11-22: its four GETs gained authorize(['ADMIN']) beside
+  // requireAuth (the comment that says so does not name requireAuth).
   'productionPackage.js': 7,
   'lalaScripts.js': 2,
   'scriptParse.js': 4,
@@ -266,6 +274,27 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
       expect(src).toMatch(
         /router\.get\(\s*['"]\/:showId\/debug['"],\s*requireAuth,\s*authorize\(\['ADMIN'\]\),/,
       );
+    });
+  });
+
+  describe('Script reads are an ADMIN\'s (Evoni, 2026-11-22; F-AUTH-1 Amendment 2)', () => {
+    const ADMIN = String.raw`requireAuth,\s*authorize\(\['ADMIN'\]\),`;
+    test('episodes.js — the four script reads carry requireAuth + authorize([\'ADMIN\']), after their validators', () => {
+      const src = readSrc('episodes.js');
+      expect(src).toMatch(new RegExp(String.raw`router\.get\('\/:id\/script-versions',\s*validateUUIDParam\('id'\),\s*${ADMIN}`));
+      expect(src).toMatch(new RegExp(String.raw`router\.get\('\/:id\/script-versions\/:versionId',\s*validateUUIDParam\('id'\),\s*validateUUIDParam\('versionId'\),\s*${ADMIN}`));
+      expect(src).toMatch(new RegExp(String.raw`router\.get\(\s*'\/:episodeId\/scripts',\s*validateUUIDParam\('episodeId'\),\s*${ADMIN}\s*asyncHandler\(scriptsController\.getScriptsByEpisode\)`));
+      expect(src).toMatch(new RegExp(String.raw`router\.get\(\s*'\/:episodeId\/scripts\/:scriptType\/versions',\s*validateUUIDParam\('episodeId'\),\s*${ADMIN}\s*asyncHandler\(scriptsController\.getScriptVersions\)`));
+    });
+
+    test('productionPackage.js — the four GETs carry both; the POST and the DELETE carry requireAuth alone', () => {
+      const src = readSrc('productionPackage.js');
+      const routes = src.match(/router\.(get|post|delete)\(\s*'[^']+',\s*[^\n]*\n\s*productionPackageController\.\w+/g) || [];
+      expect(routes).toHaveLength(6);
+      const admin = routes.filter((r) => /authorize\(\['ADMIN'\]\)/.test(r));
+      expect(admin).toHaveLength(4);
+      for (const r of admin) expect(r).toMatch(/^router\.get\(/);
+      for (const r of routes) expect(r).toMatch(/\brequireAuth\b/);
     });
   });
 

@@ -3,7 +3,11 @@
 // audio is taken; the file goes to S3 the raw clips' way, under
 // episodes/<episode>/voice-clips/; saving soft-deletes the line's earlier
 // clip in the same transaction; before the migration every route is a 409
-// and no file goes to S3. Mocked: no database, no S3.
+// and no file goes to S3. Mocked: no database, no S3. The auth middleware is
+// stood in here (every request is signed in, and authorize passes), so the
+// admin gates are not shown by this file: the upload's is in
+// scriptVoiceClipsOwnership.integration.test.js, and the list's (an ADMIN's
+// since 2026-11-22) is in scriptVoiceClips-read-admin-only.test.js.
 // ============================================================================
 const express = require('express');
 const request = require('supertest');

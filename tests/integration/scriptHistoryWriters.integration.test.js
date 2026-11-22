@@ -31,9 +31,11 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
   const show = uuid();
   const eps = [];
   let token;
+  let adminToken;
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({ id: `test-hist-${show.slice(0, 8)}`, email: 'h@hist.dev', name: 'Hist', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    adminToken = TokenService.generateTokenPair({ id: `test-hist-admin-${show.slice(0, 8)}`, email: 'admin@hist.dev', name: 'Hist Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :n, :n, NOW(), NOW())`, { id: show, n: `hist-${show.slice(0, 8)}` });
   });
 
@@ -48,9 +50,10 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
   });
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
-  // GET /episodes/:id sends the script, its locked beats and its revision to an
-  // ADMIN only (Evoni, 2026-11-22); the writes below are still this editor's.
-  const asAdmin = (r) => auth(r).set('Authorization', `Bearer ${TokenService.generateTokenPair({ id: 'test-admin-hist', email: 'admin@hist.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken}`);
+  // An ADMIN's reads (Evoni, 2026-11-22): GET /episodes/:id sends the script, its
+  // locked beats and its revision to an ADMIN only, and the version reads are an
+  // ADMIN's. The writes below keep this editor's token.
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const episode = async (script) => {
     const ep = uuid();
     eps.push(ep);
@@ -124,7 +127,7 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
       const res = await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: OLD, restored_from: first.id, script_revision: await revisionOf(ep) });
       expect(res.status).toBe(200);
       expect(res.body.data.script_content).toBe(OLD);
-      const list = (await auth(request(app).get(`/api/v1/episodes/${ep}/script-versions`))).body.data;
+      const list = (await asAdmin(request(app).get(`/api/v1/episodes/${ep}/script-versions`))).body.data;
       expect(list.map((v) => [v.source, v.restore])).toEqual([['restore', true], ['save', false]]);
       expect(list[0].preview).toBe('Lala: "a new take"');
     });
