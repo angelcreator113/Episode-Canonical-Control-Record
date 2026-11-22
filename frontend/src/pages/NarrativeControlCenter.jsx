@@ -17,6 +17,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api';
+import { locationAdminOnlyMessage, locationDeleteMessage } from '../utils/locationWrites';
 import './NarrativeControlCenter.css';
 
 const API = '/api/v1';
@@ -560,7 +561,7 @@ function WorldTimelineTab() {
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB: Locations
 // ═══════════════════════════════════════════════════════════════════════════
-function LocationsTab() {
+export function LocationsTab() {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -574,16 +575,35 @@ function LocationsTab() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // Adding and deleting a location are an admin's (Evoni, 2026-11-22); a
+  // location anything still uses is refused with what uses it.
+  const [error, setError] = useState(null);
+
   const addLocation = async () => {
     if (!form.name.trim()) return;
-    await fetchJSON(`${API}/tier/world-locations`, { method: 'POST', body: JSON.stringify(form) });
+    setError(null);
+    try {
+      await fetchJSON(`${API}/tier/world-locations`, { method: 'POST', body: JSON.stringify(form) });
+    } catch (err) {
+      console.error('[NarrativeControl] location could not be saved:', err.response?.status || err.message);
+      setError(locationAdminOnlyMessage(err) || 'The location could not be saved.');
+      return;
+    }
     setShowForm(false);
     setForm({ name: '', description: '', location_type: 'interior', narrative_role: '', sensory_details: { sight: '', sound: '', smell: '', texture: '', atmosphere: '' } });
     load();
   };
 
-  const deleteLocation = async (id) => {
-    await fetchJSON(`${API}/tier/world-locations/${id}`, { method: 'DELETE' });
+  const deleteLocation = async (loc) => {
+    if (!window.confirm(`Delete the location "${loc.name}"? This cannot be undone.`)) return;
+    setError(null);
+    try {
+      await fetchJSON(`${API}/tier/world-locations/${loc.id}`, { method: 'DELETE' });
+    } catch (err) {
+      console.error('[NarrativeControl] location could not be deleted:', err.response?.status || err.message);
+      setError(locationDeleteMessage(err));
+      return;
+    }
     load();
   };
 
@@ -621,6 +641,8 @@ function LocationsTab() {
         </div>
       )}
 
+      {error && <div role="alert" data-testid="locations-error" style={{ color: '#ef4444', fontSize: 14, marginBottom: 12, overflowWrap: 'anywhere' }}>{error}</div>}
+
       {locations.length === 0 && <EmptyState text="No locations yet. Add the key places in your world." />}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
@@ -628,7 +650,7 @@ function LocationsTab() {
           <div key={loc.id} style={cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ fontSize: 15, fontWeight: 600 }}>{typeIcons[loc.location_type] || ''} {loc.name}</div>
-              <button onClick={() => deleteLocation(loc.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>\u00D7</button>
+              <button onClick={() => deleteLocation(loc)} aria-label={`Delete ${loc.name}`} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>\u00D7</button>
             </div>
             <div style={{ fontSize: 12, color: T.slate, marginTop: 4 }}>{loc.location_type}{loc.narrative_role ? ` · ${loc.narrative_role}` : ''}</div>
             {loc.description && <div style={{ fontSize: 13, color: T.inkLight, marginTop: 8 }}>{loc.description}</div>}

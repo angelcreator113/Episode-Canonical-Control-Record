@@ -3242,7 +3242,8 @@ router.get('/world/locations', requireAuth, authorize(['ADMIN']), async (req, re
 });
 
 // POST /world/locations — create a location
-router.post('/world/locations', requireAuth, async (req, res) => {
+// ADMIN (Evoni, 2026-11-22): a shared production location.
+router.post('/world/locations', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { name, description, location_type, sensory_details, narrative_role, associated_characters, parent_location_id, metadata, street_address, city, district, coordinates, venue_type, venue_details, property_type, style_guide, floor_plan } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
@@ -3281,7 +3282,8 @@ router.post('/world/locations', requireAuth, async (req, res) => {
 });
 
 // PUT /world/locations/:id — update a location
-router.put('/world/locations/:id', requireAuth, async (req, res) => {
+// ADMIN (Evoni, 2026-11-22).
+router.put('/world/locations/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const allowed = ['name', 'description', 'location_type', 'sensory_details', 'narrative_role', 'associated_characters', 'parent_location_id', 'metadata', 'street_address', 'city', 'district', 'coordinates', 'venue_type', 'venue_details', 'property_type', 'style_guide', 'floor_plan'];
     const WorldLocation = models.WorldLocation;
@@ -3300,18 +3302,19 @@ router.put('/world/locations/:id', requireAuth, async (req, res) => {
 });
 
 // DELETE /world/locations/:id
-router.delete('/world/locations/:id', requireAuth, async (req, res) => {
+// ADMIN (Evoni, 2026-11-22). A location anything live uses is not deleted:
+// services/approvedBaseService deleteWorldLocation answers the 404 and the
+// 409 refusals (Place lock, approved base, LOCATION_IN_USE); no override.
+router.delete('/world/locations/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
-    const WorldLocation = models.WorldLocation;
-    if (WorldLocation) {
-      const loc = await WorldLocation.findByPk(req.params.id);
-      if (!loc) return res.status(404).json({ error: 'Not found' });
-      await loc.destroy();
-      return res.json({ deleted: true });
-    }
-    await sequelize.query('DELETE FROM world_locations WHERE id = :id', { replacements: { id: req.params.id } });
-    res.json({ deleted: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const { deleteWorldLocation } = require('../services/approvedBaseService');
+    const outcome = await deleteWorldLocation(sequelize, req.params.id, { userId: req.user?.id });
+    if (outcome.status !== 200) return res.status(outcome.status).json(outcome.body);
+    return res.json({ deleted: true });
+  } catch (err) {
+    console.error('[WorldStudio] DELETE /world/locations/:id failed:', err);
+    return res.status(500).json({ error: 'The location could not be deleted' });
+  }
 });
 
 // Studio types (Evoni, 2026-10-18: every creator's studio read "venue ·
@@ -3328,7 +3331,8 @@ router.get('/world/locations/studio-types', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/world/locations/studio-types', requireAuth, async (req, res) => {
+// ADMIN (Evoni, 2026-11-22): it renames and retypes shared locations. The GET above is unchanged.
+router.post('/world/locations/studio-types', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { applyStudioRetypes } = require('../services/feedHomeLocation');
     const changed = await applyStudioRetypes(models, req.body?.items);
@@ -3340,7 +3344,8 @@ router.post('/world/locations/studio-types', requireAuth, async (req, res) => {
 });
 
 // POST /world/locations/seed-infrastructure — generate full DREAM city infrastructure
-router.post('/world/locations/seed-infrastructure', requireAuth, async (req, res) => {
+// ADMIN (Evoni, 2026-11-22): World Foundation's Seed Infrastructure button is its only caller.
+router.post('/world/locations/seed-infrastructure', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const WorldLocation = models.WorldLocation;
     if (!WorldLocation) return res.status(500).json({ error: 'WorldLocation model not available' });

@@ -4,8 +4,29 @@ const path = require('path');
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'tierFeatures.js'), 'utf8');
 
 describe('CP12 — tierFeatures.js Tier 1 sweep + aiRateLimiter overlay', () => {
-  test('imports requireAuth from middleware/auth', () => {
-    expect(SRC).toMatch(/const \{ requireAuth \} = require\(['"]\.\.\/middleware\/auth['"]\)/);
+  // authorize came with the World Location writes (Evoni, 2026-11-22).
+  test('imports requireAuth and authorize from middleware/auth', () => {
+    expect(SRC).toMatch(/const \{ requireAuth, authorize \} = require\(['"]\.\.\/middleware\/auth['"]\)/);
+  });
+  test.each([
+    ['post', '/world-locations'],
+    ['put', '/world-locations/:locationId'],
+    ['delete', '/world-locations/:locationId'],
+  ])('%s %s is an ADMIN\'s (requireAuth + authorize, then the handler)', (method, route) => {
+    expect(SRC).toContain(`router.${method}('${route}', requireAuth, authorize(['ADMIN']), async (req, res) => {`);
+  });
+  test('the three World Location writes are the only routes of the file that carry authorize', () => {
+    expect(SRC.match(/authorize\(\['ADMIN'\]\)/g) || []).toHaveLength(3);
+  });
+  test('GET /world-locations stays a sign-in', () => {
+    expect(SRC).toContain('router.get(\'/world-locations\', requireAuth, async (req, res) => {');
+  });
+  test('DELETE /world-locations/:locationId deletes through the one shared function, with no override and no model destroy', () => {
+    const start = SRC.indexOf('router.delete(\'/world-locations/:locationId\'');
+    const handler = SRC.slice(start, SRC.indexOf('\n});', start));
+    expect(handler).toContain('deleteWorldLocation(db.sequelize, req.params.locationId, { userId: req.user?.id })');
+    expect(handler).toContain('console.error(');
+    expect(handler).not.toMatch(/\.destroy\(|DELETE FROM|req\.(query|body)|err\??\.message/);
   });
   test('imports aiRateLimiter from middleware/aiRateLimiter', () => {
     expect(SRC).toMatch(/const \{ aiRateLimiter \} = require\(['"]\.\.\/middleware\/aiRateLimiter['"]\)/);
