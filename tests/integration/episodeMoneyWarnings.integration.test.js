@@ -35,7 +35,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   beforeAll(() => {
     token = TokenService.generateTokenPair({
       id: 'test-user-money-warnings', email: 'test@money-warnings.dev', name: 'Money Warnings',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {

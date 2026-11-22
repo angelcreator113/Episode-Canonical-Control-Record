@@ -68,7 +68,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   beforeAll(async () => {
     await junctionMigration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-inject-f3', email: 'user@inject-f3.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-inject-f3', email: 'user@inject-f3.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     for (const id of [show, otherShow]) {
       await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :name, :slug, NOW(), NOW())`,

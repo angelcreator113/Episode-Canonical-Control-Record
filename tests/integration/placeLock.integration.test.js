@@ -63,7 +63,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const qi = sequelize.getQueryInterface();
     for (const m of [approvedMigration, venueLookMigration, looksMigration]) await m.up(qi, Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-place-lock', email: 'user@placelock.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-place-lock', email: 'user@placelock.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :slug, '{}', NOW(), NOW())`,
       { show, name: `Place lock ${show.slice(0, 8)}`, slug: `place-lock-${show.slice(0, 8)}` });

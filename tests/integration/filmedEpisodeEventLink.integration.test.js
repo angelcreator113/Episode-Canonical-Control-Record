@@ -86,7 +86,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const history = async (f) => ({ episode: await episodeRow(f.filmed), brief: await briefRow(f.filmed), source: await eventRow(f.source), clips: await clipCount(f.filmed) });
 
   beforeAll(() => {
-    token = TokenService.generateTokenPair({ id: 'test-user-filmlink', email: 'filmlink@test.dev', name: 'Filmlink', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-user-filmlink', email: 'filmlink@test.dev', name: 'Filmlink', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   });
   beforeEach(() => {
     jest.spyOn(console, 'log').mockImplementation(() => {});

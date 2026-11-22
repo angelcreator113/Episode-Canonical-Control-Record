@@ -13,7 +13,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth, authorize } = require('../../middleware/auth');
+const { requireAuth, authorize, userInGroup } = require('../../middleware/auth');
 const { mergeCanonConsequences } = require('../../utils/canonConsequencesMerge');
 const { parseExpectedVersion, versionMatches, staleSaveBody } = require('../../utils/eventVersion');
 const { normalizeRestrictions } = require('../../services/eventTermsService');
@@ -22,6 +22,7 @@ const { findTermsLockEpisode, changedLockedFields, termsLockedBody, LOCKED_EVENT
 const { syncDraftedDealType } = require('../../services/dealTypeDraftService');
 const { DEAL_TYPES, CATEGORY_VALUES, FORMAT_VALUES } = require('../../models/WorldEvent');
 const { loadScopedEvent } = require('../../utils/eventScope');
+const { episodeEventIdSql } = require('../../utils/episodeEventSql');
 const { getModels } = require('./helpers');
 const { assertEventRelinkAllowed, assertEpisodeAcceptsEventLink, isFrozenEpisodeError } = require('../../utils/frozenEpisode');
 const { RetryableConflictError, asRetryable } = require('../../utils/episodeLocks');
@@ -53,6 +54,40 @@ class EventPutRefusal extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+// The two fields of an event save that reach an episode: the episode link,
+// and the event's place once it has (or is being given) an episode. Changing
+// either is an ADMIN's (Evoni, 2026-11-22); every other field stays any
+// signed-in account's. The refusal names fields only, never the episode.
+const ADMIN_EVENT_FIELDS_MESSAGE = 'Only an admin can link an event to an episode or change the place of an event that has an episode.';
+const sameRef = (a, b) => String(a ?? '').toLowerCase() === String(b ?? '').toLowerCase();
+
+/**
+ * The episode-affecting fields this save would change, judged on the
+ * normalized incoming values against the locked stored row. A value sent
+ * unchanged is not a change. scene_set_id counts only when the event has an
+ * episode now (its stored link, or a live episode whose event this is, the
+ * predicate syncEpisodeEventLocation uses) or would have one after the save.
+ */
+async function adminOnlyEventChanges(sequelize, { eventId, stored, values, transaction }) {
+  const linkSent = values.used_in_episode_id !== undefined;
+  const linkChanged = linkSent && !sameRef(values.used_in_episode_id, stored.used_in_episode_id);
+  const setChanged = values.scene_set_id !== undefined && !sameRef(values.scene_set_id, stored.scene_set_id);
+  const fields = [];
+  if (linkChanged) fields.push('used_in_episode_id');
+  if (setChanged) {
+    const linkedAfter = !!(linkSent ? values.used_in_episode_id : stored.used_in_episode_id);
+    let linkedNow = !!stored.used_in_episode_id;
+    if (!linkedNow && !linkedAfter) {
+      const [rows] = await sequelize.query(
+        `SELECT 1 FROM episodes e WHERE e.deleted_at IS NULL AND ${episodeEventIdSql('e.id')} = :eventId LIMIT 1`,
+        { replacements: { eventId }, transaction });
+      linkedNow = !!rows?.[0];
+    }
+    if (linkedNow || linkedAfter) fields.push('scene_set_id');
+  }
+  return fields;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -552,14 +587,32 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // the event's linked episodes and the target (episode-first), then the
       // event, and refuses 409 EVENT_EPISODE_FROZEN; nothing in the request
       // is written. Re-sending the stored link, and clearing it, are as before.
+      // That guard answers with bodies that name an episode, so it runs only
+      // for an ADMIN. Anyone else changing the link is refused below, under
+      // the event's lock, before any other check can describe an episode.
+      // The group is asked only when the save carries such a change.
+      const isAdmin = () => userInGroup(req.user, 'ADMIN');
       const linkTo = replacements.used_in_episode_id;
-      if (linkTo) await assertRelinkUnlessStored(transaction, linkTo);
+      if (linkTo && isAdmin()) await assertRelinkUnlessStored(transaction, linkTo);
       const stored = await loadScopedEvent(models.sequelize, { showId, eventId, transaction, lock: true });
       if (!stored) throw new EventPutRefusal(404, { success: false, error: 'Event not found' });
       if (expected.present && !versionMatches(stored.updated_at, expected.ms)) {
         const stale = new Error('Stale event save refused');
         stale.staleSave = true;
         throw stale;
+      }
+
+      // Episode-affecting fields are an ADMIN's (Evoni, 2026-11-22). Judged
+      // here, on the locked row, before the terms lock, the Place lock and
+      // the reference checks, so the whole request is refused with nothing
+      // written and no body that names the episode.
+      if (replacements.used_in_episode_id !== undefined || replacements.scene_set_id !== undefined) {
+        const fields = await adminOnlyEventChanges(models.sequelize, { eventId, stored, values: replacements, transaction });
+        if (fields.length && !isAdmin()) {
+          throw new EventPutRefusal(403, {
+            success: false, code: 'AUTH_GROUP_REQUIRED', error: ADMIN_EVENT_FIELDS_MESSAGE, message: ADMIN_EVENT_FIELDS_MESSAGE, fields,
+          });
+        }
       }
 
       // Terms lock: once the event has started a live episode, its access

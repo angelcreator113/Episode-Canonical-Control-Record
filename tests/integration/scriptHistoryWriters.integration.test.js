@@ -88,7 +88,7 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
       const WITH_STAKES = `${OLD}\n\n${beat(6, 'Strategic Reaction', 'Lala: "This is my moment."')}`;
       const ep = await episode(WITH_STAKES);
       const ev = await worldEvent();
-      const res = await auth(request(app).post(`/api/v1/world/${show}/events/${ev}/inject`)).send({ episode_id: ep });
+      const res = await asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/inject`)).send({ episode_id: ep });
       expect(res.status).toBe(200);
       const kept = await versions(ep);
       expect(kept).toHaveLength(1);

@@ -60,7 +60,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   beforeAll(async () => {
     for (const m of [slotsMigration, contextMigration, threadsMigration]) await m.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-story-threads', email: 'user@story-threads.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-story-threads', email: 'user@story-threads.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {

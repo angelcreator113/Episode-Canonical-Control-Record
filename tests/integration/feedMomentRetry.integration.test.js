@@ -33,8 +33,8 @@ const KEPT_MOMENT = { type: 'post', marker: 'already saved before the retry' };
       id: 'test-user-feed-moment-retry',
       email: 'test@feed-moment-retry.dev',
       name: 'Feed Moment Retry Test',
-      groups: ['USER', 'EDITOR'],
-      role: 'USER',
+      groups: ['ADMIN'],
+      role: 'ADMIN',
     }).accessToken;
   });
 

@@ -8,6 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
+const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const models = require('../models');
 const { EpisodeBrief, ScenePlan, Episode, SceneSet } = models;
@@ -99,7 +100,7 @@ async function herGoalForEpisode(episodeId, showId) {
 
 // ── UPDATE BRIEF ──────────────────────────────────────────────────────────────
 
-router.put('/:episodeId', requireAuth, async (req, res) => {
+router.put('/:episodeId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId } = req.params;
 
@@ -202,7 +203,7 @@ router.put('/:episodeId', requireAuth, async (req, res) => {
 // locked; no migration: event_metadata is an existing JSONB column. A locked
 // brief still takes marks: they say what the script does, not the brief.
 const COVER_KEY = /^(?:goal:[a-z0-9_]{1,80}:[a-z0-9-]{0,200}|carried:[A-Za-z0-9-]{1,64}|career:[A-Za-z0-9-]{1,64}|hook|opportunity)$/;
-router.put('/:episodeId/cover-marks', requireAuth, async (req, res) => {
+router.put('/:episodeId/cover-marks', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { key, covered = null, beat = null } = req.body || {};
@@ -247,7 +248,7 @@ router.put('/:episodeId/cover-marks', requireAuth, async (req, res) => {
 // Complete softens or adds stress by it (evaluationFormula
 // .selfTalkStressDelta). tone null takes the choice back. A locked brief
 // still takes it, as it does cover marks.
-router.put('/:episodeId/self-talk', requireAuth, async (req, res) => {
+router.put('/:episodeId/self-talk', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId } = req.params;
     if (!SHOW_ID_RE.test(String(episodeId))) return res.status(400).json({ error: 'episodeId must be a UUID' });
@@ -266,7 +267,7 @@ router.put('/:episodeId/self-talk', requireAuth, async (req, res) => {
 
 // ── LOCK BRIEF ────────────────────────────────────────────────────────────────
 
-router.post('/:episodeId/lock', requireAuth, async (req, res) => {
+router.post('/:episodeId/lock', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const brief = await EpisodeBrief.findOne({ where: { episode_id: req.params.episodeId } });
     if (!brief) return res.status(404).json({ error: 'Brief not found' });
@@ -280,7 +281,7 @@ router.post('/:episodeId/lock', requireAuth, async (req, res) => {
 
 // ── GENERATE SCENE PLAN (AI) ──────────────────────────────────────────────────
 
-router.post('/:episodeId/generate-plan', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:episodeId/generate-plan', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { episodeId } = req.params;
 
@@ -437,7 +438,7 @@ router.delete('/:episodeId/performance-clips/:clipId', requireAuth, async (req, 
 // feed_moment_missing, and only those (§8(w) P5, Task #2220). Template-built,
 // no AI call.
 
-router.post('/:episodeId/feed-moments/retry', requireAuth, async (req, res) => {
+router.post('/:episodeId/feed-moments/retry', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const result = await retryMissingFeedMoments(models, req.params.episodeId);
     const feedMomentMissing = await missingFeedMomentBeats(models, req.params.episodeId);
@@ -450,7 +451,7 @@ router.post('/:episodeId/feed-moments/retry', requireAuth, async (req, res) => {
 
 // ── UPDATE SINGLE BEAT ────────────────────────────────────────────────────────
 
-router.put('/:episodeId/plan/:beatNumber', requireAuth, async (req, res) => {
+router.put('/:episodeId/plan/:beatNumber', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId, beatNumber } = req.params;
 
@@ -626,7 +627,7 @@ router.post('/:episodeId/dressed-angles/:angleId/upload', ...dressedIds, require
 
 // ── LOCK BEAT (toggle) ────────────────────────────────────────────────────────
 
-router.post('/:episodeId/plan/:beatNumber/lock', requireAuth, async (req, res) => {
+router.post('/:episodeId/plan/:beatNumber/lock', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const plan = await ScenePlan.findOne({
       where: { episode_id: req.params.episodeId, beat_number: parseInt(req.params.beatNumber, 10) },
@@ -642,7 +643,7 @@ router.post('/:episodeId/plan/:beatNumber/lock', requireAuth, async (req, res) =
 
 // ── LOCK ALL BEATS ────────────────────────────────────────────────────────────
 
-router.post('/:episodeId/plan/lock-all', requireAuth, async (req, res) => {
+router.post('/:episodeId/plan/lock-all', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     await ScenePlan.update({ locked: true }, { where: { episode_id: req.params.episodeId } });
     return res.json({ success: true, message: 'All beats locked — ready for script generation.' });
@@ -654,7 +655,7 @@ router.post('/:episodeId/plan/lock-all', requireAuth, async (req, res) => {
 // ── RESUME SETUP (audit STATE-01) ─────────────────────────────────────────────
 // Makes the scene-plan beats a partly initialised episode is missing and
 // records the outcome on episodes.setup_status. Never a second episode.
-router.post('/:episodeId/setup/resume', requireAuth, async (req, res) => {
+router.post('/:episodeId/setup/resume', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { resumeEpisodeSetup } = require('../services/episodeGeneratorService');
     const result = await resumeEpisodeSetup(models, req.params.episodeId);

@@ -26,6 +26,7 @@
  * missing-image actions are the Beat Plan's (components/BeatPlan). The
  * feed moment warning (§8(w) P5, Task #2216) and Edit locations (L6) stay.
  */
+import { adminOnlyMessage } from '../../utils/authGroups';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Film, Loader, AlertTriangle, Clapperboard, Trash2 } from 'lucide-react';
@@ -258,7 +259,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       }
     } catch (err) {
       console.error('Failed to retry feed moments:', err);
-      note = `Could not retry the Pulse moments: ${err.response?.data?.error || err.message || 'request failed'}`;
+      note = adminOnlyMessage(err) || `Could not retry the Pulse moments: ${err.response?.data?.error || err.message || 'request failed'}`;
     }
     await loadPlan();
     setFeedMomentRetry({ running: false, note });
@@ -306,7 +307,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       await loadPlan();
     } catch (err) {
       console.error('Failed to change the beat lock:', err);
-      toast(err.response?.data?.error || 'Could not change the lock', 'error');
+      toast(adminOnlyMessage(err) || err.response?.data?.error || 'Could not change the lock', 'error');
     }
   };
 

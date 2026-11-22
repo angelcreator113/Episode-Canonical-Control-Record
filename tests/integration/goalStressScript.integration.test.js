@@ -28,7 +28,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   const shows = [];
   let token;
   beforeAll(() => {
-    token = TokenService.generateTokenPair({ id: 'test-user-goal-stress', email: 'test@goal-stress.dev', name: 'Goal Stress', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-user-goal-stress', email: 'test@goal-stress.dev', name: 'Goal Stress', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   });
 
   async function seed({ pin = true } = {}) {

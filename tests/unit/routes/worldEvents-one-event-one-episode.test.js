@@ -99,7 +99,7 @@ jest.mock('@anthropic-ai/sdk', () => jest.fn().mockImplementation(() => ({ messa
 jest.mock('../../../src/middleware/aiRateLimiter', () => ({ aiRateLimiter: (_req, _res, next) => next() }));
 jest.mock('../../../src/middleware/auth', () => {
   const actual = jest.requireActual('../../../src/middleware/auth');
-  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1' }; next(); } };
+  return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1', groups: ['ADMIN'] }; next(); } };
 });
 
 const router = require('../../../src/routes/worldEvents');

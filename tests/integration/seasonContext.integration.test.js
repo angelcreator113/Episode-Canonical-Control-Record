@@ -54,7 +54,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     await slotsMigration.up(sequelize.getQueryInterface(), Sequelize);
     await contextMigration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-season-context', email: 'user@season-context.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-season-context', email: 'user@season-context.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 

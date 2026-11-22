@@ -42,7 +42,7 @@ const { softDeleteUnusedUnlinkedEvents } = require('../../utils/worldEventSafeDe
 // Body: { event_ids: [uuid, ...], draft_script?: bool, offer_decision?: string }
 // offer_decision is the anchor's (services/startOfferDecision): asked for
 // with 409 OFFER_DECISION_REQUIRED when the anchor's opportunity is open.
-router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/generate-episode-from-many', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { showId } = req.params;
     const { event_ids: eventIds = [], draft_script: draftScript = false } = req.body || {};
@@ -250,7 +250,7 @@ router.post('/world/:showId/events/generate-episode-from-many', requireAuth, aiR
 // relinked in the same transaction (§8(w) P3). Useful when the event has been edited (new outfit,
 // stakes, etc.) and the creator wants the episode to reflect those
 // changes without losing their place.
-router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/:eventId/regenerate-episode', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();

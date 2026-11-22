@@ -14,3 +14,21 @@ export const userInGroup = (user, group) => {
 };
 
 export const isAdmin = (user) => userInGroup(user, 'admin');
+
+// A write the server kept for an admin answers 403 with this code: from
+// authorize(['ADMIN']) with its own wording ("User must be in one of these
+// groups: ADMIN"), or from a handler that refuses one field with a sentence
+// of its own. adminOnlyMessage(err) is what to show a person: the handler's
+// sentence when it sent one, else the page's sentence; null when the error
+// is anything else, so callers keep their own message. Display only: the
+// server is the guard.
+export const ADMIN_ONLY_CODE = 'AUTH_GROUP_REQUIRED';
+export const PLAN_ADMIN_ONLY_MESSAGE = 'Only an admin can change the production plan.';
+const MIDDLEWARE_WORDING = /^User must be in one of these groups/i;
+
+export const adminOnlyMessage = (err, sentence = PLAN_ADMIN_ONLY_MESSAGE) => {
+  const res = err?.response;
+  if (!res || res.status !== 403 || res.data?.code !== ADMIN_ONLY_CODE) return null;
+  const own = res.data.message;
+  return typeof own === 'string' && own.trim() && !MIDDLEWARE_WORDING.test(own) ? own : sentence;
+};
