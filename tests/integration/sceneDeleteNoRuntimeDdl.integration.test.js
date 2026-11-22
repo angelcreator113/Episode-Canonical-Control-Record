@@ -481,7 +481,10 @@ function call(handler, req) {
       const onScenes = sent0.filter((s) => /\b(?:FROM|UPDATE|INTO)\s+"?scenes"?\b/i.test(s.text));
       const reads = onScenes.filter((s) => /^SELECT/i.test(s.text));
       const writes = onScenes.filter((s) => /^UPDATE/i.test(s.text));
-      expect([reads.length, writes.length]).toEqual([4, 8]); // four reads, then the two passes of four, as before
+      // One locked read of the episode's live scenes (the numbers in use), the four reads of the listed scenes, then
+      // the two passes of four, as before.
+      expect([reads.length, writes.length]).toEqual([5, 8]);
+      expect(reads[0].text).toMatch(/^SELECT id, scene_number FROM scenes WHERE episode_id = .* AND deleted_at IS NULL ORDER BY .* FOR UPDATE$/);
       const tx = new Set(onScenes.map((s) => s.txId));
       expect(tx.size).toBe(1);
       expect([...tx][0]).toBeTruthy();
@@ -610,6 +613,147 @@ function call(handler, req) {
       expect((await live(shape, epB)).map(([, n]) => n)).toEqual([1, 2, 3, 4]);
       expect(trace.records.filter((r) => r.error)).toEqual([]);
     });
+
+    // ── a reorder's waiting numbers sit above every number in use (Evoni, 2026-11-22) ──
+    //
+    // reorderScenes used to park the listed scenes at 1000, 1001, ... while it renumbered them. A live scene of the
+    // episode already numbered there (listed or not) met those numbers: with the unique index, as in production,
+    // the first pass was a unique violation and the reorder a 500; without it, two scenes shared a number mid-way.
+    // The waiting numbers now start above the highest number any live scene of the episode holds.
+
+    it('live scenes numbered 1000, 1001, 1003 and 1005 outside the list: the reorder succeeds and they are not touched', async () => {
+      const ep = await episode();
+      const listed = await seed(shape, ep, [1, 2, 3, 4, 5, 6]);
+      const outside = await seed(shape, ep, [1000, 1001, 1003, 1005]); // 1000..1005 is where six listed scenes used to wait
+      const outsideBefore = (await all(shape, ep)).filter((r) => outside.includes(r.id));
+      const before = await indexes(shape);
+      const wanted = [...listed].reverse();
+      const sequelize = reg().sequelize;
+      const real = sequelize.query.bind(sequelize);
+      const sent0 = [];
+      jest.spyOn(sequelize, 'query').mockImplementation(async (sql, options) => {
+        const text = String(typeof sql === 'object' && sql !== null && sql.query ? sql.query : sql).replace(/\s+/g, ' ').trim();
+        const values = (typeof sql === 'object' && sql !== null && (sql.bind || sql.values)) || options?.bind || [];
+        sent0.push({ text, values });
+        return real(sql, options);
+      });
+      const res = await reorder(reg(), ep, wanted);
+      jest.restoreAllMocks();
+      expect(res.status).toBe(200);
+      expect(res.body.data.map((s) => s.id)).toEqual(wanted);
+      expect(await live(shape, ep)).toEqual([...wanted.map((id, i) => [id, i + 1]),
+        [outside[0], 1000], [outside[1], 1001], [outside[2], 1003], [outside[3], 1005]]);
+      expect((await all(shape, ep)).filter((r) => outside.includes(r.id))).toEqual(outsideBefore); // updated_at included
+      expect(await indexes(shape)).toEqual(before);
+      expect(sent0.map((s) => s.text).filter((s) => DDL.test(s))).toEqual([]);
+      // The two passes, six statements each: the first went above 1005 (not to 1000+), the second to 1..6.
+      const updates = sent0.filter((s) => /^UPDATE "?scenes"?/i.test(s.text));
+      expect(updates).toHaveLength(12);
+      const numberSet = (u) => u.values.find((v) => typeof v === 'number');
+      expect(updates.slice(0, 6).map(numberSet)).toEqual([1006, 1007, 1008, 1009, 1010, 1011]);
+      expect(updates.slice(6).map(numberSet)).toEqual([1, 2, 3, 4, 5, 6]);
+    });
+
+    it('listed scenes that are themselves numbered 1000 and up, and numbers far higher, reorder to 1..n', async () => {
+      const ep = await episode();
+      const ids = await seed(shape, ep, [1000, 1001, 1002]);
+      expect((await reorder(reg(), ep, [ids[2], ids[0], ids[1]])).status).toBe(200);
+      expect(await live(shape, ep)).toEqual([[ids[2], 1], [ids[0], 2], [ids[1], 3]]);
+
+      const high = await episode();
+      const some = await seed(shape, high, [7, 50000, 8]);
+      const [far] = await seed(shape, high, [2000000000]);
+      expect((await reorder(reg(), high, [some[1], some[2], some[0]])).status).toBe(200);
+      expect(await live(shape, high)).toEqual([[some[1], 1], [some[2], 2], [some[0], 3], [far, 2000000000]]);
+
+      // Right up to the column's limit: two scenes wait at 2147483646 and 2147483647.
+      const edge = await episode();
+      const two = await seed(shape, edge, [1, 2147483645]);
+      expect((await reorder(reg(), edge, [two[1], two[0]])).status).toBe(200);
+      expect(await live(shape, edge)).toEqual([[two[1], 1], [two[0], 2]]);
+    });
+
+    it('soft-deleted scenes numbered where the listed ones wait are not read and not written', async () => {
+      const ep = await episode();
+      const ids = await seed(shape, ep, [1, 2, 3, [4, { deleted: true }], [5, { deleted: true }], [1000, { deleted: true }]]);
+      const deletedBefore = (await all(shape, ep)).slice(3);
+      expect((await reorder(reg(), ep, [ids[2], ids[1], ids[0]])).status).toBe(200);
+      expect(await live(shape, ep)).toEqual([[ids[2], 1], [ids[1], 2], [ids[0], 3]]);
+      expect((await all(shape, ep)).slice(3)).toEqual(deletedBefore);
+    });
+
+    it('numbers too high to leave room: the reorder and the delete are refused (409) before anything is written', async () => {
+      jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const refusal = { status: 409, body: { success: false, error: "This episode's scene numbers are too large to renumber. Nothing was changed.", code: 'SCENE_NUMBER_RANGE' } };
+      const ep = await episode();
+      const ids = await seed(shape, ep, [1, 2, 2147483646]); // three would wait at 2147483647, ...8, ...9
+      const before = await all(shape, ep);
+      const trace = lockTrace.install(reg().sequelize);
+      try {
+        expect(await reorder(reg(), ep, [ids[2], ids[1], ids[0]])).toEqual(refusal);
+        // A delete that would have to renumber (the first scene goes, the other two must close up) is refused whole.
+        expect(await del(reg(), ids[0])).toEqual(refusal);
+      } finally { trace.uninstall(); }
+      // The reorder wrote nothing at all; the delete's soft delete was rolled back with its transaction.
+      expect(trace.records.filter((r) => r.kind === 'commit')).toEqual([]);
+      expect(trace.records.filter((r) => r.kind === 'rollback')).toHaveLength(2);
+      expect(trace.records.filter((r) => r.kind === 'write').map((r) => r.sql)).toHaveLength(1); // the delete's own, undone
+      expect(await all(shape, ep)).toEqual(before);
+      expect((await one(shape, ids[0])).deleted_at).toBeNull();
+      // A delete that needs no renumbering (the last scene) is not in the way of anything.
+      expect((await del(reg(), ids[2])).status).toBe(200);
+      expect(await live(shape, ep)).toEqual([[ids[0], 1], [ids[1], 2]]);
+    });
+
+    it('a scene added by a route that takes no episode lock, numbered just above the highest, while a reorder is part-way', async () => {
+      const ep = await episode();
+      const ids = await seed(shape, ep, [1, 2, 3]);
+      const before = await all(shape, ep);
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      const trace = lockTrace.install(reg().sequelize);
+      let res;
+      let added;
+      try {
+        // Held after it read the numbers in use (highest: 3), before its first pass.
+        const gate = trace.gate((r) => r.kind === 'lock' && r.table === 'scenes');
+        const reordering = reorder(reg(), ep, [ids[2], ids[1], ids[0]]);
+        await gate.reached;
+        [added] = await seed(shape, ep, [4]); // what createScene and scene duplicate do: highest + 1, no episode lock
+        gate.open();
+        res = await reordering;
+      } finally { trace.uninstall(); }
+      jest.restoreAllMocks();
+      if (shape === 'present') {
+        // The first waiting number (4) is now taken: the index refuses it, the whole reorder rolls back, and it says so.
+        expect(res).toEqual({ status: 500, body: { success: false, error: 'Failed to reorder scenes', message: 'Validation error' } });
+        expect((await all(shape, ep)).filter((r) => r.id !== added)).toEqual(before);
+        expect(await live(shape, ep)).toEqual([[ids[0], 1], [ids[1], 2], [ids[2], 3], [added, 4]]);
+        // Tried again, it sees the new scene's number and goes above it.
+        expect((await reorder(reg(), ep, [ids[2], ids[1], ids[0]])).status).toBe(200);
+      } else {
+        // No index: nothing forbids the shared number mid-way, as before; the end state has no repeat.
+        expect(res.status).toBe(200);
+      }
+      expect(await live(shape, ep)).toEqual([[ids[2], 1], [ids[1], 2], [ids[0], 3], [added, 4]]);
+    });
+
+    it('a list that leaves a scene out whose number the listed ones would take: unchanged from before this change', async () => {
+      // Listing two of three scenes asks for numbers 1 and 2 while the unlisted scene holds 1. With the index that is
+      // refused in the second pass and everything rolls back (500, as on main); without it the numbers repeat (as on main).
+      const ep = await episode();
+      const ids = await seed(shape, ep, [1, 2, 3]);
+      const before = await all(shape, ep);
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      const res = await reorder(reg(), ep, [ids[2], ids[1]]);
+      jest.restoreAllMocks();
+      if (shape === 'present') {
+        expect(res).toEqual({ status: 500, body: { success: false, error: 'Failed to reorder scenes', message: 'Validation error' } });
+        expect(await all(shape, ep)).toEqual(before);
+      } else {
+        expect(res.status).toBe(200);
+        expect(await live(shape, ep)).toEqual([[ids[0], 1], [ids[2], 1], [ids[1], 2]]);
+      }
+    });
   });
 
   it('where the numbers repeat or are missing (no index to forbid it), the delete still leaves 1..n', async () => {
@@ -672,14 +816,14 @@ function call(handler, req) {
 
     it('a reorder succeeds for that role: the order is saved, the index is the same object and no DDL was sent', async () => {
       const ep = await episode();
-      const ids = await seed('present', ep, [1, 2, 3]);
+      const ids = await seed('present', ep, [1, 2, 3, 1000, 1001]); // the last two are not listed, and sit where the old range began
       const before = await indexes('present');
       const trace = lockTrace.install(asRole.sequelize);
       let res;
       try { res = await reorder(asRole, ep, [ids[2], ids[0], ids[1]]); } finally { trace.uninstall(); }
       expect(res.status).toBe(200);
       expect(res.body.data.map((s) => [s.id, s.scene_number])).toEqual([[ids[2], 1], [ids[0], 2], [ids[1], 3]]);
-      expect(await live('present', ep)).toEqual([[ids[2], 1], [ids[0], 2], [ids[1], 3]]);
+      expect(await live('present', ep)).toEqual([[ids[2], 1], [ids[0], 2], [ids[1], 3], [ids[3], 1000], [ids[4], 1001]]);
       expect(await indexes('present')).toEqual(before);
       expect(trace.records.map((r) => r.sql || r.kind).filter((s) => DDL.test(s))).toEqual([]);
       expect(trace.records.filter((r) => r.error)).toEqual([]);

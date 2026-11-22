@@ -361,6 +361,50 @@ exports.updateScene = async (req, res) => {
   }
 };
 
+// scenes.scene_number is a 32-bit integer.
+const MAX_SCENE_NUMBER = 2147483647;
+
+/** The numbers cannot be moved out of the way: nothing was changed. */
+class SceneNumberRangeError extends Error {
+  constructor() {
+    super("This episode's scene numbers are too large to renumber. Nothing was changed.");
+    this.name = 'SceneNumberRangeError';
+    this.status = 409;
+    this.code = 'SCENE_NUMBER_RANGE';
+  }
+}
+
+/**
+ * An episode's live scenes, locked, in their order (the caller's
+ * transaction holds the episode's lock already). Soft-deleted rows are not
+ * read.
+ */
+async function lockLiveScenes(sequelize, episodeId, transaction) {
+  const [live] = await sequelize.query(
+    `SELECT id, scene_number FROM scenes
+      WHERE episode_id = :episodeId AND deleted_at IS NULL
+      ORDER BY scene_number ASC NULLS LAST, created_at ASC, id ASC
+      FOR UPDATE`,
+    { replacements: { episodeId }, transaction }
+  );
+  return live;
+}
+
+/**
+ * Where `count` scenes can wait while they are renumbered: the numbers
+ * base+1 .. base+count. The base is the highest number any live scene of
+ * the episode holds, and at least `count`, so the waiting numbers meet no
+ * live scene's number and none of the final numbers 1..count. One rule for
+ * the delete's renumbering and for a reorder. Refuses, before anything is
+ * written, when the waiting numbers would not fit the column.
+ */
+function waitingBase(live, count) {
+  const highest = live.reduce((max, row) => Math.max(max, Number(row.scene_number) || 0), 0);
+  const base = Math.max(highest, count);
+  if (base + count > MAX_SCENE_NUMBER) throw new SceneNumberRangeError();
+  return base;
+}
+
 /**
  * Numbers an episode's live scenes 1..n in their current order, inside the
  * caller's transaction, with no schema change.
@@ -374,18 +418,11 @@ exports.updateScene = async (req, res) => {
  * Soft-deleted rows are not read and not written.
  */
 async function renumberLiveScenes(sequelize, episodeId, transaction) {
-  const [live] = await sequelize.query(
-    `SELECT id, scene_number FROM scenes
-      WHERE episode_id = :episodeId AND deleted_at IS NULL
-      ORDER BY scene_number ASC NULLS LAST, created_at ASC, id ASC
-      FOR UPDATE`,
-    { replacements: { episodeId }, transaction }
-  );
+  const live = await lockLiveScenes(sequelize, episodeId, transaction);
   if (live.every((row, i) => row.scene_number === i + 1)) return;
 
   const ids = live.map((row) => row.id);
-  const highest = live.reduce((max, row) => Math.max(max, Number(row.scene_number) || 0), 0);
-  const clear = Math.max(highest, live.length);
+  const clear = waitingBase(live, live.length);
   const move = (offset) => sequelize.query(
     `UPDATE scenes AS s SET scene_number = :offset + v.position
        FROM unnest(ARRAY[:ids]::uuid[]) WITH ORDINALITY AS v(id, position)
@@ -467,6 +504,10 @@ exports.deleteScene = async (req, res) => {
     if (retry instanceof RetryableConflictError) {
       console.warn(`Scene delete refused (${retry.code}):`, retry.message);
       return res.status(409).json({ success: false, error: retry.message, code: retry.code });
+    }
+    if (error instanceof SceneNumberRangeError) {
+      console.warn(`Scene delete refused (${error.code}):`, error.message);
+      return res.status(409).json({ success: false, error: error.message, code: error.code });
     }
     console.error('Error deleting scene:', error);
     res.status(500).json({
@@ -602,6 +643,8 @@ exports.reorderScenes = async (req, res) => {
       // The episode first (utils/episodeLocks): a delete of one of these scenes
       // and this reorder take turns, so neither renumbers from a stale read.
       await lockEpisodes(sequelize, [episodeId], { transaction });
+      // Every live scene of the episode, listed here or not: the numbers in use.
+      const live = await lockLiveScenes(sequelize, episodeId, transaction);
 
       // Fetch all scenes to reorder
       const scenesToReorder = [];
@@ -613,9 +656,11 @@ exports.reorderScenes = async (req, res) => {
       }
 
       // Two-step renumbering to avoid unique constraint violations:
-      // Step 1: Set all to temporary large values (1000+)
+      // Step 1: Set all to temporary values above every number in use in the
+      // episode (a fixed 1000+ met any scene already numbered there)
+      const base = waitingBase(live, scenesToReorder.length);
       for (let i = 0; i < scenesToReorder.length; i++) {
-        scenesToReorder[i].scene_number = 1000 + i;
+        scenesToReorder[i].scene_number = base + 1 + i;
         await scenesToReorder[i].save({ transaction });
       }
 
@@ -641,6 +686,10 @@ exports.reorderScenes = async (req, res) => {
     if (retry instanceof RetryableConflictError) {
       console.warn(`Scene reorder refused (${retry.code}):`, retry.message);
       return res.status(409).json({ success: false, error: retry.message, code: retry.code });
+    }
+    if (error instanceof SceneNumberRangeError) {
+      console.warn(`Scene reorder refused (${error.code}):`, error.message);
+      return res.status(409).json({ success: false, error: error.message, code: error.code });
     }
     console.error('Error reordering scenes:', error);
     res.status(500).json({
