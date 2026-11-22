@@ -175,9 +175,18 @@ async function approvalsForSets(sequelize, sets) {
  * location takes a key-share lock on that same row, so such an attach and
  * this delete take turns: the delete sees the committed attach and refuses,
  * or the attach finds the location gone and fails on its foreign key.
- * References with no foreign key (feed posts, look variants, timeline
- * events, the JSONB copies) are read here, and their writers do not wait on
- * this lock.
+ *
+ * What this does NOT guarantee. It takes turns only with writers of the
+ * foreign-key references (scene_sets.world_location_id, world_events.
+ * venue_location_id, story_calendar_events.location_id, social_profiles.
+ * home_location_id, world_locations.parent_location_id). References with no
+ * foreign key (feed_posts.place_location_id, location_look_variants,
+ * world_timeline_events.location_id, an event's automation copy, a look's
+ * brief, social_profiles.frequent_venues) are counted here, and that is
+ * all: their writers take no lock on the location, so one written at the
+ * same moment as a delete, after the count, is left naming a location that
+ * is gone. This function is not a guarantee of referential integrity for
+ * world_locations; the database's foreign keys are the only one there is.
  *
  * There is no override. Refusals, in this order:
  *   1. PLACE_LOCKED: a live event at the location, or held at one of its

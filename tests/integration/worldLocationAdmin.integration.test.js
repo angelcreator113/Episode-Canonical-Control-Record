@@ -240,6 +240,10 @@ const shouldSkip =
       const location = await mkLocation({ baseSet: uuid(), baseUrl: 'https://x.test/approved.jpg' });
       return { location, body: approvedBase(location) };
     }],
+    ['an approved base set id alone, with no image (a partial, older state)', async () => {
+      const location = await mkLocation({ baseSet: uuid() });
+      return { location, body: approvedBase(location) };
+    }],
     ['an approved base image alone', async () => {
       const location = await mkLocation({ baseUrl: 'https://x.test/approved-only.jpg' });
       return { location, body: approvedBase(location) };
@@ -470,6 +474,10 @@ const shouldSkip =
 
     test('a foreign key this code does not count refuses the delete: a 409 LOCATION_IN_USE without the database\'s message', async () => {
       const location = await mkLocation();
+      // Rows that name it but do not block (soft-deleted), so the delete reaches its DELETE statement.
+      await mkSet(location.id, { deleted: true });
+      await mkFeedPost(location.id, { deleted: true });
+      const before = await state();
       const real = sequelize.query.bind(sequelize);
       jest.spyOn(console, 'error').mockImplementation(() => {});
       jest.spyOn(sequelize, 'query').mockImplementation((sql, options) => (
@@ -481,7 +489,23 @@ const shouldSkip =
       expect(res.status).toBe(409);
       expect(res.body).toEqual({ success: false, code: LOCATION_IN_USE_CODE, uses: {}, error: 'Something else still refers to this location. Nothing was deleted.' });
       expect(res.text).not.toMatch(/violates|constraint|x_fkey/);
+      // The transaction rolled back: the location, the rows that name it and every other row are as they were, and no delete was recorded.
       expect(await locationRow(location.id)).not.toBeNull();
+      expect(await state()).toEqual(before);
+      expect(await deleteEntries(location.id)).toEqual([]);
+    });
+
+    test('the activity entry is in the delete\'s transaction: when it cannot be written, the location is not deleted', async () => {
+      const location = await mkLocation();
+      const before = await state();
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      jest.spyOn(models.ActivityLog, 'logActivity').mockRejectedValue(new Error('the activity log is not writable'));
+      const res = await del('admin', base, location.id);
+      jest.restoreAllMocks();
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'The location could not be deleted' });
+      expect(res.text).not.toMatch(/activity log is not writable/);
+      expect(await state()).toEqual(before);
       expect(await deleteEntries(location.id)).toEqual([]);
     });
   });
@@ -522,6 +546,29 @@ const shouldSkip =
         }
       }
       expect(await state()).toEqual(before);
+    });
+
+    describe.each(DELETES)('DELETE %s/:id, an approved base in each state it can be in', (base) => {
+      const setId = uuid();
+      test.each([
+        ['the set id alone (image null)', { baseSet: setId }, { approved_base_scene_set_id: setId, approved_base_image_url: null }],
+        ['the image alone (set id null)', { baseUrl: 'https://x.test/legacy.jpg' }, { approved_base_scene_set_id: null, approved_base_image_url: 'https://x.test/legacy.jpg' }],
+        ['both', { baseSet: setId, baseUrl: 'https://x.test/both.jpg' }, { approved_base_scene_set_id: setId, approved_base_image_url: 'https://x.test/both.jpg' }],
+      ])('%s: refused with the approved-base body, and approved_base_scene_set_id, approved_base_image_url and approved_base_at are unchanged', async (_name, extra, columns) => {
+        const location = await mkLocation(extra);
+        const before = await locationRow(location.id);
+        expect(before).toMatchObject(columns);
+        expect(before.approved_base_at).not.toBeNull();
+        const res = await del('admin', base, location.id);
+        expect(res.status).toBe(409);
+        expect(res.body).toEqual(approvedBase(location));
+        expect(res.body.code).toBeUndefined();
+        const after = await locationRow(location.id);
+        expect(after).toMatchObject(columns);
+        expect(after.approved_base_at).toEqual(before.approved_base_at);
+        expect(after).toEqual(before);
+        expect(await deleteEntries(location.id)).toEqual([]);
+      });
     });
 
     test('an approved base is intact after the refusal, and the location is deleted once it is un-approved and unused', async () => {
