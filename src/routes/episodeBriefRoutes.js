@@ -297,6 +297,8 @@ router.post('/:episodeId/generate-plan', requireAuth, aiRateLimiter, async (req,
     console.log(`[ScenePlanner] Generating plan for episode: ${episodeId}`);
 
     const plan = await generateScenePlan(episodeId, episode.show_id, brief.toJSON(), { save: true });
+    // L12a: the beats' scene rows follow the new plan (the plan's read no longer does this).
+    await require('../services/beatScenesService').syncBeatScenesQuietly(models.sequelize, episodeId, 'generate-plan');
 
     return res.json({
       success: true,
@@ -350,9 +352,11 @@ router.get('/:episodeId/plan', requireAuth, async (req, res) => {
       const { planWithAngles, planReadiness } = require('../services/planLocationsService');
       data = await planWithAngles(models.sequelize, plans.map((p) => p.toJSON()));
       readiness = planReadiness(data);
-      // L12a: each beat's scene row, brought up to date ("Open in Studio").
-      const { syncBeatScenesQuietly, beatSceneIds } = require('../services/beatScenesService');
-      await syncBeatScenesQuietly(models.sequelize, req.params.episodeId, 'GET plan');
+      // L12a: each beat's scene row ("Open in Studio"), as it is. This read
+      // writes nothing (Evoni, 2026-11-22): the scene rows are brought up to
+      // date where the plan is made or changed (Start Episode, resume,
+      // generate-plan, a beat's save) and at export, not here.
+      const { beatSceneIds } = require('../services/beatScenesService');
       const sceneIds = await beatSceneIds(models.sequelize, req.params.episodeId);
       data = data.map((b) => ({ ...b, scene_id: sceneIds.get(b.id) || null }));
     } catch (angleErr) {
