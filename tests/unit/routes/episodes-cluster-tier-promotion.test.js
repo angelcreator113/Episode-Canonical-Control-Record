@@ -295,14 +295,24 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
       expect(src).toMatch(new RegExp(String.raw`router\.post\(\s*'\/:episodeId\/scripts',\s*validateUUIDParam\('episodeId'\),\s*${ADMIN}\s*asyncHandler\(scriptsController\.createScript\)`));
     });
 
-    test('productionPackage.js — the four GETs carry both; the POST and the DELETE carry requireAuth alone', () => {
+    // The POST and the DELETE became an ADMIN's with the reads (Evoni, 2026-11-22;
+    // F-AUTH-1_DestructiveOps_ParseScript_AdminOnly_Amendment_2026-11-22.md).
+    test('productionPackage.js — all six routes (four GETs, the POST and the DELETE) carry both', () => {
       const src = readSrc('productionPackage.js');
       const routes = src.match(/router\.(get|post|delete)\(\s*'[^']+',\s*[^\n]*\n\s*productionPackageController\.\w+/g) || [];
       expect(routes).toHaveLength(6);
       const admin = routes.filter((r) => /authorize\(\['ADMIN'\]\)/.test(r));
-      expect(admin).toHaveLength(4);
-      for (const r of admin) expect(r).toMatch(/^router\.get\(/);
+      expect(admin).toHaveLength(6);
+      expect(routes.map((r) => r.match(/^router\.(\w+)\(/)[1]).sort()).toEqual(['delete', 'get', 'get', 'get', 'get', 'post']);
       for (const r of routes) expect(r).toMatch(/\brequireAuth\b/);
+    });
+
+    test('scriptParse.js — parse-script and apply-scene-plan carry both; POST /parse carries requireAuth alone', () => {
+      const src = readSrc('scriptParse.js');
+      expect(src).toMatch(new RegExp(String.raw`router\.post\('\/:id\/parse-script',\s*${ADMIN}\s*async`));
+      expect(src).toMatch(new RegExp(String.raw`router\.post\('\/:id\/apply-scene-plan',\s*${ADMIN}\s*async`));
+      expect(src).toMatch(/router\.post\('\/parse',\s*requireAuth,\s*async/);
+      expect(src.match(/authorize\(\['ADMIN'\]\)/g)).toHaveLength(2);
     });
   });
 

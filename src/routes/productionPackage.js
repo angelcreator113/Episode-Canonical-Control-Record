@@ -9,7 +9,9 @@ const productionPackageController = require('../controllers/productionPackageCon
 // The four reads are an ADMIN's (Evoni, 2026-11-22): a package is built from
 // the episode's script, and a non-admin account is never sent internal script
 // text (docs/audit/F-AUTH-1_ScriptReads_AdminOnly_Amendment2_2026-11-22.md).
-// The two writes are as they were.
+// The two writes are an ADMIN's too (Evoni, 2026-11-22): generating answers
+// with the package built from the script, and the delete is a hard delete
+// (docs/audit/F-AUTH-1_DestructiveOps_ParseScript_AdminOnly_Amendment_2026-11-22.md).
 const { requireAuth, authorize } = require('../middleware/auth');
 
 // ============================================================================
@@ -22,7 +24,7 @@ const { requireAuth, authorize } = require('../middleware/auth');
  */
 router.post(
   '/:episodeId/production-package/generate',
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   productionPackageController.generateProductionPackage
 );
 
@@ -72,7 +74,7 @@ router.get(
  */
 router.delete(
   '/:episodeId/production-package/:packageId',
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   productionPackageController.deletePackage
 );
 
