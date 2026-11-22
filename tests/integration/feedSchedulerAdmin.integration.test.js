@@ -546,6 +546,127 @@ const HOUR = 60 * 60 * 1000;
     });
   });
 
+  // ── POST /start: an interval in the body is held to the same limits ─────
+  describe('POST /start, for an ADMIN', () => {
+    const REFUSAL = {
+      success: false, code: 'INVALID_SCHEDULER_CONFIG', fields: ['interval_hours'],
+      error: 'interval_hours must be a number from 1 to 168. Nothing was changed.',
+      message: 'interval_hours must be a number from 1 to 168. Nothing was changed.',
+    };
+    const BAD_START = [0, -1, 0.5, 0.001, 168.5, 169, 596, 1e9, 1e308, 'abc', '', ' ', 'NaN', 'Infinity', '-4', '1e3', '0x10', '4h', true, false, [4], { hours: 4 }];
+    const withoutNextRun = (status) => ({ ...status, next_run: null });
+    afterEach(() => { delete process.env.FEED_SCHEDULER_ENABLED; });
+
+    describe.each([['switched on', 'true'], ['switched off', undefined]])('with the scheduler %s on the server', (_name, flag) => {
+      const setFlag = () => { if (flag) process.env.FEED_SCHEDULER_ENABLED = flag; else delete process.env.FEED_SCHEDULER_ENABLED; };
+
+      test.each(BAD_START.map((v) => [v]))('interval_hours %j, scheduler stopped: 400, nothing set or started', async (value) => {
+        setFlag();
+        const before = { config: scheduler.getConfig(), status: scheduler.getSchedulerStatus() };
+        const res = await send('post', '/start', freshAdmin(`start-a-${ipN}`), { interval_hours: value });
+        expect(res.status).toBe(400);
+        expect(res.body).toEqual(REFUSAL);
+        expect(scheduler.getConfig()).toEqual(before.config);
+        expect(scheduler.getSchedulerStatus()).toEqual(before.status);
+        expect(scheduler.getSchedulerStatus().running).toBe(false);
+        await settle();
+        nothingRan();
+      });
+
+      test.each(BAD_START.map((v) => [v]))('interval_hours %j, scheduler running: 400, its timer and settings as they were', async (value) => {
+        startFakeScheduler();
+        setFlag();
+        const before = { config: scheduler.getConfig(), status: scheduler.getSchedulerStatus() };
+        const res = await send('post', '/start', freshAdmin(`start-b-${ipN}`), { interval_hours: value });
+        expect(res.status).toBe(400);
+        expect(res.body).toEqual(REFUSAL);
+        expect(scheduler.getConfig()).toEqual(before.config);
+        expect(withoutNextRun(scheduler.getSchedulerStatus())).toEqual(withoutNextRun(before.status));
+        expect(scheduler.getSchedulerStatus().running).toBe(true);
+        expect(timers.set).toEqual([]);
+        expect(timers.cleared).toEqual([]);
+        expect(timers.initial).toBe(1); // startFakeScheduler's; none after
+        expect(Math.abs(nextRunIn() - 4 * HOUR)).toBeLessThan(5000);
+        expect(providerCalls).toEqual([]);
+      });
+    });
+
+    test.each([[1, 1], [4, 4], [168, 168], [4.5, 4.5], ['6', 6]])('switched on, interval_hours %j: started on that interval, as before', async (value, hours) => {
+      process.env.FEED_SCHEDULER_ENABLED = 'true';
+      const res = await send('post', '/start', freshAdmin(`start-ok-${ipN}`), { interval_hours: value });
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe('Feed scheduler started');
+      expect(res.body.status).toMatchObject({ running: true, enabled: true, interval_hours: hours });
+      expect(scheduler.getConfig()).toEqual({ ...initialConfig, enabled: true, interval_hours: hours });
+      expect(timers.set).toEqual([[hours * HOUR, { fakeSchedulerInterval: 1 }]]);
+      expect(timers.cleared).toEqual([]);
+      expect(timers.initial).toBe(1);
+      expect(providerCalls).toEqual([]);
+    });
+
+    test.each([[{}], [{ interval_hours: null }], [{ something_else: 1 }]])('switched on, no interval (%j): started on the current interval, as before', async (body) => {
+      process.env.FEED_SCHEDULER_ENABLED = 'true';
+      const res = await send('post', '/start', freshAdmin(`start-none-${ipN}`), body);
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe('Feed scheduler started');
+      expect(scheduler.getConfig()).toEqual({ ...initialConfig, enabled: true });
+      expect(timers.set).toEqual([[4 * HOUR, { fakeSchedulerInterval: 1 }]]);
+      expect(timers.initial).toBe(1);
+    });
+
+    test('switched on and already running: a valid start replaces the timer, as before', async () => {
+      startFakeScheduler();
+      process.env.FEED_SCHEDULER_ENABLED = 'true';
+      const res = await send('post', '/start', freshAdmin('start-again'), { interval_hours: 6 });
+      expect(res.status).toBe(200);
+      expect(timers.cleared).toEqual([{ fakeSchedulerInterval: 1 }]);
+      expect(timers.set).toHaveLength(1);
+      expect(timers.set[0][0]).toBe(6 * HOUR);
+      expect(timers.initial).toBe(2);
+      expect(scheduler.getConfig().interval_hours).toBe(6);
+    });
+
+    test.each([[{}], [{ interval_hours: 4 }], [{ interval_hours: 168 }]])('switched off, a valid start %j: the same 409, nothing started', async (body) => {
+      const before = scheduler.getConfig();
+      const res = await send('post', '/start', freshAdmin(`start-off-${ipN}`), body);
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe('The feed scheduler is switched off on the server (FEED_SCHEDULER_ENABLED is not true), so nothing was started.');
+      expect(res.body.status.running).toBe(false);
+      expect(scheduler.getConfig()).toEqual(before);
+      nothingRan();
+    });
+
+    test('the service refuses an out-of-bounds interval for any caller, switched on or off, before it sets or starts anything', () => {
+      for (const flag of ['true', undefined]) {
+        for (const running of [false, true]) {
+          scheduler.stopScheduler();
+          if (running) startFakeScheduler();
+          if (flag) process.env.FEED_SCHEDULER_ENABLED = flag; else delete process.env.FEED_SCHEDULER_ENABLED;
+          timers.set.length = 0; timers.cleared.length = 0;
+          const initialRuns = timers.initial;
+          const before = { config: scheduler.getConfig(), status: withoutNextRun(scheduler.getSchedulerStatus()) };
+          for (const value of [0, 0.001, -1, 169, 1e9, NaN, Infinity, -Infinity, 'abc', '', true, false, [4]]) {
+            let thrown;
+            try { scheduler.startScheduler(value, db); } catch (err) { thrown = err; }
+            expect([value, thrown?.code, thrown?.status, thrown?.fields]).toEqual([value, 'INVALID_SCHEDULER_CONFIG', 400, ['interval_hours']]);
+            expect(scheduler.getConfig()).toEqual(before.config);
+            expect(withoutNextRun(scheduler.getSchedulerStatus())).toEqual(before.status);
+          }
+          expect(timers.set).toEqual([]);
+          expect(timers.cleared).toEqual([]);
+          expect(timers.initial).toBe(initialRuns);
+        }
+      }
+    });
+
+    test('the route asks the same validator before the switch and before startScheduler', () => {
+      const start = ROUTE_SRC.slice(ROUTE_SRC.indexOf("router.post('/start'"), ROUTE_SRC.indexOf("router.post('/stop'"));
+      expect(start).toMatch(/^router\.post\('\/start', \.\.\.admin, aiRateLimiter, \(req, res\) => \{\n {2}const refusal = configRefusal\(\{ interval_hours: req\.body\?\.interval_hours \}\);/);
+      expect(start.indexOf('configRefusal(')).toBeLessThan(start.indexOf('FEED_SCHEDULER_ENABLED'));
+      expect(start.indexOf('FEED_SCHEDULER_ENABLED')).toBeLessThan(start.indexOf('startScheduler('));
+    });
+  });
+
   // ── preview-sparks: any signed-in account, and it only reads ────────────
   describe('POST /preview-sparks stays a signed-in account\'s', () => {
     test('signed out: 401', async () => {

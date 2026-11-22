@@ -1,4 +1,4 @@
-| **PRIME STUDIOS** **F-AUTH-1 — FEED GENERATION AND THE SCHEDULER'S SETTINGS ARE AN ADMIN'S (AMENDMENT)** *Two routes that generate Feed creators with paid AI calls, and the route that sets the Feed scheduler's interval, batch size and switches, answered any signed-in account. By Evoni's decision of 2026-11-22 they need a sign-in in the admin group, checked before the rate limiter. The settings route also refuses an interval or batch size outside stated limits, whole. The spark preview stays any signed-in account's.* |
+| **PRIME STUDIOS** **F-AUTH-1 — FEED GENERATION AND THE SCHEDULER'S SETTINGS ARE AN ADMIN'S (AMENDMENT)** *Two routes that generate Feed creators with paid AI calls, and the route that sets the Feed scheduler's interval, batch size and switches, answered any signed-in account. By Evoni's decision of 2026-11-22 they need a sign-in in the admin group, checked before the rate limiter. The settings route also refuses an interval or batch size outside stated limits, whole, and the start route refuses an interval outside the same limits. The spark preview stays any signed-in account's.* |
 | --- |
 
 **Document version**
@@ -7,13 +7,13 @@ v1.0. This is an additive amendment, written as a new file because the register 
 - The FD tail, XK tail and PE tail are unchanged.
 - No earlier register file is edited, and no banner is added to one.
 
-**Basis:** `origin/main` at `9d69c06c976865c93b16185ae1c8f8beec8757eb` (2026-11-22), plus branch `claude/feed-scheduler-admin`.
+**Basis:** `origin/main` at `9d69c06c976865c93b16185ae1c8f8beec8757eb` (2026-11-22) for the reads of §1, plus branch `claude/feed-scheduler-admin`, into which `origin/main` at `006002c6a1ba34988de776863d190bff04d57c6c` is merged. Where a line number is given "on the branch" it is the branch's.
 
 **Author:** Claude, with Evoni (JustAWomanInHerPrime), Prime Studios.
 
 **Status:** amendment, on Evoni's word in the session of 2026-11-22. Merging this file with the change it describes is her approval of the text.
 
-**Standings used:** RULED (her words in §2); MEASURED (the repository reads in §1 and §3, each with its command or its `file:line` at the basis); JUDGEMENT (a number the evidence did not settle, marked where used and put to Evoni).
+**Standings used:** RULED (her words in §2); MEASURED (the repository reads in §1, §3 and §4, each with its command or its `file:line`). The three limits were first put to her as judgements and are now RULED.
 
 ---
 
@@ -72,6 +72,14 @@ Evoni, in the session of 2026-11-22:
 
 > "Generation-cap precheck — SEPARATE. Do not include the proposed cap-check reordering in this security PR."
 
+> "APPROVED: Minimum interval: 1 hour. Maximum interval: 168 hours. Batch size: 1–20."
+
+> "Before requesting #3929 merge approval, inspect POST /feed-scheduler/start and confirm whether it can bypass these limits. If it can, reuse the existing configuration validator to enforce the same interval bounds without changing legitimate start behavior. A rejected start must leave timer and configuration state unchanged. Add focused tests, update the PR head and rerun all seven checks. Do not create another scheduler service or validation system. Keep preview-sparks access unchanged."
+
+> "Correct the documentation: the current after-generation count/check/insert sequence does NOT guarantee the cap under concurrency."
+
+> "Record the auto-generate-job cancellation defect as separate future work. Do not implement cancellation under #3929 or the cap proposal."
+
 > "Decision 2 — preview-sparks. Keep POST /feed-scheduler/preview-sparks sign-in accessible. Preserve its existing AI rate limit and budget protection. Verify in tests that it does not write shared profiles or scheduling configuration. If any guard is absent, report that before changing the route."
 
 # §3. What the change does (MEASURED on the branch)
@@ -98,13 +106,13 @@ $ grep -n "^router\.\(post\|put\)\|^const admin" src/routes/feedSchedulerRoutes.
 
 `src/services/feedScheduler.js` gains `CONFIG_LIMITS`, `configRefusal(updates)` and a check at the top of `updateConfig`.
 
-| Key | Allowed | Evidence | Standing |
+| Key | Allowed | What the repository shows | Standing |
 | --- | --- | --- | --- |
-| `batch_size` | a whole number, 1 to 20 | The Automation panel's select offers `[1,2,3,5,8,10,15,20]` and nothing else (`frontend/src/pages/feed/FeedViews.jsx:616`); the three routes that take a count cap it at 20 (`src/routes/feedSchedulerRoutes.js:177`, `:234`, `:414`, "max 20 per request"); the default is 5 (`src/services/feedScheduler.js:193`). No caller, test or document uses a value above 20 or a fraction. | MEASURED |
-| `interval_hours`, lower | 1 | The default is 4 (`:192`); the server starts the scheduler at 4 (`src/app.js:770`); the code's comment and the reads name four hours and "6 cycles/day" (`:1237`; `docs/reads/2026-11-04-pulse-social-simulation-audit.md:26`). **No page sets the interval**: the panel only shows it (`FeedViews.jsx:544`), and no document names a valid range. The existing unit tests set 1 and 2 (`tests/unit/services/feedScheduler.test.js`, "should recalculate interval", "should restart interval timer"). One hour is the smallest value anything in the repository uses. | **JUDGEMENT** |
-| `interval_hours`, upper | 168 (one week) | Her words ask for a minimum. An upper bound is needed for the minimum to hold: Node's `setInterval` treats a delay above 2^31-1 ms (about 596.5 hours) as 1 ms, so a very large interval would run cycles continuously. Any bound at or under 596 closes that; one week is the choice. | **JUDGEMENT** |
+| `batch_size` | a whole number, 1 to 20 | The Automation panel's select offers `[1,2,3,5,8,10,15,20]` and nothing else (`frontend/src/pages/feed/FeedViews.jsx:616`); the three routes that take a count cap it at 20; the default is 5. | RULED: "Batch size: 1–20." |
+| `interval_hours`, lower | 1 | The default is 4; the server starts the scheduler at 4 (`src/app.js:770`); no page sets the interval and no document names a valid range; the existing unit tests set 1 and 2. | RULED: "Minimum interval: 1 hour." |
+| `interval_hours`, upper | 168 (one week) | Node's `setInterval` treats a delay above 2^31-1 ms (about 596.5 hours) as 1 ms, so a very large interval would run cycles continuously. | RULED: "Maximum interval: 168 hours." |
 
-**Put to Evoni:** the lower bound of one hour is the conservative reading that breaks no existing caller or test. Nothing in the repository shows an intended interval under four hours outside those two unit tests, so four may be what she wants. Raising the bound is a one-number change (`CONFIG_LIMITS.interval_hours.min`) and two unit tests' values.
+The two interval bounds were put to Evoni as judgements, the repository not settling them; she approved all three limits (§2).
 
 **How a value is read.** A JSON number, or text that is only digits with an optional decimal part (at the basis the settings coerced `'15'` to 15, and a unit test holds that). Anything else is refused: other text (`'abc'`, `''`, `'NaN'`, `'Infinity'`, `'-4'`, `'1e3'`, `'0x10'`), `true` and `false`, arrays, objects, `NaN`, `Infinity`, zero, negatives, and for `batch_size` a fraction. A key sent as `null`, or not sent, is left as it is, as before; so is an unknown key.
 
@@ -121,6 +129,19 @@ $ grep -n "^router\.\(post\|put\)\|^const admin" src/routes/feedSchedulerRoutes.
 
 **A valid update** is applied as before, including the restart of a running timer when `interval_hours` is sent.
 
+## POST /start
+
+**Could it pass the limits? Yes (MEASURED at the basis).** The route read `const intervalHours = req.body.interval_hours || null;` and passed it to `startScheduler` (`src/routes/feedSchedulerRoutes.js:95-96`), which, where `FEED_SCHEDULER_ENABLED` is `true`, set `schedulerConfig.interval_hours = intervalHours` and `schedulerIntervalMs = intervalHours * 60 * 60 * 1000` and made the timer on it (`src/services/feedScheduler.js:1246-1251`), with no check. An ADMIN's `POST /start` with `interval_hours: 0.001` would have run a cycle every 3.6 seconds. The route was an ADMIN's already (SEC-4).
+
+What sets the interval or makes the timer, in all of `src/`: `updateConfig` (bounded above); `startScheduler`, called from `POST /start` and from the server's startup with the constant 4 (`src/app.js:770`, not in tests); nothing else. `runManualCycle` runs one cycle and touches neither.
+
+**The change.** The same validator, no second one:
+
+- `POST /start` (`...admin, aiRateLimiter`, unchanged) first asks `configRefusal({ interval_hours: req.body?.interval_hours })`. A value outside the limits is a 400 with the body of `PUT /config`'s refusal (`code: 'INVALID_SCHEDULER_CONFIG'`, `fields: ['interval_hours']`), before the `FEED_SCHEDULER_ENABLED` answer and before `startScheduler`.
+- `startScheduler` makes the same check as its first statement (`assertConfigAllowed`, which `updateConfig` now calls too) and throws as `updateConfig` does, so a caller that does not go through the route is refused too. Nothing is set, no timer is cleared or made, and no first run is scheduled.
+- **The order of answers on `POST /start`:** 401, 403, the rate limiter's 429, the 400 for an interval outside the limits, the 409 when the scheduler is switched off, then the start. A request with a valid interval, or none, is answered exactly as before, the 409 included.
+- **Values.** As `PUT /config` reads them. No interval (absent or `null`) starts on the current one, as before. `0`, `''` and `false` were read as "no interval" (`|| null`) and are now refused as out of bounds. Digits-only text was passed through and stored as text; it is now stored as its number.
+
 ## The frontend (display only)
 
 `frontend/src/pages/SocialProfileGenerator.jsx`: the auto-generate start (`runAutoGenerate`) and the settings save (`updateAutoConfig`) show "Only an admin can generate Feed creators or change the Feed automation settings." on a 403 with `AUTH_GROUP_REQUIRED` (`adminOnlyMessage` of `frontend/src/utils/authGroups.js`) in place of "Forbidden". A 400 shows the server's sentence, as the handler already showed `error`. The page does not know the user's groups (it has no `useAuth` or `isAdmin`), so no control is hidden: a signed-in account that is not an admin sees the same buttons and the sentence when it uses one. `POST /auto-generate` has no caller in the frontend.
@@ -136,18 +157,21 @@ $ grep -n "^router\.\(post\|put\)\|^const admin" src/routes/feedSchedulerRoutes.
 - Changed, pins: `tests/unit/routes/feed-scheduler-tier-promotion.test.js` (the two generation routes and `PUT /config` now pinned to `...admin`; `preview-sparks` still pinned to `requireAuth, aiRateLimiter`; every `aiRateLimiter` after a sign-in or the guard). `tests/unit/routes/sec4-feed-scheduler-admin.test.js` (the three routes added to the 401/403 cases; an admin's `PUT /config`, and its 400).
 - Added to: `tests/unit/services/feedScheduler.test.js` (the limits, without a database).
 - New: `frontend/src/pages/SocialProfileGenerator.adminOnly.test.jsx`.
+- `POST /start`, in the same integration file and in `tests/unit/services/feedScheduler.test.js`: for an ADMIN, each kind of invalid interval, with the scheduler stopped and running and with the server switch on and off, is a 400 with the settings and status as they were and no timer made or cleared; a valid interval and no interval start as before; the 409 when switched off is as before; `startScheduler` called directly refuses the same values; the startup call with 4 still starts.
 
 # §4. What this amendment does not cover
 
 - **The generation-cap check's order.** `auto-generate-job` checks the Feed cap and the provider before making a job; `auto-generate` checks the cap inside the batch. Reordering these is separate, by Evoni's word in §2. Not changed.
+- **The Feed cap is not guaranteed under concurrency.** The cap is checked once before a batch (`autoGenerateBatch`, `src/services/feedScheduler.js:560` on the branch) and again for each profile after its paid call and before its insert (`generateAndSaveProfile`: the call at `:781`, the count at `:810`, the insert at `:921`). That count and that insert are separate statements, with no lock and no transaction. Two requests, jobs or cycles running together can each pass the count and insert, taking a layer past its cap; and a profile whose count finds the cap reached is discarded after its AI call was paid for. This change does not alter that. A separate design covers it and is not yet authorized. The code comment at the second check said it was there "to prevent race conditions between concurrent jobs"; its wording is corrected on this branch to say what the check does and does not do. No behaviour is changed by that.
 - **`preview-sparks`.** Unchanged, by her ruling. It makes two provider calls a request (a pre-flight check and the sparks), behind `aiRateLimiter` and the budget gate, for any signed-in account. Where `ADMIN_WRITE_GUARD` is enforcing, that guard refuses a non-admin's `POST` before the route; this amendment does not change the guard or rely on it.
 - **What an over-budget request answers.** The budget gate refuses each provider call. `auto-generate` then answers 200 with `created: 0` and one error a profile; `auto-generate-job` answers 503 from its pre-flight check. Neither answers 429. That is as it was, and is not changed.
-- **`POST /start`'s interval.** It takes `interval_hours` from the request (`src/routes/feedSchedulerRoutes.js:95` at the basis) and `startScheduler` uses it unchecked. It is an ADMIN's already and works only where `FEED_SCHEDULER_ENABLED` is `true`. The page sends no body. Recorded for a separate decision; not changed.
+- **`POST /start`'s other behaviour.** Only its interval is checked (§3). It still works only where `FEED_SCHEDULER_ENABLED` is `true`, and a start while running still replaces the timer and schedules a first run.
 - **The settings' other keys.** `finalize_threshold` and `cross_threshold` are still set through `Number(v)` with no bounds, and the six `auto_*_enabled` switches take whatever is sent. They are an ADMIN's now. Not bounded here.
 - **The other scheduler agents' calls.** Which of the six agents make paid calls beyond auto-fill's sparks and profiles (through `autoAssignAllFollowers`, `autoLinkRelationships` or otherwise) was not traced.
 - **Server values.** `AI_DAILY_BUDGET_USD`, `FEED_SCHEDULER_ENABLED` and `ADMIN_WRITE_GUARD` on any server are not known and not relied on. `FEED_SCHEDULER_ENABLED`'s handling is not changed.
 - **The settings are in process memory only.** They are not stored and are lost on a restart. Not changed.
 - **Indirect location creation.** Places made through events and stories are unchanged, and recorded for separate review: the case-insensitive dedupe of story locations; whether the AI rate limit covers draft-event generation; high-volume draft-event creation and its effect on the World Location deletion rule.
+- **Future work: cancelling an auto-generate job.** Recorded, not changed here, by Evoni's word in §2. `POST /api/v1/social-profiles/bulk/jobs/:id/cancel` (an ADMIN's, `src/routes/socialProfileBulkRoutes.js:813`) adds the job to that file's in-memory `cancelledJobs` set and sets the row's status to `cancelled` (`:826-827`). The auto-generate job's loop (`processAutoGenInBackground`, `src/routes/feedSchedulerRoutes.js:315` on the branch) reads the row's status once, before it starts (`:334`), never reads `cancelledJobs` or the status again, runs the whole batch, and then sets the status to `completed` (`:395-396`), over the `cancelled`. So a cancelled auto-generate job keeps generating and ends as completed. Likewise the streamed form of `POST /auto-generate` (`:200-222`) has no handler for the client going away: the batch runs to its end after a disconnect.
 - **The scheduler, the queue, the limiter, the budget.** No new permission, budget, queue or scheduler system. The cycle, the job implementation, `aiCostTracker` and `aiRateLimiter` are as they were.
 - **Reads.** No `GET` is changed: status, events, history, config and layer-status stay any signed-in account's.
 - **Stored data.** No row is changed or removed. No migration.
@@ -156,6 +180,6 @@ $ grep -n "^router\.\(post\|put\)\|^const admin" src/routes/feedSchedulerRoutes.
 ---
 
 **Type:** amendment.
-**Rules:** `POST /feed-scheduler/auto-generate`, `POST /feed-scheduler/auto-generate-job` and `PUT /feed-scheduler/config` are an ADMIN's, the check ahead of the rate limiter; `PUT /config` refuses `interval_hours` outside 1 to 168 and `batch_size` outside the whole numbers 1 to 20, whole; `POST /feed-scheduler/preview-sparks` stays a signed-in account's; on Evoni's words in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** nothing.
+**Rules:** `POST /feed-scheduler/auto-generate`, `POST /feed-scheduler/auto-generate-job` and `PUT /feed-scheduler/config` are an ADMIN's, the check ahead of the rate limiter; `PUT /config` refuses `interval_hours` outside 1 to 168 and `batch_size` outside the whole numbers 1 to 20, whole; `POST /feed-scheduler/start` and `startScheduler` refuse an interval outside 1 to 168; `POST /feed-scheduler/preview-sparks` stays a signed-in account's; on Evoni's words in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** nothing.
 **Host/AWS/DB/Cognito contact (this session):** the tests ran against a local PostgreSQL scratch database in the session's own container. No deployed host or database was contacted, no provider was called, and no scheduler was started.
 **Production standing:** as the newest Fix Plan revision states it (`F-Deploy-1_Fix_Plan_v1.56.md`, footer). What an agent session may do in production is set by `CLAUDE.md` and `F-Tools-5_AgentProductionAccess_Ruling_2026-10-31.md`.

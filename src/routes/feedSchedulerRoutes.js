@@ -98,7 +98,15 @@ router.put('/config', ...admin, (req, res) => {
 // ── POST /start ─────────────────────────────────────────────────────────────
 // startScheduler does nothing unless FEED_SCHEDULER_ENABLED is 'true'; say so
 // rather than answering "started".
+// An interval_hours in the body is held to the limits PUT /config uses, and
+// refused first: a value outside them is a 400 whether or not the scheduler
+// is switched on, and nothing is set, cleared or started.
 router.post('/start', ...admin, aiRateLimiter, (req, res) => {
+  const refusal = configRefusal({ interval_hours: req.body?.interval_hours });
+  if (refusal) {
+    console.warn(`[FeedScheduler] start refused (${refusal.fields.join(', ')}): ${refusal.message}`);
+    return res.status(400).json({ success: false, code: refusal.code, error: refusal.message, message: refusal.message, fields: refusal.fields });
+  }
   if (process.env.FEED_SCHEDULER_ENABLED !== 'true') {
     console.warn('[FeedScheduler] start refused: FEED_SCHEDULER_ENABLED is not true');
     return res.status(409).json({ error: 'The feed scheduler is switched off on the server (FEED_SCHEDULER_ENABLED is not true), so nothing was started.', status: getSchedulerStatus() });

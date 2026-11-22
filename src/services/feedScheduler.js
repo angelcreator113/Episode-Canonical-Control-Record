@@ -258,17 +258,22 @@ function configRefusal(updates) {
   return { code: CONFIG_REFUSED, message: `${parts.join('; ')}. Nothing was changed.`, fields };
 }
 
+// Throws what configRefusal refuses with; updateConfig and startScheduler call
+// it before they set anything.
+function assertConfigAllowed(updates) {
+  const refusal = configRefusal(updates);
+  if (!refusal) return;
+  const err = new Error(refusal.message);
+  err.code = refusal.code;
+  err.status = 400;
+  err.fields = refusal.fields;
+  throw err;
+}
+
 function updateConfig(updates) {
   // Refuse before anything is applied: no key set, no interval recalculated,
   // no timer touched.
-  const refusal = configRefusal(updates);
-  if (refusal) {
-    const err = new Error(refusal.message);
-    err.code = refusal.code;
-    err.status = 400;
-    err.fields = refusal.fields;
-    throw err;
-  }
+  assertConfigAllowed(updates);
   for (const [k, v] of Object.entries(updates)) {
     if (k in schedulerConfig && v != null) {
       schedulerConfig[k] = typeof schedulerConfig[k] === 'number' ? Number(v) : v;
@@ -795,7 +800,11 @@ Return ONLY valid JSON with these fields:
   const safeArchetype = sanitizeEnum(generated.archetype || spark.archetype, VALID_ARCHETYPES, 'polished_curator');
   const safeTrajectory = sanitizeEnum(generated.current_trajectory, VALID_TRAJECTORIES, 'rising');
 
-  // Re-check cap at insert time to prevent race conditions between concurrent jobs
+  // Re-check the cap after the paid call, before the insert. This narrows the
+  // window between concurrent jobs but does not close it: the count here and
+  // the insert below are separate statements, with no lock or transaction, so
+  // two jobs can both pass and take the layer past its cap, and a profile
+  // already paid for is discarded when the count has reached the cap.
   const cap = FEED_CAPS[layer];
   if (cap) {
     const currentCount = await db.SocialProfile.count({
@@ -1282,9 +1291,14 @@ async function scheduledRun() {
   }
 }
 
+// An interval given here is held to the limits a configuration update is
+// (CONFIG_LIMITS, Evoni 2026-11-22): refused, by a throw, before anything is
+// set, cleared or started. No interval (null or absent) starts on the current
+// one. The env gate stays within the first lines of the function, where
+// scripts/audit-cost-exposure.sh looks for it.
 function startScheduler(intervalHours, db) {
+  assertConfigAllowed({ interval_hours: intervalHours });
   if (db) _db = db;
-
   // Gate: only run scheduler when explicitly opted-in via env var.
   // Each cycle makes 10+ Claude API calls (~$30-50/cycle, 6 cycles/day).
   // Set FEED_SCHEDULER_ENABLED=true in production when you want auto-generation.
@@ -1295,9 +1309,10 @@ function startScheduler(intervalHours, db) {
 
   if (schedulerTimer) clearInterval(schedulerTimer);
   if (initialTimeout) clearTimeout(initialTimeout);
-  if (intervalHours) {
-    schedulerConfig.interval_hours = intervalHours;
-    schedulerIntervalMs = intervalHours * 60 * 60 * 1000;
+  if (intervalHours != null) {
+    const hours = Number(intervalHours);
+    schedulerConfig.interval_hours = hours;
+    schedulerIntervalMs = hours * 60 * 60 * 1000;
   }
   schedulerConfig.enabled = true;
   schedulerTimer = setInterval(scheduledRun, schedulerIntervalMs);
