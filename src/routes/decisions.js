@@ -5,6 +5,7 @@ const router = express.Router();
 const { UserDecision, DecisionPattern, Episode, Scene } = require('../models');
 const { Op } = require('sequelize');
 const { requireAuth } = require('../middleware/auth');
+const { EPISODE_NESTED_FIELDS } = require('../services/episodeReadFields');
 
 /**
  * POST /api/decisions
@@ -241,7 +242,8 @@ router.get('/:id', requireAuth, async (req, res) => {
   try {
     const decision = await UserDecision.findByPk(req.params.id, {
       include: [
-        { model: Episode, as: 'episode' },
+        // The decision's episode by name, never its script (Evoni, 2026-11-22).
+        { model: Episode, as: 'episode', attributes: [...EPISODE_NESTED_FIELDS] },
         { model: Scene, as: 'scene' },
       ],
     });

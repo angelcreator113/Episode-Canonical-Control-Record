@@ -9,6 +9,7 @@ const logger = require('../utils/logger');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
+const { EPISODE_NESTED_FIELDS } = require('../services/episodeReadFields');
 const { isDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 
 // Configure multer for memory storage (we'll upload directly to S3)
@@ -203,7 +204,9 @@ router.post('/episodes/:episodeId/assets', requireAuth, async (req, res) => {
     await episode.addAssets(assets);
 
     // Return the updated episode with its linked assets
+    // The episode by name, never its script (Evoni, 2026-11-22).
     const updatedEpisode = await Episode.findByPk(episodeId, {
+      attributes: [...EPISODE_NESTED_FIELDS],
       include: [{
         model: Asset,
         as: 'assets',

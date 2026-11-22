@@ -1,6 +1,7 @@
 const { models, sequelize } = require('../models');
 const { Scene, Episode, Thumbnail, Asset, SceneAsset, AssetUsageLog } = models;
 const { QueryTypes } = require('sequelize');
+const { EPISODE_NESTED_FIELDS } = require('../services/episodeReadFields');
 const { isDocumentPresentation, anyDocumentPresentation, assetIdsWithin, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 
 /**
@@ -267,8 +268,10 @@ exports.updateScene = async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
+    // The scene's episode by name, never its script: the answer carries it
+    // (models/Scene toJSON; Evoni, 2026-11-22).
     const scene = await Scene.findByPk(id, {
-      include: 'episode',
+      include: [{ model: Episode, as: 'episode', attributes: [...EPISODE_NESTED_FIELDS] }],
     });
 
     if (!scene) {

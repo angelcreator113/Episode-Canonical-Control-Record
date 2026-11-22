@@ -7,6 +7,9 @@ const { models } = require('../models');
 const _AssetService = require('./AssetService');
 const s3Service = require('./S3Service');
 const { v4: _uuidv4 } = require('uuid');
+// An episode inside a composition names it and no more: never its script
+// (services/episodeReadFields; Evoni, 2026-11-22).
+const { EPISODE_NESTED_FIELDS } = require('./episodeReadFields');
 
 class CompositionService {
   /**
@@ -19,6 +22,7 @@ class CompositionService {
           {
             model: models.Episode,
             as: 'episode',
+            attributes: [...EPISODE_NESTED_FIELDS],
             required: false,
           },
           {
@@ -117,6 +121,7 @@ class CompositionService {
           {
             model: models.Episode,
             as: 'episode',
+            attributes: [...EPISODE_NESTED_FIELDS],
           },
         ],
       });

@@ -7,6 +7,8 @@
  * This makes the "Continue Working" button intelligent.
  */
 
+import { hasScript } from '../lib/episodeScriptFacts';
+
 export const EPISODE_STATUSES = {
   DRAFT: 'draft',
   SCRIPTED: 'scripted',
@@ -203,7 +205,7 @@ export function suggestStatusAdvance(episode) {
   const suggestions = {
     [EPISODE_STATUSES.DRAFT]: () => {
       // Suggest moving to Scripted if script exists
-      if (episode.script_content || episode.script_url) {
+      if (episode.script_content || hasScript(episode) || episode.script_url) {
         return {
           shouldSuggest: true,
           reason: 'Script uploaded',

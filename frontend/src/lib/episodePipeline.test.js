@@ -24,6 +24,14 @@ describe('episode labels', () => {
     expect(cardLine({ status: 'draft', script_content: 'x' })).toBe('Draft');
     expect(cardLine({ status: 'in_build' })).toBe('In build');
   });
+
+  // An episode sent without its script (not an admin; 2026-11-22) says so in has_script.
+  test('the card line reads has_script when the episode comes without its script', () => {
+    expect(cardLine({ status: 'draft', has_script: true })).toBe('Draft');
+    expect(cardLine({ status: 'scripted', has_script: true })).toBe('Scripted');
+    expect(cardLine({ status: 'draft', has_script: false })).toBe('needs script');
+    expect(cardLine({ status: 'scripted', has_script: false })).toBe('needs script');
+  });
 });
 
 describe('episode codes across seasons (2026-10-25)', () => {

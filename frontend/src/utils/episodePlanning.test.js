@@ -43,6 +43,17 @@ describe('episodePlanning', () => {
     expect(p.next.tab).toBe('checklist');
   });
 
+  // An episode sent without its script (not an admin; 2026-11-22).
+  test('without the script text, has_script decides the next step; the Look names no beat', () => {
+    const yes = episodePlanning({ episode: { has_script: true }, event: EVENT });
+    expect(yes.hasScript).toBe(true);
+    expect(yes.next.tab).toBe('checklist');
+    const no = episodePlanning({ episode: { has_script: false }, event: EVENT });
+    expect(no.hasScript).toBe(false);
+    expect(no.next).toEqual({ key: 'script', label: 'Generate Script', tab: 'scripts' });
+    expect(byKey(yes).look.detail).toBe('2 pieces chosen');
+  });
+
   test('gaps say what is missing and where to finish them', () => {
     const p = episodePlanning({
       episode: {},

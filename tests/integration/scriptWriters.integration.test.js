@@ -96,6 +96,9 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
   // limiter (60 a minute per address) is not what is under test here.
   let testNumber = 0;
   const auth = (r) => r.set('Authorization', `Bearer ${token}`).set('X-Forwarded-For', `10.27.${Math.floor(testNumber / 250)}.${testNumber % 250 + 1}`);
+  // GET /episodes/:id sends the script, its locked beats and its revision to an
+  // ADMIN only (Evoni, 2026-11-22); the writes below are still this editor's.
+  const asAdmin = (r) => auth(r).set('Authorization', `Bearer ${TokenService.generateTokenPair({ id: 'test-admin-a1c', email: 'admin@a1c.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken}`);
 
   beforeAll(async () => {
     process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || 'test-key-not-used';
@@ -172,7 +175,7 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
   const episodeRow = async (ep) => (await rows(`SELECT script_content, script_locked_beats, script_line_keys, script_seq::text AS script_seq FROM episodes WHERE id = :ep`, { ep }))[0];
   const versionRows = (ep) => rows(`SELECT source, script_content, script_line_keys FROM episode_script_versions WHERE episode_id = :ep ORDER BY created_at DESC, id DESC`, { ep });
   const clips = (ep) => rows(`SELECT * FROM script_voice_clips WHERE episode_id = :ep ORDER BY id`, { ep });
-  const revisionOf = async (ep) => (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
+  const revisionOf = async (ep) => (await asAdmin(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
   const setKeys = (ep) => run(`UPDATE episodes SET script_line_keys = CAST(:k AS jsonb) WHERE id = :ep`, { ep, k: JSON.stringify({ v: 1, text_hash: 'x', lines: [], retired: [] }) });
   // The Script Writer's rows of an episode, as stored.
   const scriptRows = (ep) => rows(`SELECT id, version, status, script_text FROM "${SCHEMA}".episode_scripts WHERE episode_id = :ep ORDER BY version`, { ep });

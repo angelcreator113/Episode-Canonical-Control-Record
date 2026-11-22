@@ -83,6 +83,27 @@ describe('Episode Ledger reads the ledger (#2278)', () => {
     expect(reference.textContent).not.toContain('🪙');
   });
 
+  // "Has Script (n lines)": from the text for an admin, from the server's
+  // facts for an episode sent without its script (2026-11-22).
+  test('Has Script and its line count: from the text, or from has_script and script_line_count', async () => {
+    const quiet = async (url) => (url === '/api/v1/shows/show-1/financial-summary' ? { data: { by_episode: [] } } : { data: {} });
+    vi.mocked(api.get).mockImplementation(quiet);
+    const first = renderLedger([{ ...EPISODE, script_content: 'one\ntwo\nthree' }]);
+    fireEvent.click(await screen.findByText('Gala Night'));
+    expect(await screen.findByText('✅ Has Script (3 lines)')).toBeTruthy();
+    first.unmount();
+
+    const second = renderLedger([{ ...EPISODE, has_script: true, script_line_count: 41 }]);
+    fireEvent.click(await screen.findByText('Gala Night'));
+    expect(await screen.findByText('✅ Has Script (41 lines)')).toBeTruthy();
+    second.unmount();
+
+    renderLedger([{ ...EPISODE, has_script: false, script_line_count: 0 }]);
+    fireEvent.click(await screen.findByText('Gala Night'));
+    await screen.findByText('Estimate the result');
+    expect(screen.queryByText(/Has Script/)).toBeNull();
+  });
+
   // The saved event–episode link, not the event's name in the script.
   test('the event is the one linked to the episode, not one whose name the script mentions', async () => {
     const withScript = { ...EPISODE, script_content: 'Lala arrives at the Rose Gala.' };
