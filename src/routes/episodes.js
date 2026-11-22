@@ -989,10 +989,11 @@ router.get(
 );
 
 // POST /api/v1/episodes/:episodeId/scripts - Create new script
+// ADMIN only (Evoni, 2026-11-22), as the script library's other writes.
 router.post(
   '/:episodeId/scripts',
   validateUUIDParam('episodeId'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(scriptsController.createScript)
 );
 

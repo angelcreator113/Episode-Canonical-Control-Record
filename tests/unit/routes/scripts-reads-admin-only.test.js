@@ -185,9 +185,17 @@ describe('the allowlists', () => {
   });
 });
 
-describe('the writes are as they were', () => {
-  test('signed out, a write is still a 401', async () => {
+// The six writes of this router are an ADMIN's as well (Evoni, 2026-11-22;
+// docs/audit/F-AUTH-1_ScriptWrites_AdminOnly_Amendment3_2026-11-22.md). How
+// they behave is in scripts-writes-admin-only.test.js.
+describe('the writes are an ADMIN\'s too', () => {
+  test('signed out, a write is a 401', async () => {
     const res = await request(app).post('/api/v1/scripts/sc-1/set-primary');
     expect(res.status).toBe(401);
+  });
+  test('signed in and not an admin, a write is a 403', async () => {
+    const res = await request(app).post('/api/v1/scripts/sc-1/set-primary').set('Authorization', `Bearer ${token(['USER'])}`);
+    expect(res.status).toBe(403);
+    expect(res.body.data).toBeUndefined();
   });
 });
