@@ -3,7 +3,8 @@
  * /api/v1/episodes/:episodeId/production-package/latest, /versions,
  * /:packageId and /:packageId/download answered any signed-in account with a
  * package built from the episode's script. They now need a sign-in in the
- * admin group. Generating and deleting a package are as they were.
+ * admin group. Generating and deleting a package became an ADMIN's later the
+ * same day (productionPackage-writes-admin-only.test.js has their full cases).
  *
  * The real router, auth middleware and controller; the pool and the package
  * service are stand-ins, so no database is read and nothing is built.
@@ -83,14 +84,21 @@ describe('the production package reads need a sign-in in the admin group', () =>
   });
 });
 
-describe('the two writes are as they were', () => {
+describe('the two writes are an ADMIN\'s too', () => {
   test('signed out, they are a 401', async () => {
     expect((await call('post', '/generate', null)).status).toBe(401);
     expect((await call('delete', `/${PKG}`, null)).status).toBe(401);
   });
-  test('signed in and not an admin, generating is not refused for the group', async () => {
+  test('signed in and not an admin, generating is refused for the group and builds nothing', async () => {
     mockGenerate.mockResolvedValue({ package: { package_version: 3, zip_file_s3_url: 'https://bucket/p3.zip' }, fileCount: 4 });
     const res = await call('post', '/generate', token(['USER']));
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('AUTH_GROUP_REQUIRED');
+    expect(mockGenerate).not.toHaveBeenCalled();
+  });
+  test('an admin generates as before', async () => {
+    mockGenerate.mockResolvedValue({ package: { package_version: 3, zip_file_s3_url: 'https://bucket/p3.zip' }, fileCount: 4 });
+    const res = await call('post', '/generate', token(['ADMIN']));
     expect(res.status).toBe(200);
     expect(mockGenerate).toHaveBeenCalledWith(EP, expect.anything());
   });
