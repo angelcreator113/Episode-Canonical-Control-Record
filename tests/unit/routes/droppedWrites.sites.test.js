@@ -288,11 +288,15 @@ describe('SceneSet.create — POST /properties/:id/rooms (src/routes/propertyRou
     jest.doMock(MODELS, () => ({
       SceneSet,
       WorldLocation: {
-        findByPk: async () => ({ id: 'prop-1', name: 'The Loft', universe_id: 'uni-1' }),
+        findByPk: async () => ({ id: 'prop-1', name: 'The Loft', universe_id: 'uni-1', location_type: 'property' }),
         create: async (data) => ({ ...data }),
       },
     }));
-    passAuth();
+    // An ADMIN, and a row that is a property: the route asks for both since 2026-11-22 (Evoni).
+    jest.doMock(AUTH, () => {
+      const actual = jest.requireActual(AUTH);
+      return { ...actual, requireAuth: (req, _res, next) => { req.user = { id: 'u1', groups: ['ADMIN'] }; next(); } };
+    });
     const app = express();
     app.use(express.json());
     app.use('/', require('../../../src/routes/propertyRoutes'));

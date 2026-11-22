@@ -20,6 +20,10 @@ const q = (sql, replacements = {}) => sequelize.query(sql, { replacements, type:
 const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
 (shouldSkip ? describe.skip : describe)('Locations get a DREAM city', () => {
+  // The property routes' writes are an ADMIN's since 2026-11-22 (Evoni).
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${TokenService.generateTokenPair({
+    id: 'test-admin-dream-city', email: 'admin@dream-city.dev', name: 'Dream City Admin', groups: ['ADMIN'], role: 'ADMIN',
+  }).accessToken}`);
   const made = [];
   let token;
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
@@ -39,12 +43,12 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   it('a property takes a DREAM city and its room inherits it', async () => {
-    const prop = await auth(request(app).post('/api/v1/properties')).send({ name: 'Dream City Test Penthouse', city: 'echo_park' });
+    const prop = await asAdmin(request(app).post('/api/v1/properties')).send({ name: 'Dream City Test Penthouse', city: 'echo_park' });
     expect(prop.status).toBe(201);
     made.push(prop.body.data.id);
     expect(await cityOf(prop.body.data.id)).toBe('Echo Park');
 
-    const room = await auth(request(app).post(`/api/v1/properties/${prop.body.data.id}/rooms`)).send({ name: 'Dream City Test Closet', room_type: 'closet' });
+    const room = await asAdmin(request(app).post(`/api/v1/properties/${prop.body.data.id}/rooms`)).send({ name: 'Dream City Test Closet', room_type: 'closet' });
     expect(room.status).toBeLessThan(300);
     const roomId = room.body.data?.room?.id || room.body.data?.id || room.body.room?.id;
     made.push(roomId);
@@ -52,7 +56,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   it('a property given a city outside the five gets none', async () => {
-    const prop = await auth(request(app).post('/api/v1/properties')).send({ name: 'Dream City Test Nova', city: 'Nova Prime' });
+    const prop = await asAdmin(request(app).post('/api/v1/properties')).send({ name: 'Dream City Test Nova', city: 'Nova Prime' });
     made.push(prop.body.data.id);
     expect(await cityOf(prop.body.data.id)).toBeNull();
   });

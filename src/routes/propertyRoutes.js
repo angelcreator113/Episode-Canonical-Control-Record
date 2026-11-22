@@ -17,12 +17,19 @@
  *   DELETE /properties/:id/rooms/:roomId — delete room
  *   GET    /properties/templates         — list room layout templates
  *   GET    /properties/style-presets     — list style guide presets
+ *
+ * The four writes (create and edit a property, add and edit a room) are an
+ * ADMIN's (Evoni, 2026-11-22): world_locations has no owner column, so every
+ * row is shared production data. A property is a row whose location_type is
+ * 'property', the test GET /:id makes; a room is a row whose
+ * parent_location_id is that property. The writes refuse any other :id, so
+ * they cannot change a World Location that is not a property or its room.
  */
 
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
-const { v4: uuidv4 } = require('uuid');
+const { requireAuth, authorize } = require('../middleware/auth');
+const { v4: uuidv4, validate: isUuid } = require('uuid');
 const propertyService = require('../services/propertyService');
 const { dreamCityName } = require('../utils/lalaHome');
 
@@ -31,6 +38,25 @@ let models;
 function getModels() {
   if (!models) models = require('../models');
   return models;
+}
+
+/**
+ * The property a write names, or null once it has answered: 404 when :id is
+ * no location (an id that is not a UUID names none), 400 when the location
+ * is not a property. Both bodies are GET /:id's.
+ */
+async function propertyForWrite(req, res) {
+  const { WorldLocation } = getModels();
+  const property = isUuid(req.params.id) ? await WorldLocation.findByPk(req.params.id) : null;
+  if (!property) {
+    res.status(404).json({ success: false, error: 'Property not found' });
+    return null;
+  }
+  if (property.location_type !== 'property') {
+    res.status(400).json({ success: false, error: 'This location is not a property' });
+    return null;
+  }
+  return property;
 }
 
 // ─── TEMPLATES & PRESETS ─────────────────────────────────────────────────────
@@ -80,7 +106,7 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // POST /api/v1/properties — create a property
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { WorldLocation } = getModels();
     const { name, description, property_type, style_preset_id, style_guide, universe_id, city } = req.body;
@@ -150,11 +176,10 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 // PATCH /api/v1/properties/:id — update property (name, style_guide, floor_plan)
-router.patch('/:id', requireAuth, async (req, res) => {
+router.patch('/:id', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
-    const { WorldLocation } = getModels();
-    const property = await WorldLocation.findByPk(req.params.id);
-    if (!property) return res.status(404).json({ success: false, error: 'Property not found' });
+    const property = await propertyForWrite(req, res);
+    if (!property) return;
 
     const allowed = ['name', 'description', 'metadata'];
     const updates = {};
@@ -179,11 +204,11 @@ router.patch('/:id', requireAuth, async (req, res) => {
 // ─── ROOMS ───────────────────────────────────────────────────────────────────
 
 // POST /api/v1/properties/:id/rooms — add a room to property
-router.post('/:id/rooms', requireAuth, async (req, res) => {
+router.post('/:id/rooms', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { WorldLocation, SceneSet } = getModels();
-    const property = await WorldLocation.findByPk(req.params.id);
-    if (!property) return res.status(404).json({ success: false, error: 'Property not found' });
+    const property = await propertyForWrite(req, res);
+    if (!property) return;
 
     const { name, room_type, template_id, scene_type } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'name is required' });
@@ -242,12 +267,17 @@ router.post('/:id/rooms', requireAuth, async (req, res) => {
 });
 
 // PATCH /api/v1/properties/:id/rooms/:roomId — update room
-router.patch('/:id/rooms/:roomId', requireAuth, async (req, res) => {
+router.patch('/:id/rooms/:roomId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { WorldLocation } = getModels();
-    const room = await WorldLocation.findOne({
-      where: { id: req.params.roomId, parent_location_id: req.params.id },
-    });
+    // The room of this property: :id must be a property and the room its child.
+    const { id, roomId } = req.params;
+    const parent = isUuid(id) && isUuid(roomId)
+      ? await WorldLocation.findByPk(id, { attributes: ['id', 'location_type'] })
+      : null;
+    const room = parent && parent.location_type === 'property'
+      ? await WorldLocation.findOne({ where: { id: roomId, parent_location_id: parent.id } })
+      : null;
     if (!room) return res.status(404).json({ success: false, error: 'Room not found in this property' });
 
     const allowed = ['name', 'description', 'style_guide', 'metadata'];
