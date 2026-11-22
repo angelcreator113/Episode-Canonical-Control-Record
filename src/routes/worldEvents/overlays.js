@@ -20,7 +20,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, userInGroup } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { isBudgetError } = require('../../services/imageCostService');
 const { eventCreatorOrganizer } = require('../../utils/eventOrganizer');
@@ -531,6 +531,11 @@ router.post('/world/:showId/episodes/:episodeId/generate-title-overlay', require
       // that's been soft- or hard-deleted. Clear the FK so the next page
       // refresh stops showing the orphan button. Best-effort — never let
       // the cleanup throw mask the underlying 404.
+      // Unlinking an event from an episode is an ADMIN's (Evoni, 2026-11-22):
+      // anyone else gets the 404 and no link is touched.
+      if (!userInGroup(req.user, 'ADMIN')) {
+        return res.status(404).json({ success: false, error: 'Episode not found — it may have been deleted.' });
+      }
       try {
         await models.sequelize.query(
           `UPDATE world_events SET used_in_episode_id = NULL

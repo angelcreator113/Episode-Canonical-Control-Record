@@ -68,7 +68,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const qi = sequelize.getQueryInterface();
     for (const m of [junctionMigration, sortOrderMigration, rolesMigration, lookMigration, kindMigration, zoneMigration]) await m.up(qi, Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-l14', email: 'user@l14.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-l14', email: 'user@l14.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:id, :name, :slug, '{}', NOW(), NOW())`,
       { id: show, name: `L14 ${show.slice(0, 8)}`, slug: `l14-${show.slice(0, 8)}` });

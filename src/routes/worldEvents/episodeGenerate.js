@@ -13,7 +13,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth, userInGroup } = require('../../middleware/auth');
+const { requireAuth, authorize, userInGroup } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { eventEpisodeConflictBody, EVENT_EPISODE_CONFLICT_CODE, eventDeletedBody, EVENT_DELETED_CODE } = require('../../utils/eventEpisodeLink');
 const { dealPriceRequiredBody, DEAL_PRICE_REQUIRED_CODE } = require('../../services/dealPricingService');
@@ -27,7 +27,7 @@ const { isFrozenEpisodeError } = require('../../utils/frozenEpisode');
 // Auto-generate a complete episode from an event
 // ═══════════════════════════════════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     // Optional: when draft_script is true, also kick the script skeleton

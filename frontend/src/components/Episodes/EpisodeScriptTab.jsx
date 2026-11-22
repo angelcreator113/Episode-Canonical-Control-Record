@@ -1,6 +1,7 @@
 // frontend/src/components/Episodes/EpisodeScriptTab.jsx
 // Beat-by-beat script reviewer with Show Brain AI rewrite
 
+import { adminOnlyMessage } from '../../utils/authGroups';
 import { Fragment, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import { PenLine, GripVertical, ChevronDown, ArrowUp, ArrowDown, Smartphone, Image as ImageIcon, X, Plus, Coins, Shirt, MapPin, Users, ListChecks, Check, Circle, AlertTriangle, Bell, MessageCircle, Send, Clock, Trash2, ChevronLeft, ChevronRight, AudioLines, ScrollText, Images, Sparkles, Camera, Home } from 'lucide-react';
@@ -1692,6 +1693,8 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
   const [selfTalkFailed, setSelfTalkFailed] = useState(false);
   const [marking, setMarking] = useState(null);
   const [markFailed, setMarkFailed] = useState(null);
+  // An admin-only refusal says so; any other failure keeps its own words.
+  const [markFailedText, setMarkFailedText] = useState(null);
   // Read for every episode: a follow-up carried from an earlier one is a
   // goal task too (services/storyCarryForward), with or without event goals.
   useEffect(() => {
@@ -1765,7 +1768,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
       setSelfTalk(res?.data?.data?.self_talk?.tone ?? null);
     } catch (err) {
       console.error('[EpisodeScript] self-talk save failed:', err);
-      setSelfTalkFailed(true);
+      setSelfTalkFailed(adminOnlyMessage(err) || true);
     } finally {
       setSelfTalkSaving(null);
     }
@@ -1776,6 +1779,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     if (marking) return;
     setMarking(c.key);
     setMarkFailed(null);
+    setMarkFailedText(null);
     try {
       const res = await api.put(`/api/v1/episode-brief/${episodeId}/cover-marks`, { key: c.markKey, covered, ...(covered && c.beat ? { beat: c.beat } : {}) });
       const marks = res?.data?.data?.cover_marks;
@@ -1783,6 +1787,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
     } catch (err) {
       console.error('[EpisodeScript] cover mark failed:', err);
       setMarkFailed(c.key);
+      setMarkFailedText(adminOnlyMessage(err));
     } finally {
       setMarking(null);
     }
@@ -3247,7 +3252,7 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
                           </span>
                           {byYou}
                           <span className="esp-cover-actions">{markButton}</span>
-                          {markFailed === c.key && <span className="esp-cover-fail" role="alert">Couldn&apos;t save your mark. Try again.</span>}
+                          {markFailed === c.key && <span className="esp-cover-fail" role="alert">{markFailedText || <>Couldn&apos;t save your mark. Try again.</>}</span>}
                         </span>
                       ) : goal ? (
                         <span className="esp-cover-goal">
@@ -3277,14 +3282,14 @@ export default function EpisodeScriptTab({ episode, show, onSaved, onDirtyChange
                             {markButton}
                           </span>
                           {tickFailed.has(c.key) && <span className="esp-cover-fail" role="alert">Couldn&apos;t tick it. Try again.</span>}
-                          {markFailed === c.key && <span className="esp-cover-fail" role="alert">Couldn&apos;t save your mark. Try again.</span>}
+                          {markFailed === c.key && <span className="esp-cover-fail" role="alert">{markFailedText || <>Couldn&apos;t save your mark. Try again.</>}</span>}
                         </span>
                       ) : (
                         <span className="esp-cover-goal">
                           <span><strong>{c.source}</strong> {c.label}{c.beat ? <span className="esp-cover-beat"> · Beat {c.beat}</span> : null}</span>
                           {byYou}
                           <span className="esp-cover-actions">{markButton}</span>
-                          {markFailed === c.key && <span className="esp-cover-fail" role="alert">Couldn&apos;t save your mark. Try again.</span>}
+                          {markFailed === c.key && <span className="esp-cover-fail" role="alert">{markFailedText || <>Couldn&apos;t save your mark. Try again.</>}</span>}
                         </span>
                       )}
                     </li>

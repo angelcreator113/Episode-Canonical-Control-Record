@@ -257,14 +257,14 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
     {
       id: 'W5', existing: true,
       setup: async (ctx) => { ctx.ev = await makeEvent({ name: 'Velour Gala' }); },
-      drive: async (ctx) => auth(request(app).post(`/api/v1/world/${show}/events/${ctx.ev}/inject`)).send({ episode_id: ctx.ep }),
+      drive: async (ctx) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${ctx.ev}/inject`)).send({ episode_id: ctx.ep }),
       // The tag as the route built it (its response's event_tag), on the lines after beat 6's header.
       expected: (res) => withTag(FIXTURE, '## BEAT: 6 · Strategic Reaction', res.body.event_tag),
     },
     {
       id: 'W6', created: true,
       setup: async (ctx) => { ctx.ev = await makeEvent(); },
-      drive: async (ctx) => auth(request(app).post(`/api/v1/world/${show}/events/${ctx.ev}/generate-episode`)).send({ draft_script: true }),
+      drive: async (ctx) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${ctx.ev}/generate-episode`)).send({ draft_script: true }),
       expected: null,
     },
     {
@@ -276,7 +276,7 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
     {
       id: 'W8', created: true,
       setup: async (ctx) => { ctx.ev = await makeEvent(); },
-      drive: async (ctx) => auth(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [ctx.ev], draft_script: true }),
+      drive: async (ctx) => asAdmin(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [ctx.ev], draft_script: true }),
       expected: null,
     },
     {
@@ -819,7 +819,7 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
   });
 
   describe('W5: inject keeps its beat (C4, N6)', () => {
-    const inject = (ev, ep) => auth(request(app).post(`/api/v1/world/${show}/events/${ev}/inject`)).send({ episode_id: ep });
+    const inject = (ev, ep) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/inject`)).send({ episode_id: ep });
     const linkOf = async (ev) => (await rows(`SELECT used_in_episode_id, times_used FROM world_events WHERE id = :ev`, { ev }))[0];
     // The skeleton writers' named headers; STAKES_INTENTION is canonical beat 6.
     const NAMED = '## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me."\n\n## BEAT: STAKES_INTENTION\nPrime: "This is the one."\n\n## BEAT: TRANSFORMATION\nLala: "Closet time."';
@@ -931,7 +931,7 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
     test('W6: the episode in the answer has the drafted script', async () => {
       const ev = await makeEvent();
       const before = await allEpisodeIds();
-      const res = await auth(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`)).send({ draft_script: true });
+      const res = await asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`)).send({ draft_script: true });
       expect(res.status).toBe(201);
       const [ep] = await newEpisodesOf(before);
       const row = await episodeRow(ep);
@@ -953,7 +953,7 @@ const SCHEMA = `a1c_r1_${crypto.randomUUID().slice(0, 8)}`;
     test('W8: the answer says it drafted, with the saved script\'s revision', async () => {
       const ev = await makeEvent();
       const before = await allEpisodeIds();
-      const res = await auth(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [ev], draft_script: true });
+      const res = await asAdmin(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [ev], draft_script: true });
       expect(res.status).toBe(201);
       const [ep] = await newEpisodesOf(before);
       const row = await episodeRow(ep);

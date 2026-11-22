@@ -10,7 +10,7 @@ import { useContext, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import AuthContext from '../../contexts/AuthContext';
-import { isAdmin } from '../../utils/authGroups';
+import { isAdmin, adminOnlyMessage } from '../../utils/authGroups';
 import { S, EVENT_TYPE_ICONS } from './producerStyles';
 import { seasonPageHref } from '../../lib/seasonPage';
 import { InvitationButton, InvitationStyleFields } from '../../pages/InvitationGenerator';
@@ -775,7 +775,7 @@ Return action "enhance" with new_value as a JSON object containing ALL fields li
                           } catch (err) {
                             const status = err.response?.status;
                             const data = err.response?.data || {};
-                            setToast('Failed: ' + (data.error || err.message));
+                            setToast(adminOnlyMessage(err) || 'Failed: ' + (data.error || err.message));
                             // Stale link recovery — backend cleared the
                             // orphan used_in_episode_id; reload events so
                             // the now-detached row no longer shows this

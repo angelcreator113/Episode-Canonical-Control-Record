@@ -13,7 +13,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { findTermsLockEpisode, termsLockedBody, episodeLabel } = require('../../utils/eventTermsLock');
 const { loadScopedEvent } = require('../../utils/eventScope');
 const { lockLiveEvent, eventDeletedBody, EVENT_DELETED_CODE } = require('../../utils/eventEpisodeLink');
@@ -116,7 +116,7 @@ function injectedScript(row, injection) {
 // Inject an event into an episode's script as [EVENT:] tag
 // ═══════════════════════════════════════════
 
-router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/inject', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const { episode_id } = req.body;
@@ -306,7 +306,7 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, async (req, re
 // an attached event's scene set to its episode (F2), or link the one Evoni
 // chose (F3): body { scene_set_id? }. 409 when the event is not attached to
 // an episode. The response's scene_set says what happened.
-router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const models = await getModels();
@@ -352,7 +352,7 @@ router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, async 
 // terms, any commitment, or anything in production that still depends on
 // it. Every outcome is written to the activity log. Not gated by the attach
 // switch: removing is always allowed where it is safe.
-router.post('/world/:showId/events/:eventId/detach-episode', requireAuth, async (req, res) => {
+router.post('/world/:showId/events/:eventId/detach-episode', requireAuth, authorize(['ADMIN']), async (req, res) => {
   const secondaryEvents = require('../../services/episodeSecondaryEvents');
   try {
     const { showId, eventId } = req.params;
