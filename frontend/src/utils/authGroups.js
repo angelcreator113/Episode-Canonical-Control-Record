@@ -7,6 +7,15 @@
  * authorize() in src/middleware/auth.js. Pool groups: admin, editor, viewer.
  */
 
+// What a page shows when the server kept a scene, set or footage write for
+// an admin (pass it to adminOnlyMessage below), and the notice on a page a
+// signed-in person may open but not edit. Display only.
+export const SCENE_ADMIN_ONLY_MESSAGE = 'Only an admin can change scenes, sets or footage.';
+export const VIEW_ONLY_NOTICE = 'View-only — Admin editing required';
+export function sceneAdminOnlyMessage(err) {
+  return adminOnlyMessage(err, SCENE_ADMIN_ONLY_MESSAGE);
+}
+
 export const userInGroup = (user, group) => {
   if (!user || !Array.isArray(user.groups) || typeof group !== 'string') return false;
   const wanted = group.toLowerCase();

@@ -11,6 +11,7 @@ import { purposeLines } from '../../lib/seasonArc';
 import SceneSuggestionReview from '../episode/SceneSuggestionReview';
 import EpisodeTeaserSection from './EpisodeTeaserSection';
 import EpisodeMoneyCard from './EpisodeMoneyCard';
+import { sceneAdminOnlyMessage } from '../../utils/authGroups';
 import EpisodeStyleBoard from './EpisodeStyleBoard';
 import { NextStepBanner, OverviewTiles, StoryBriefCard, FromEventCard } from './EpisodeOverviewSummary';
 import { episodePlanning } from '../../utils/episodePlanning';
@@ -1166,7 +1167,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
               setSceneSets(data?.data || []);
               setSceneSuggestion(null);
             } catch (err) {
-              alert(err?.response?.data?.error || err.message || 'Failed to apply');
+              alert(sceneAdminOnlyMessage(err) || err?.response?.data?.error || err.message || 'Failed to apply');
             } finally {
               setApplyBusy(false);
             }

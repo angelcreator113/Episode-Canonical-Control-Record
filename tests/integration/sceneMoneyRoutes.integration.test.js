@@ -56,7 +56,7 @@ const shouldSkip =
       ADD COLUMN IF NOT EXISTS enhanced_still_url text,
       ADD COLUMN IF NOT EXISTS enhanced_video_url text`);
     token = TokenService.generateTokenPair({
-      id: 'test-user-scene-money', email: 'user@scene-money.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-scene-money', email: 'user@scene-money.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 

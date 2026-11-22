@@ -41,6 +41,7 @@ import { listBeats } from '../../utils/sceneSteps';
 import usePlanRefresh from '../BeatPlan/usePlanRefresh';
 import RemovedSetsBanner from '../BeatPlan/RemovedSetsBanner';
 import OpenInSceneSets from '../OpenInSceneSets';
+import { sceneAdminOnlyMessage } from '../../utils/authGroups';
 import './EpisodeScenesTab.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -293,7 +294,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       await reload();
     } catch (err) {
       console.error('Failed to save episode locations:', err);
-      toast(err.response?.data?.error || 'Could not save the locations', 'error');
+      toast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not save the locations', 'error');
     } finally {
       setSavingLocations(false);
     }

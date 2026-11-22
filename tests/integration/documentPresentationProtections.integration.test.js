@@ -91,7 +91,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     ['DELETE /ui-overlays/:showId/asset/:assetId', 'editor', (id) => request(app).delete(`/api/v1/ui-overlays/${show}/asset/${id}`)],
     ['POST …/reject-overlay', 'editor', (id) => request(app).post(`/api/v1/world/${show}/events/${event}/reject-overlay`).send({ assetId: id })],
     ['POST /roles/bulk-assign', 'admin', (id) => request(app).post('/api/v1/roles/bulk-assign').send({ assignments: [{ assetId: overlay, roleKey: 'BG.MAIN' }, { assetId: id, roleKey: 'BG.MAIN' }] })],
-    ['DELETE /episodes/:id/assets/:assetId', 'editor', (id) => request(app).delete(`/api/v1/episodes/${episode}/assets/${id}`)],
+    ['DELETE /episodes/:id/assets/:assetId', 'admin', (id) => request(app).delete(`/api/v1/episodes/${episode}/assets/${id}`)],
   ];
 
   describe('routes that find an asset by its id', () => {

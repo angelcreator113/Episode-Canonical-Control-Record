@@ -10,7 +10,7 @@ import useImage from 'use-image';
  * Uses a Group with a transparent Rect hit region so the object is always
  * clickable, draggable, and selectable — even while the image is loading.
  */
-export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd, onDragMove }) {
+export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd, onDragMove, readOnly = false }) {
   const src = obj.assetUrl || '';
   const [image, imageStatus] = useImage(src);
   const [displayImage, setDisplayImage] = useState(null);
@@ -72,7 +72,7 @@ export default function ImageObject({ obj, isSelected, onSelect, onTransformEnd,
       opacity={obj.opacity != null ? obj.opacity : 1}
       offsetX={obj.flipX ? w : 0}
       offsetY={obj.flipY ? h : 0}
-      draggable={!obj.isLocked}
+      draggable={!obj.isLocked && !readOnly}
       listening={!obj.isLocked}
       onClick={onSelect}
       onTap={onSelect}

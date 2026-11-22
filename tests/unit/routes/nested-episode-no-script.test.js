@@ -181,7 +181,21 @@ describe('linking assets to an episode (POST /api/footage/episodes/:episodeId/as
     expect(linked).toEqual([]);
   });
 
-  test.each(READERS.map((g) => [g.join('+'), g]))('%s: the assets are linked as before; the episode in the answer by name, never its script', async (_label, groups) => {
+  // Linking assets to an episode is an ADMIN's (P2a; Evoni, 2026-11-22).
+  // Anyone else is refused in middleware: nothing read, nothing linked, and
+  // no episode in the answer.
+  const NOT_ADMINS = READERS.filter((g) => !g.includes('ADMIN'));
+  test.each(NOT_ADMINS.map((g) => [g.join('+'), g]))('%s: 403, nothing is read or linked, and no episode in the answer', async (_label, groups) => {
+    const res = await post(token(groups));
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'Forbidden', message: 'User must be in one of these groups: ADMIN', code: 'AUTH_GROUP_REQUIRED' });
+    expect(linked).toEqual([]);
+    expect(db.Episode.findByPk).not.toHaveBeenCalled();
+    expect(db.Asset.findAll).not.toHaveBeenCalled();
+    noScript(res.body);
+  });
+
+  test.each([['ADMIN'], ['admin'], ['EDITOR', 'ADMIN']].map((g) => [g.join('+'), g]))('%s: the assets are linked as before; the episode in the answer by name, never its script', async (_label, groups) => {
     const res = await post(token(groups));
     expect(res.status).toBe(200);
     expect(linked).toEqual([ASSET]);
