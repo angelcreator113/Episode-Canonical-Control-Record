@@ -88,6 +88,8 @@ const REQUIRE_AUTH_COUNTS = {
   // /:id/script-versions/:versionId, /:episodeId/scripts and
   // /:episodeId/scripts/:scriptType/versions) gained authorize(['ADMIN'])
   // beside the requireAuth they had (Evoni; F-AUTH-1 Amendment 2).
+  // +0 on 2026-11-22: POST /:episodeId/scripts gained authorize(['ADMIN'])
+  // beside the requireAuth it had (Evoni; F-AUTH-1 Amendment 3).
   'episodes.js': 117, // +2 POST /:id/style-sheet/distribution/site/image/withdraw and /check (ADMIN; 2026-11-15); +1 PATCH /:id/style-sheet/distribution/site/links (ADMIN; a published product's availability, 2026-11-15); +1 POST /:id/lookbook/images/from-pose, +2 the designs' GETs (2026-10-22); -1 GET /test-create removed (SEC-6, 2026-10-29)
   // 12 at CP2 close; +1 for POST /:episodeId/feed-moments/retry (Task #2220, requireAuth);
   // +3 for POST /:episodeId/dressed-angles/:angleId/{brief,generate,upload} (L10, §8(hh), requireAuth).
@@ -285,6 +287,12 @@ describe('Step 3 CP2 — Episodes cluster tier promotion', () => {
       expect(src).toMatch(new RegExp(String.raw`router\.get\('\/:id\/script-versions\/:versionId',\s*validateUUIDParam\('id'\),\s*validateUUIDParam\('versionId'\),\s*${ADMIN}`));
       expect(src).toMatch(new RegExp(String.raw`router\.get\(\s*'\/:episodeId\/scripts',\s*validateUUIDParam\('episodeId'\),\s*${ADMIN}\s*asyncHandler\(scriptsController\.getScriptsByEpisode\)`));
       expect(src).toMatch(new RegExp(String.raw`router\.get\(\s*'\/:episodeId\/scripts\/:scriptType\/versions',\s*validateUUIDParam\('episodeId'\),\s*${ADMIN}\s*asyncHandler\(scriptsController\.getScriptVersions\)`));
+    });
+
+    // Evoni, 2026-11-22; F-AUTH-1 Amendment 3 (the script library's writes).
+    test('episodes.js — POST /:episodeId/scripts carries requireAuth + authorize([\'ADMIN\']), after its validator', () => {
+      const src = readSrc('episodes.js');
+      expect(src).toMatch(new RegExp(String.raw`router\.post\(\s*'\/:episodeId\/scripts',\s*validateUUIDParam\('episodeId'\),\s*${ADMIN}\s*asyncHandler\(scriptsController\.createScript\)`));
     });
 
     // The POST and the DELETE became an ADMIN's with the reads (Evoni, 2026-11-22;
