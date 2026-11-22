@@ -86,7 +86,7 @@ function track(promise) {
   }
 
   beforeAll(() => {
-    token = TokenService.generateTokenPair({ id: 'test-user-relink', email: 'relink@test.dev', name: 'Relink', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-user-relink', email: 'relink@test.dev', name: 'Relink', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   });
   beforeEach(() => {
     jest.spyOn(console, 'log').mockImplementation(() => {});

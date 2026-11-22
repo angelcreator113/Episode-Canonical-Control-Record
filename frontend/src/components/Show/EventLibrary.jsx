@@ -29,7 +29,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MoreHorizontal, ArrowRight, Plus, Lightbulb, AlertTriangle, Search, ChevronDown } from 'lucide-react';
 import api from '../../services/api';
 import AuthContext from '../../contexts/AuthContext';
-import { isAdmin } from '../../utils/authGroups';
+import { isAdmin, adminOnlyMessage } from '../../utils/authGroups';
 import { S, isFailureToast } from './producerStyles';
 import { InvitationButton } from '../../pages/InvitationGenerator';
 import EventOutfitPicker from '../EventOutfitPicker';
@@ -660,7 +660,7 @@ The revised event should feel like a completely different experience from the si
       }
     } catch (err) {
       console.error('[WorldAdmin] scene set retry failed:', err);
-      setSceneSetReconnect((cur) => ({ ...(cur || {}), eventId, reason: err.response?.data?.error || err.message }));
+      setSceneSetReconnect((cur) => ({ ...(cur || {}), eventId, reason: adminOnlyMessage(err) || err.response?.data?.error || err.message }));
     } finally { setReconnecting(false); }
   };
 
@@ -699,7 +699,7 @@ The revised event should feel like a completely different experience from the si
         setError(msg);
       }
     } catch (err) {
-      const msg = err.response?.data?.error || err.response?.data?.message || err.message;
+      const msg = adminOnlyMessage(err) || err.response?.data?.error || err.response?.data?.message || err.message;
       setError(msg);
       console.error('Inject failed:', err.response?.status, msg);
     } finally { setInjecting(false); }
@@ -903,7 +903,7 @@ The revised event should feel like a completely different experience from the si
                       setToast(res.data.error || 'Failed');
                     }
                   } catch (err) {
-                    setToast(err?.offerDecisionCancelled ? err.message : 'Multi-event generate failed: ' + (err.response?.data?.error || err.message));
+                    setToast(err?.offerDecisionCancelled ? err.message : adminOnlyMessage(err) || 'Multi-event generate failed: ' + (err.response?.data?.error || err.message));
                   }
                   setTimeout(() => setToast(null), 6000);
                 }} style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700, borderRadius: 6, border: 'none', background: 'var(--lala-lavender)', color: 'var(--text-inverse)', cursor: 'pointer' }}>
@@ -1052,7 +1052,7 @@ The revised event should feel like a completely different experience from the si
                                 } else {
                                   setToast(res.data.error || 'Failed');
                                 }
-                              } catch (err) { setToast('Regenerate failed: ' + (err.response?.data?.error || err.message)); }
+                              } catch (err) { setToast(adminOnlyMessage(err) || 'Regenerate failed: ' + (err.response?.data?.error || err.message)); }
                               setTimeout(() => setToast(null), 5000);
                             }} style={S.menuItem}>♻️ Regenerate Episode</button>
                           )}

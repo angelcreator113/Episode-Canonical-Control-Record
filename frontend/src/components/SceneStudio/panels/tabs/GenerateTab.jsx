@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Sparkles, Loader, Image, History, Wand2, Trash2, AlertCircle, CheckCircle, Scissors, RotateCcw, Info, Upload, RefreshCw, Frame, Palette, Crop, Layers } from 'lucide-react';
 import api from '../../../../services/api';
+import { adminOnlyMessage, SCENE_ADMIN_ONLY_MESSAGE } from '../../../../utils/authGroups';
 
 // A source image uploaded for Transform is a scene frame: one of the types
 // POST /api/v1/assets accepts (routes/assets.js VALID_ASSET_TYPES).
@@ -235,7 +236,7 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
       }
     } catch (err) {
       console.error('Generate error:', err);
-      const msg = err.response?.data?.error || 'Generation failed.';
+      const msg = adminOnlyMessage(err, SCENE_ADMIN_ONLY_MESSAGE) || err.response?.data?.error || 'Generation failed.';
       const status = err.response?.status;
       // User-friendly error messages
       if (msg.includes('limit')) {
@@ -346,7 +347,7 @@ export default function GenerateTab({ sceneId, contextType, canvasWidth, canvasH
       }
     } catch (err) {
       console.error('Transform error:', err);
-      const msg = err.response?.data?.error || 'Transform failed.';
+      const msg = adminOnlyMessage(err, SCENE_ADMIN_ONLY_MESSAGE) || err.response?.data?.error || 'Transform failed.';
       const status = err.response?.status;
       if (status === 429) {
         setError(msg.includes('limit') ? msg : 'Rate limit reached. Please wait a few minutes.');

@@ -136,7 +136,7 @@ const fakeClient = () => ({ messages: { create: jest.fn(async () => ({ content: 
     if (!(await rows("SELECT to_regclass('public.season_specials') AS t"))[0].t) {
       await specialsMigration.up(sequelize.getQueryInterface(), Sequelize);
     }
-    token = TokenService.generateTokenPair({ id: 'test-user-freeze', email: 'freeze@test.dev', name: 'Freeze Test', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-user-freeze', email: 'freeze@test.dev', name: 'Freeze Test', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
   });
   beforeEach(() => {
     jest.spyOn(console, 'log').mockImplementation(() => {});

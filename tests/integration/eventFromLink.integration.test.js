@@ -119,7 +119,7 @@ const SCRIPT_NO_TAG = '## BEAT: OPENING\nLala: Tonight is the gala.\n';
   it('end to end: inject into an empty script, save a script without a tag, evaluate', async () => {
     const { show, ep, event } = await seed({ linked: false, script: '' });
 
-    const injected = await request(app).post(`/api/v1/world/${show}/events/${event}/inject`).set(auth).send({ episode_id: ep });
+    const injected = await request(app).post(`/api/v1/world/${show}/events/${event}/inject`).set(admin).send({ episode_id: ep });
     expect(injected.status).toBe(200);
     expect(injected.body.script_tagged).toBe(false);
 

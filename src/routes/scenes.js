@@ -5,6 +5,7 @@ const sceneStudioController = require('../controllers/sceneStudioController');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateUUIDParam } = require('../middleware/requestValidation');
 const { requireAuth } = require('../middleware/auth');
+const { authorize } = require('../middleware/auth');
 
 console.log('🔵 SCENES ROUTES FILE LOADING... [TIMESTAMP:', new Date().toISOString(), ']');
 console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:id LAST');
@@ -30,6 +31,7 @@ router.get('/', requireAuth, asyncHandler(sceneController.listScenes));
 router.post(
   '/',
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.createScene)
 );
 
@@ -38,6 +40,7 @@ router.post(
   '/:id/duplicate',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.duplicateScene)
 );
 
@@ -50,6 +53,7 @@ router.put(
   '/:id/status',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.updateSceneStatus)
 );
 
@@ -58,6 +62,7 @@ router.post(
   '/:id/characters',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.addCharacter)
 );
 
@@ -66,6 +71,7 @@ router.delete(
   '/:id/characters/:characterName',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.removeCharacter)
 );
 
@@ -74,6 +80,7 @@ router.put(
   '/:id/thumbnail',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.setSceneThumbnail)
 );
 
@@ -82,6 +89,7 @@ router.put(
   '/:id/assets',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.updateSceneAssets)
 );
 
@@ -97,6 +105,7 @@ router.post(
   '/:id/assets',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.addSceneAsset)
 );
 
@@ -106,6 +115,7 @@ router.delete(
   validateUUIDParam('id'),
   validateUUIDParam('assetId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.removeSceneAsset)
 );
 
@@ -115,6 +125,7 @@ router.patch(
   validateUUIDParam('id'),
   validateUUIDParam('assetId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.updateSceneAsset)
 );
 
@@ -135,6 +146,7 @@ router.put(
   '/:id/canvas',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.saveCanvas)
 );
 
@@ -143,6 +155,7 @@ router.post(
   '/:id/generate-object',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.generateObject)
 );
 
@@ -151,6 +164,7 @@ router.post(
   '/:id/transform-object',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.transformObject)
 );
 
@@ -159,6 +173,7 @@ router.post(
   '/:id/regenerate-background',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.regenerateBackground)
 );
 
@@ -167,6 +182,7 @@ router.post(
   '/:id/suggest-objects',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.suggestObjects)
 );
 
@@ -175,6 +191,7 @@ router.post(
   '/:id/inpaint',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.inpaint)
 );
 
@@ -183,6 +200,7 @@ router.post(
   '/:id/segment',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.segmentObject)
 );
 
@@ -191,6 +209,7 @@ router.post(
   '/:id/animate',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.animateScene)
 );
 
@@ -199,6 +218,7 @@ router.post(
   '/:id/generate-depth',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.generateDepth)
 );
 
@@ -215,6 +235,7 @@ router.post(
   '/:id/objects',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.addObject)
 );
 
@@ -224,6 +245,7 @@ router.patch(
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.updateObject)
 );
 
@@ -233,6 +255,7 @@ router.delete(
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.deleteObject)
 );
 
@@ -242,6 +265,7 @@ router.post(
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.duplicateObject)
 );
 
@@ -251,6 +275,7 @@ router.post(
   validateUUIDParam('id'),
   validateUUIDParam('objectId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.createVariant)
 );
 
@@ -260,6 +285,7 @@ router.patch(
   validateUUIDParam('id'),
   validateUUIDParam('groupId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneStudioController.activateVariant)
 );
 
@@ -277,6 +303,7 @@ router.put(
   '/:id',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.updateScene)
 );
 
@@ -285,6 +312,7 @@ router.delete(
   '/:id',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.deleteScene)
 );
 

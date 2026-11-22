@@ -75,7 +75,7 @@ const SCHEDULE = { day: 'sun', time: '10:00', cadence: 'weekly', first_release: 
   const pencil = async (show, arcId, n, eventId) => auth(request(app).put(`/api/v1/world/${show}/season/slots/${await slotId(arcId, n)}/event`)).send({ event_id: eventId });
   const roadmap = async (show) => (await auth(request(app).get(`/api/v1/world/${show}/season/roadmap`))).body.roadmap;
   const releaseView = async (show) => (await auth(request(app).get(`/api/v1/world/${show}/release-schedule`))).body.data;
-  const startEpisode = (show, eventId) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`)).send({ draft_script: false });
+  const startEpisode = (show, eventId) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`)).send({ draft_script: false });
   const addSpecial = (show, body) => auth(request(app).post(`/api/v1/world/${show}/season/specials`)).send(body);
   const allSlots = (map) => map.phases.flatMap((p) => p.slots);
 

@@ -4419,3 +4419,64 @@
     height: 32px;
   }
 }
+
+/* ── View-only (anyone signed in who is not an admin) ──
+   The page opens and shows the scene; the editing panels are inert and
+   greyed, and this notice says why. Mobile first: it wraps at 375px. */
+.scene-studio-view-only-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(184, 150, 46, 0.12);
+  border-bottom: 1px solid rgba(184, 150, 46, 0.45);
+  color: var(--lala-ink, #2C2C2C);
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.35;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.scene-studio-view-only-notice svg {
+  flex-shrink: 0;
+  color: var(--lala-gold, #B8962E);
+}
+
+/* A viewer's panels stay readable and scrollable; the disabled fieldset
+   inside disables every control. It must not change the panel's layout. */
+.scene-studio-view-only-fieldset {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.scene-studio--view-only [data-view-only='true'] :disabled,
+.scene-studio--view-only .scene-studio-tool-btn-labeled:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* A viewer's bottom bar holds only the panel toggles, which a wide screen
+   does not show: without this it is an empty strip. */
+@media (min-width: 768px) {
+  .scene-studio--view-only .scene-studio-action-bar {
+    display: none;
+  }
+}
+
+.scene-studio-overlay-note {
+  margin: 6px 0 0;
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-xs);
+  color: var(--lala-gold, #B8962E);
+}

@@ -65,7 +65,7 @@ const DRAFT = { story_purpose: 'Lala is tested by her first paid invite', career
     await slotsMigration.up(sequelize.getQueryInterface(), Sequelize);
     await contextMigration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-season-intent', email: 'user@season-intent.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-season-intent', email: 'user@season-intent.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {

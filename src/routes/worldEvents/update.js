@@ -13,7 +13,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth, authorize } = require('../../middleware/auth');
+const { requireAuth, authorize, userInGroup } = require('../../middleware/auth');
 const { mergeCanonConsequences } = require('../../utils/canonConsequencesMerge');
 const { parseExpectedVersion, versionMatches, staleSaveBody } = require('../../utils/eventVersion');
 const { normalizeRestrictions } = require('../../services/eventTermsService');
@@ -22,6 +22,7 @@ const { findTermsLockEpisode, changedLockedFields, termsLockedBody, LOCKED_EVENT
 const { syncDraftedDealType } = require('../../services/dealTypeDraftService');
 const { DEAL_TYPES, CATEGORY_VALUES, FORMAT_VALUES } = require('../../models/WorldEvent');
 const { loadScopedEvent } = require('../../utils/eventScope');
+const { episodeEventIdSql } = require('../../utils/episodeEventSql');
 const { getModels } = require('./helpers');
 const { assertEventRelinkAllowed, assertEpisodeAcceptsEventLink, isFrozenEpisodeError } = require('../../utils/frozenEpisode');
 const { RetryableConflictError, asRetryable } = require('../../utils/episodeLocks');
@@ -53,6 +54,40 @@ class EventPutRefusal extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+// The two fields of an event save that reach an episode: the episode link,
+// and the event's place once it has (or is being given) an episode. Changing
+// either is an ADMIN's (Evoni, 2026-11-22); every other field stays any
+// signed-in account's. The refusal names fields only, never the episode.
+const ADMIN_EVENT_FIELDS_MESSAGE = 'Only an admin can link an event to an episode or change the place of an event that has an episode.';
+const sameRef = (a, b) => String(a ?? '').toLowerCase() === String(b ?? '').toLowerCase();
+
+/**
+ * The episode-affecting fields this save would change, judged on the
+ * normalized incoming values against the locked stored row. A value sent
+ * unchanged is not a change. scene_set_id counts only when the event has an
+ * episode now (its stored link, or a live episode whose event this is, the
+ * predicate syncEpisodeEventLocation uses) or would have one after the save.
+ */
+async function adminOnlyEventChanges(sequelize, { eventId, stored, values, transaction }) {
+  const linkSent = values.used_in_episode_id !== undefined;
+  const linkChanged = linkSent && !sameRef(values.used_in_episode_id, stored.used_in_episode_id);
+  const setChanged = values.scene_set_id !== undefined && !sameRef(values.scene_set_id, stored.scene_set_id);
+  const fields = [];
+  if (linkChanged) fields.push('used_in_episode_id');
+  if (setChanged) {
+    const linkedAfter = !!(linkSent ? values.used_in_episode_id : stored.used_in_episode_id);
+    let linkedNow = !!stored.used_in_episode_id;
+    if (!linkedNow && !linkedAfter) {
+      const [rows] = await sequelize.query(
+        `SELECT 1 FROM episodes e WHERE e.deleted_at IS NULL AND ${episodeEventIdSql('e.id')} = :eventId LIMIT 1`,
+        { replacements: { eventId }, transaction });
+      linkedNow = !!rows?.[0];
+    }
+    if (linkedNow || linkedAfter) fields.push('scene_set_id');
+  }
+  return fields;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -552,10 +587,29 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // the event's linked episodes and the target (episode-first), then the
       // event, and refuses 409 EVENT_EPISODE_FROZEN; nothing in the request
       // is written. Re-sending the stored link, and clearing it, are as before.
+      // That guard answers with bodies that name an episode, so it runs only
+      // for an ADMIN. Anyone else changing the link is refused below, under
+      // the event's lock, before any other check can describe an episode.
+      // The group is asked only when the save carries such a change.
+      const isAdmin = () => userInGroup(req.user, 'ADMIN');
       const linkTo = replacements.used_in_episode_id;
-      if (linkTo) await assertRelinkUnlessStored(transaction, linkTo);
+      if (linkTo && isAdmin()) await assertRelinkUnlessStored(transaction, linkTo);
       const stored = await loadScopedEvent(models.sequelize, { showId, eventId, transaction, lock: true });
       if (!stored) throw new EventPutRefusal(404, { success: false, error: 'Event not found' });
+      // Episode-affecting fields are an ADMIN's (Evoni, 2026-11-22). Judged
+      // here, on the locked row, before the stale-save answer (which carries
+      // the event row, its episode link included), the terms lock, the Place
+      // lock and the reference checks, so the whole request is refused with
+      // nothing written and no body that names the episode.
+      if (replacements.used_in_episode_id !== undefined || replacements.scene_set_id !== undefined) {
+        const fields = await adminOnlyEventChanges(models.sequelize, { eventId, stored, values: replacements, transaction });
+        if (fields.length && !isAdmin()) {
+          throw new EventPutRefusal(403, {
+            success: false, code: 'AUTH_GROUP_REQUIRED', error: ADMIN_EVENT_FIELDS_MESSAGE, message: ADMIN_EVENT_FIELDS_MESSAGE, fields,
+          });
+        }
+      }
+
       if (expected.present && !versionMatches(stored.updated_at, expected.ms)) {
         const stale = new Error('Stale event save refused');
         stale.staleSave = true;
@@ -580,7 +634,18 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
           // Reopened terms (Reopen ruling, §8(cc); Task #2378): every locked
           // field but the episode link is editable until Save and relock.
           const reopened = await readTermsReopen(models.sequelize, eventId, { transaction });
-          const changed = changedLockedFields(compared, updates, lockEpisode)
+          // The episode link is compared as the route reads it (unwrapped,
+          // null-normalized, and the same id whatever its letter case), not
+          // as it was sent: the stored link sent back as { id } or { value }
+          // is not a change, and is never answered with the 409 below,
+          // whose body names the episode.
+          const lockUpdates = updates.used_in_episode_id === undefined ? updates : {
+            ...updates,
+            used_in_episode_id: sameRef(replacements.used_in_episode_id, stored.used_in_episode_id)
+              ? stored.used_in_episode_id
+              : (typeof replacements.used_in_episode_id === 'string' ? replacements.used_in_episode_id.toLowerCase() : replacements.used_in_episode_id),
+          };
+          const changed = changedLockedFields(compared, lockUpdates, lockEpisode)
             .filter((f) => !reopened || STAYS_LOCKED_WHILE_REOPENED.has(f));
           if (changed.length > 0) throw new EventPutRefusal(409, termsLockedBody(lockEpisode, changed));
         }
@@ -589,7 +654,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // L13 (§8(hh)): the scene set is part of the Place, editable after
       // Start Episode while the episode is a draft, locked once it is
       // accepted. The stored value re-sent is not a change.
-      if (replacements.scene_set_id !== undefined && String(stored.scene_set_id || '') !== String(replacements.scene_set_id || '')) {
+      if (replacements.scene_set_id !== undefined && !sameRef(stored.scene_set_id, replacements.scene_set_id)) {
         const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../../utils/placeLock');
         if (await isPlaceLocked(models.sequelize, eventId, { transaction })) {
           throw new EventPutRefusal(409, { success: false, error: PLACE_LOCKED_MESSAGE, code: PLACE_LOCKED_CODE });
@@ -612,7 +677,8 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     // beats follow (eighth audit), in the same transaction as the save.
     const followSceneSet = async (stored, transaction) => {
       const toSetId = replacements.scene_set_id;
-      if (toSetId && String(stored.scene_set_id || '') !== String(toSetId)) {
+      // The same set in another letter case is the same place: nothing follows.
+      if (toSetId && !sameRef(stored.scene_set_id, toSetId)) {
         await require('../../services/eventPlaceSync').syncEpisodeEventLocation(models.sequelize,
           { eventId, fromSetId: stored.scene_set_id || null, toSetId, transaction });
       }

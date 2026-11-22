@@ -18,6 +18,7 @@ import SceneBriefConfirm from '../components/SceneBriefConfirm';
 import useSpecBuild from '../hooks/useSpecBuild';
 import { sceneSetTiles, typeCounts, sectionsOf, angleHint, angleLine, episodeChips } from '../lib/sceneSetsSummary';
 import { uploadedAnglePayloads } from '../lib/angleUpload';
+import { sceneAdminOnlyMessage } from '../utils/authGroups';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -3836,7 +3837,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       await fetchSets();
     } catch (err) {
       console.error('[SceneSets] create failed:', err);
-      showToast(err.message || 'Failed to create location', 'error');
+      showToast(sceneAdminOnlyMessage(err) || err.message || 'Failed to create location', 'error');
     } finally {
       createInFlight.current = false;
       setCreating(false);
@@ -3870,7 +3871,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         setDeleting({ set, uses: err.response.data.uses });
         return;
       }
-      showToast(err.response?.data?.error || 'Failed to delete location', 'error');
+      showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Failed to delete location', 'error');
     }
   };
 
@@ -3893,7 +3894,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     } catch (err) {
       // The server's reason (another show's episode, one not found).
       console.error('[SceneSets] link episodes failed:', err);
-      showToast(err.response?.data?.error || 'Failed to link episodes', 'error');
+      showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Failed to link episodes', 'error');
     }
   };
 
@@ -3904,7 +3905,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       fetchSets();
     } catch (err) {
       console.error('[SceneSets] handleUnlinkEpisode failed:', err);
-      showToast('Failed to unlink episode', 'error');
+      showToast(sceneAdminOnlyMessage(err) || 'Failed to unlink episode', 'error');
     }
   };
 

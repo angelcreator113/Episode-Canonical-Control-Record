@@ -5,7 +5,7 @@ import { Text } from 'react-konva';
  * TextObject — Renders editable text on the Konva canvas.
  * Double-click to edit via a temporary HTML input overlay.
  */
-export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd, onUpdateObject, autoEdit, onClearAutoEdit }) {
+export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd, onUpdateObject, autoEdit, onClearAutoEdit, readOnly = false }) {
   const textRef = useRef(null);
   const hasAutoEdited = useRef(false);
 
@@ -14,7 +14,7 @@ export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, 
   const style = obj.styleData || {};
 
   const triggerEdit = () => {
-    if (obj.isLocked || !onUpdateObject) return;
+    if (obj.isLocked || readOnly || !onUpdateObject) return;
 
     const textNode = textRef.current;
     if (!textNode) return;
@@ -103,7 +103,7 @@ export default function TextObject({ obj, isSelected, onSelect, onTransformEnd, 
       align={style.align || 'left'}
       verticalAlign={style.verticalAlign || 'top'}
       opacity={obj.opacity != null ? obj.opacity : 1}
-      draggable={!obj.isLocked}
+      draggable={!obj.isLocked && !readOnly}
       listening={!obj.isLocked}
       onClick={onSelect}
       onTap={onSelect}

@@ -48,7 +48,7 @@ export default function ScriptSelfTalk({ tone = null, onChoose, saving = null, f
         {EFFECT[shown]}{' '}
         {tone ? 'Saved for this episode; choose it again to take it back.' : 'Honest by default: choose one to save it. Until then her stress is not changed by it.'}
       </p>
-      {failed && <p className="sst-fail" role="alert">Couldn&apos;t save her self-talk. Try again.</p>}
+      {failed && <p className="sst-fail" role="alert">{typeof failed === 'string' ? failed : <>Couldn&apos;t save her self-talk. Try again.</>}</p>}
     </section>
   );
 }

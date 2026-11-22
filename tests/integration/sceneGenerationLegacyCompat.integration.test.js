@@ -78,7 +78,7 @@ const settle = () => new Promise((r) => setTimeout(r, 300));
       ADD COLUMN IF NOT EXISTS enhanced_still_url text,
       ADD COLUMN IF NOT EXISTS enhanced_video_url text`);
     token = TokenService.generateTokenPair({
-      id: 'test-user-legacy-compat', email: 'user@legacy-compat.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-legacy-compat', email: 'user@legacy-compat.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 

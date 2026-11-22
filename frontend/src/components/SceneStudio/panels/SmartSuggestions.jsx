@@ -7,13 +7,16 @@ import sceneService from '../../../services/sceneService';
  * Shows at the bottom of CreationPanel when scene has background but few objects.
  * Each suggestion is a one-click shortcut to the Generate tab with a pre-filled prompt.
  */
-export default function SmartSuggestions({ sceneId, objectCount, hasBackground, onSuggestionClick, contextType }) {
+export default function SmartSuggestions({ sceneId, objectCount, hasBackground, onSuggestionClick, contextType, canEdit = false }) {
   const [suggestions, setSuggestions] = useState([]);
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Only show for scenes (not scene sets) with a background and < 4 objects
-  const shouldShow = contextType === 'scene' && hasBackground && objectCount < 4 && !dismissed && sceneId;
+  // Only show for scenes (not scene sets) with a background and < 4 objects.
+  // The suggestions are a paid call that only an admin's request is answered
+  // (403 for anyone else), and they lead to adding objects, which a viewer
+  // cannot do: so nothing is asked for unless the person can edit.
+  const shouldShow = canEdit && contextType === 'scene' && hasBackground && objectCount < 4 && !dismissed && sceneId;
 
   const fetchSuggestions = useCallback(async () => {
     if (!shouldShow || suggestions.length > 0) return;

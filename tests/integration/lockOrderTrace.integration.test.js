@@ -129,7 +129,7 @@ const KNOWN = [
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
 
   beforeAll(async () => {
-    token = TokenService.generateTokenPair({ id: 'test-user-lock-trace', email: 'trace@lock.dev', name: 'Trace', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-user-lock-trace', email: 'trace@lock.dev', name: 'Trace', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     await slotsMigration.up(sequelize.getQueryInterface(), Sequelize);
     if (!(await rows("SELECT to_regclass('public.season_specials') AS t"))[0].t) {
       await specialsMigration.up(sequelize.getQueryInterface(), Sequelize);

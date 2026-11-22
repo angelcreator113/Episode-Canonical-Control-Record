@@ -9,6 +9,7 @@ const logger = require('../utils/logger');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
+const { authorize } = require('../middleware/auth');
 const { EPISODE_NESTED_FIELDS } = require('../services/episodeReadFields');
 const { isDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 
@@ -47,7 +48,7 @@ const upload = multer({
  * POST /api/footage/upload
  * Upload raw video footage to S3 and create Scene record
  */
-router.post('/upload', requireAuth, upload.single('video'), async (req, res) => {
+router.post('/upload', requireAuth, authorize(['ADMIN']), upload.single('video'), async (req, res) => {
   try {
     const { episodeId, filename } = req.body;
     const file = req.file;
@@ -171,7 +172,7 @@ router.get('/scenes/:episodeId', requireAuth, async (req, res) => {
  * POST /api/footage/episodes/:episodeId/assets
  * Link assets to an episode from the asset library
  */
-router.post('/episodes/:episodeId/assets', requireAuth, async (req, res) => {
+router.post('/episodes/:episodeId/assets', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { assetIds } = req.body;
@@ -260,7 +261,7 @@ router.get('/episodes/:episodeId/assets', requireAuth, async (req, res) => {
  * DELETE /api/footage/episodes/:episodeId/assets/:assetId
  * Unlink a specific asset from an episode
  */
-router.delete('/episodes/:episodeId/assets/:assetId', requireAuth, async (req, res) => {
+router.delete('/episodes/:episodeId/assets/:assetId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId, assetId } = req.params;
     const { Episode, Asset } = require('../models');
@@ -293,7 +294,7 @@ router.delete('/episodes/:episodeId/assets/:assetId', requireAuth, async (req, r
  * DELETE /api/footage/scenes/:sceneId
  * Delete a scene and its associated S3 file
  */
-router.delete('/scenes/:sceneId', requireAuth, async (req, res) => {
+router.delete('/scenes/:sceneId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { sceneId } = req.params;
     console.log('DELETE request for scene:', sceneId);

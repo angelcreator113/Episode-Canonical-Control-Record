@@ -87,7 +87,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(ctx.body).toMatchObject({ ready: false, message: '14 beats still unlocked.' });
     expect(ctx.body.coverage.complete).toBe(true);
 
-    expect((await auth(request(app).post(`/api/v1/episode-brief/${ep}/plan/lock-all`))).status).toBe(200);
+    expect((await asAdmin(request(app).post(`/api/v1/episode-brief/${ep}/plan/lock-all`))).status).toBe(200);
     ctx = await scriptContext(ep);
     expect(ctx.body).toMatchObject({ ready: true, message: 'All beats locked — ready for script generation.' });
   });

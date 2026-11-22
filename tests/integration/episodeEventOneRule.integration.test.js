@@ -104,7 +104,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   it('WorldAdmin inject: another event is not injected into an episode that has its event; the brief\'s own event is, and every reader names it', async () => {
-    const token = TokenService.generateTokenPair({ id: 'test-user-one-rule', email: 'evoni@one-rule.dev', name: 'One Rule', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    const token = TokenService.generateTokenPair({ id: 'test-user-one-rule', email: 'evoni@one-rule.dev', name: 'One Rule', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     const ep = await episode();
     // The episode's brief names an event whose stamp is gone (an unlink or a
     // merge cleared it). Injecting another event would make it a second

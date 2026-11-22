@@ -194,21 +194,24 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       );
     });
 
-    test('POST /events/:eventId/generate-episode promoted (D4: optionalAuth + aiRateLimiter → requireAuth + aiRateLimiter)', () => {
+    // An ADMIN's since 2026-11-22 (Evoni; P1): authorize(['ADMIN']) sits
+    // between requireAuth and aiRateLimiter on the three Start routes and on
+    // look/generate below.
+    test('POST /events/:eventId/generate-episode is an ADMIN\'s (requireAuth + authorize + aiRateLimiter)', () => {
       expect(src).toMatch(
-        /router\.post\(['"]\/world\/:showId\/events\/:eventId\/generate-episode['"],\s*requireAuth,\s*aiRateLimiter,/,
+        /router\.post\(['"]\/world\/:showId\/events\/:eventId\/generate-episode['"],\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/,
       );
     });
 
-    test('POST /events/generate-episode-from-many preserved verbatim (was already requireAuth + aiRateLimiter)', () => {
+    test('POST /events/generate-episode-from-many is an ADMIN\'s (requireAuth + authorize + aiRateLimiter)', () => {
       expect(src).toMatch(
-        /router\.post\(['"]\/world\/:showId\/events\/generate-episode-from-many['"],\s*requireAuth,\s*aiRateLimiter,/,
+        /router\.post\(['"]\/world\/:showId\/events\/generate-episode-from-many['"],\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/,
       );
     });
 
-    test('POST /events/:eventId/regenerate-episode promoted (D4: optionalAuth + aiRateLimiter → requireAuth + aiRateLimiter)', () => {
+    test('POST /events/:eventId/regenerate-episode is an ADMIN\'s (requireAuth + authorize + aiRateLimiter)', () => {
       expect(src).toMatch(
-        /router\.post\(['"]\/world\/:showId\/events\/:eventId\/regenerate-episode['"],\s*requireAuth,\s*aiRateLimiter,/,
+        /router\.post\(['"]\/world\/:showId\/events\/:eventId\/regenerate-episode['"],\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/,
       );
     });
 
@@ -244,9 +247,9 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     });
 
     // L7-L9 (§8(hh)): "Generate this look" (an image call).
-    test('POST /events/:eventId/look/generate uses requireAuth + aiRateLimiter (L7)', () => {
+    test('POST /events/:eventId/look/generate is an ADMIN\'s (L7; requireAuth + authorize + aiRateLimiter)', () => {
       expect(src).toMatch(
-        /router\.post\(['"]\/world\/:showId\/events\/:eventId\/look\/generate['"],\s*requireAuth,\s*aiRateLimiter,/,
+        /router\.post\(['"]\/world\/:showId\/events\/:eventId\/look\/generate['"],\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/,
       );
     });
 
@@ -272,8 +275,11 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     // 21 with reroll-invitation-text and reroll-invitation-background (2026-10-24).
     // 22 with documents/:type/lines/:index/redraft (2026-10-24).
     // 23 with fill-missing (flow.js, 2026-10-25).
+    // Four of the 23 carry authorize(['ADMIN']) between the two (P1, 2026-11-22).
     test('all 23 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
-      const aiPattern = /router\.post\([^)]*requireAuth,\s*aiRateLimiter,/g;
+      const aiPattern = /router\.post\([^)]*requireAuth,\s*(?:authorize\(\['ADMIN'\]\),\s*)?aiRateLimiter,/g;
+      const adminAi = src.match(/router\.post\([^)]*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/g) || [];
+      expect(adminAi.length).toBe(4);
       const matches = src.match(aiPattern) || [];
       expect(matches.length).toBe(23);
     });

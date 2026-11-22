@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../../services/api';
 import SceneBriefConfirm from '../SceneBriefConfirm';
+import { sceneAdminOnlyMessage } from '../../utils/authGroups';
 import './DressedAngles.css';
 
 // While an angle is dressing, the list refreshes every pollMs until each one
@@ -90,7 +91,7 @@ export default function DressedAngles({ episodeId, setId, onToast, pollMs = POLL
       onToast?.(`Dressing ${angle.name || angle.label} from the event's look`);
     } catch (err) {
       console.error('[DressedAngles] generate failed:', err);
-      onToast?.(err.response?.data?.error || 'Could not dress the angle', 'error');
+      onToast?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not dress the angle', 'error');
     }
     setBusy(null);
     await load();
@@ -105,7 +106,7 @@ export default function DressedAngles({ episodeId, setId, onToast, pollMs = POLL
       onToast?.(`${angle.name || angle.label}: dressed image uploaded`);
     } catch (err) {
       console.error('[DressedAngles] upload failed:', err);
-      onToast?.(err.response?.data?.error || 'Upload failed', 'error');
+      onToast?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Upload failed', 'error');
     }
     setBusy(null);
     await load();

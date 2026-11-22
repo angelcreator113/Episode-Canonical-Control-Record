@@ -120,14 +120,14 @@ describe('reopen eligibility, pure', () => {
   const from = (r) => r.set('X-Forwarded-For', `10.61.${Math.floor(testNumber / 250)}.${(testNumber % 250) + 1}`);
   const auth = (r) => from(r).set('Authorization', `Bearer ${token}`);
   const asAdmin = (r) => from(r).set('Authorization', `Bearer ${adminToken}`);
-  const putEvent = (show, eventId, body) => auth(request(app).put(`/api/v1/world/${show}/events/${eventId}`)).send(body);
+  const putEvent = (show, eventId, body) => asAdmin(request(app).put(`/api/v1/world/${show}/events/${eventId}`)).send(body);
   const startMany = (show, ids, { key, body = {} } = {}) => {
-    const r = auth(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`));
+    const r = asAdmin(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`));
     if (key) r.set('Idempotency-Key', key);
     return r.send({ event_ids: ids, ...body });
   };
-  const startOne = (show, eventId) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`)).send({ draft_script: false });
-  const detach = (show, eventId, body = { reason: 'Picked by mistake' }) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/detach-episode`)).send(body);
+  const startOne = (show, eventId) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`)).send({ draft_script: false });
+  const detach = (show, eventId, body = { reason: 'Picked by mistake' }) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${eventId}/detach-episode`)).send(body);
   const eventRow = async (id) => (await rows('SELECT name, description, used_in_episode_id, status, prestige FROM world_events WHERE id = :id', { id }))[0];
   const linkOf = async (id) => (await rows('SELECT used_in_episode_id FROM world_events WHERE id = :id', { id }))[0]?.used_in_episode_id ?? null;
   const episodesOf = (show) => rows('SELECT id FROM episodes WHERE show_id = :show AND deleted_at IS NULL', { show });
@@ -503,7 +503,7 @@ describe('reopen eligibility, pure', () => {
   });
 
   describe('inject', () => {
-    const inject = (show, eventId, episode) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/inject`)).send({ episode_id: episode });
+    const inject = (show, eventId, episode) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${eventId}/inject`)).send({ episode_id: episode });
     test('a second event is never injected (it would replace the script\'s event tag): refused, nothing written, switch off or on', async () => {
       const f = await seed();
       await run(`UPDATE episodes SET script_content = '[EVENT: name="Studio Session"]' WHERE id = :id`, { id: f.episode });
@@ -783,7 +783,7 @@ describe('reopen eligibility, pure', () => {
       const b = await addEvent(show, 'Second');
       const started = await startMany(show, [a, b]);
       expect(started.status).toBe(201);
-      const res = await auth(request(app).post(`/api/v1/world/${show}/events/${a}/regenerate-episode`)).send({});
+      const res = await asAdmin(request(app).post(`/api/v1/world/${show}/events/${a}/regenerate-episode`)).send({});
       expect(res.status).toBe(409);
       expect(res.body).toMatchObject({ code: 'EPISODE_HAS_SECONDARY_EVENTS', events: [{ id: b, name: 'Second' }] });
       expect(await episodesOf(show)).toHaveLength(1);
@@ -990,7 +990,7 @@ describe('reopen eligibility, pure', () => {
 
       test('regenerate from an event that is not the episode\'s primary is refused: the primary is not left behind', async () => {
         const f = await disagreeing();
-        const res = await auth(request(app).post(`/api/v1/world/${f.show}/events/${f.second}/regenerate-episode`)).send({});
+        const res = await asAdmin(request(app).post(`/api/v1/world/${f.show}/events/${f.second}/regenerate-episode`)).send({});
         expect(res.status).toBe(409);
         expect(res.body).toMatchObject({ code: 'EPISODE_HAS_SECONDARY_EVENTS', primary_event_id: f.first });
         expect((await rows('SELECT deleted_at FROM episodes WHERE id = :episode', f))[0].deleted_at).toBeNull();
@@ -1083,7 +1083,7 @@ describe('reopen eligibility, pure', () => {
         const log = await audit(f.second);
         expect(log).toHaveLength(1);
         expect(log[0]).toMatchObject({
-          user_id: 'test-user-secondary', action: 'detach_secondary_event', resource_type: 'world_event', resource_id: f.second,
+          user_id: 'test-admin-secondary', action: 'detach_secondary_event', resource_type: 'world_event', resource_id: f.second,
           changes: { meta: { reason: 'Moved to next week', episode_id: f.episode, outcome: 'detached', status_kept: 'used' } },
         });
         expect(log[0].created_at).toBeTruthy();
@@ -1191,7 +1191,7 @@ describe('reopen eligibility, pure', () => {
         expect((await detach(f.show, f.second)).body.detached).toBe(true);
         expect(inTx).toHaveBeenCalledTimes(1);
         expect(inTx.mock.calls[0][0]).toBeTruthy(); // the transaction
-        expect(inTx.mock.calls[0].slice(1, 5)).toEqual(['test-user-secondary', 'detach_secondary_event', 'world_event', f.second]);
+        expect(inTx.mock.calls[0].slice(1, 5)).toEqual(['test-admin-secondary', 'detach_secondary_event', 'world_event', f.second]);
         await expect(logger.logActionInTransaction(null, 'u', 'a', 'world_event', f.second)).rejects.toThrow(/needs the caller's transaction/);
       });
 
@@ -1214,7 +1214,7 @@ describe('reopen eligibility, pure', () => {
 
   // ── The repair path, with the index in place (as production is today) ───
   describe('repairing an episode whose brief and links disagree (index in place)', () => {
-    const inject = (show, eventId, episode) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/inject`)).send({ episode_id: episode });
+    const inject = (show, eventId, episode) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${eventId}/inject`)).send({ episode_id: episode });
 
     test('the other event is removed, then the brief\'s own event is linked again; inject never attaches the other event', async () => {
       expect(await indexThere()).toBe(true);
