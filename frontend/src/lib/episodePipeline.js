@@ -13,6 +13,7 @@
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
 import { computeEventPackageReadiness, describeMissing } from '../utils/eventReadinessSections';
 import { productionSteps } from './productionSteps';
+import { hasScript } from './episodeScriptFacts';
 import { thumbnailStudioHref } from './thumbnailStudioHref';
 
 export const STAGES = [
@@ -90,7 +91,7 @@ export function openSlots(roadmap) {
 /** A card's short line: what the episode needs next, else its status. */
 export function cardLine(ep) {
   const stage = stageOf(ep);
-  if ((stage === 'planning' || stage === 'script') && !ep?.script_content) return 'needs script';
+  if ((stage === 'planning' || stage === 'script') && !ep?.script_content && !hasScript(ep)) return 'needs script';
   return STATUS_LABEL[ep?.status] || ep?.status || '';
 }
 

@@ -211,8 +211,9 @@ const entriesFor = (resourceId) => select(
 
       // 2. The script changes: named, with length and digest on both sides, its words in neither.
       const edited = `${script}A NEW CLOSING LINE.\n`;
-      // (A script save names the revision it was written against; reading the episode gives it, and is not audited.)
-      const page = await as(editor, request(app).get(`/api/v1/episodes/${ep}`));
+      // (A script save names the revision it was written against; reading the episode gives it to an ADMIN
+      // (Evoni, 2026-11-22), and is not audited.)
+      const page = await as(admin, request(app).get(`/api/v1/episodes/${ep}`));
       const saved200 = await as(editor, request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: edited, script_revision: page.body.script_revision });
       expect(saved200.status).toBe(200);
       rows = await entriesFor(ep);

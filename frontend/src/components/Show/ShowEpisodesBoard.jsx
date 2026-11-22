@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import './ShowEpisodesBoard.css';
 import { deleteFailureText } from '../../lib/frozenEpisode';
+import { hasScript } from '../../lib/episodeScriptFacts';
 
 const STATUS_ICON = { draft: '✏️', scripted: '📜', in_build: '🎬', in_review: '👀', published: '✅', archived: '📦' };
 // The glyph is text: each tier's text twin (the fills were 1.4:1 to 4.5:1 short on white).
@@ -260,7 +261,7 @@ function NowProducing({ showId, episode, checks, panel, onTagsSaved, season = nu
           <Steps steps={steps} />
           <div className="seb-hero-actions">
             <Link className="seb-btn seb-btn-primary" to={`/episodes/${episode.id}`}><Play size={16} aria-hidden="true" /> Open episode</Link>
-            <Link className="seb-btn" to={`/episodes/${episode.id}?tab=scripts`}><FileText size={16} aria-hidden="true" /> {episode.script_content ? 'Open script' : 'Generate Script'}</Link>
+            <Link className="seb-btn" to={`/episodes/${episode.id}?tab=scripts`}><FileText size={16} aria-hidden="true" /> {episode.script_content || hasScript(episode) ? 'Open script' : 'Generate Script'}</Link>
             <More episode={episode} summary={summary} />
           </div>
         </div>

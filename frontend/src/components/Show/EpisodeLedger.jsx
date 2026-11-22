@@ -24,6 +24,7 @@ import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { fetchAllSceneSets } from '../../lib/fetchAllPages';
 import { fetchClosetWithTotal } from '../../lib/closetGrouping';
 import { specialTagOf } from '../../lib/seasonSpecials';
+import { hasScript, scriptLineCount } from '../../lib/episodeScriptFacts';
 import { S, STAT_ICONS, TIER_COLORS, TIER_BG, TIER_BORDER, TIER_EMOJIS, EVENT_TYPE_ICONS, EVALUATION_LABEL } from './producerStyles';
 import './EpisodeLedger.css';
 
@@ -227,7 +228,7 @@ export default function EpisodeLedger({ showId, api = defaultApi, episodes = [],
                   <Link to={`/episodes/${ep.id}`} style={{ ...S.smBtn, textDecoration: 'none' }}>Open episode</Link>
                   <Link to={`/episodes/${ep.id}/evaluate`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--primary-subtle)', borderColor: 'var(--primary-light)', color: 'var(--primary-text)' }}>{evaluated(ep) ? 'View the result' : 'Estimate the result'}</Link>
                   <Link to={`/episodes/${ep.id}/todo`} style={{ ...S.smBtn, textDecoration: 'none', background: 'var(--surface-bg)', borderColor: 'var(--lala-parchment-3)', color: 'var(--lala-gold-text)' }}>Todo List</Link>
-                  {ep.script_content && <span style={{ ...S.smBtn, color: 'var(--success-text)' }}>✅ Has Script ({(ep.script_content || '').split('\n').length} lines)</span>}
+                  {(ep.script_content || hasScript(ep)) && <span style={{ ...S.smBtn, color: 'var(--success-text)' }}>✅ Has Script ({scriptLineCount(ep)} lines)</span>}
                 </div>
 
                 <div className="wa-ledger-cols">
