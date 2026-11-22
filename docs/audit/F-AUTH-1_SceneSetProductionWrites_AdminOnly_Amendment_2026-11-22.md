@@ -1,4 +1,4 @@
-| **PRIME STUDIOS** **F-AUTH-1 — SCENE-SET PRODUCTION WRITES, THEIR PAID ROUTES AND GENERATE-VENUE ARE AN ADMIN'S (AMENDMENT, P2b)** *Forty-six routes of the scene-set file that change a set's base image, angles, look variants, venue photo, description, spec and variants, or that call a paid provider and write nothing, answered any signed-in account, in any group or none; so did venue generation for an event. By Evoni's decisions of 2026-11-22 all forty-seven need a sign-in in the admin group, and venue generation keeps the Place lock: no new venue for an event whose episode is accepted, for an admin too, `force` or not. Reads, the brief and the estimate stay a sign-in.* |
+| **PRIME STUDIOS** **F-AUTH-1 — SCENE-SET PRODUCTION WRITES, THEIR PAID ROUTES AND GENERATE-VENUE ARE AN ADMIN'S (AMENDMENT, P2b)** *Forty-six routes of the scene-set file that change a set's base image, angles, look variants, venue photo, description, spec and variants, or that call a paid provider and write nothing, answered any signed-in account, in any group or none; so did venue generation for an event. By Evoni's decisions of 2026-11-22 all forty-seven need a sign-in in the admin group, and venue generation keeps the Place lock: for an event whose episode is accepted, no new venue (`force` or not) and no generation of its set's missing base, for an admin too. Reads, the brief and the estimate stay a sign-in.* |
 | --- |
 
 **Document version**
@@ -41,7 +41,7 @@ Of the 64 write declarations of the scene-set file, 15 were already an admin's (
 - **They change shared production data.** A scene set, its angles, its look variants and its World Location's venue photo have no owner the code checks (P2a §1). A route is an admin's or anyone's.
 - **Many spend, and five spend without writing.** `ai-describe`, `refine-description`, `suggest-angles`, `ai-camera-direction` and `spec/validate-angle` call a paid provider and change no row; a group check on writes alone would have left them open. INFERRED from the services the handlers name; which calls pass a spending gate is a separate, cost-control scope.
 - **Venue generation is paid, stores images, makes a scene set and moves the event to it.** `generateVenueImages` (`src/services/venueGenerationService.js`) calls the image provider twice, stores the results, creates a `scene_sets` row and two `scene_angles` rows, and sets `world_events.scene_set_id`.
-- **Venue generation went round the Place lock.** The event edit (`src/routes/worldEvents/update.js`), the scene-set link (`src/routes/worldEvents/inject.js`) and the look generation (`startLook`, `src/services/venueLookImageService.js`) refuse a change of Place on an event whose episode is accepted, through `isPlaceLocked` (`src/utils/placeLock.js`). `generate-venue` did not ask: with `force: true`, or with no live set attached, it replaced such an event's scene set. (MEASURED: with the lock check disabled on the branch, five cases of the new suite fail; an admin's `force: true` on an accepted episode's event, and a request for an accepted episode's event with no set, answer 200 where 409 is expected.)
+- **Venue generation went round the Place lock.** The event edit (`src/routes/worldEvents/update.js`), the scene-set link (`src/routes/worldEvents/inject.js`) and the look generation (`startLook`, `src/services/venueLookImageService.js`) refuse a change of Place on an event whose episode is accepted, through `isPlaceLocked` (`src/utils/placeLock.js`). `generate-venue` did not ask: with `force: true`, or with no live set attached, it replaced such an event's scene set. With no `force` and an attached set that had no base image, it generated that base for such an event. (MEASURED: with the lock check placed below the attached-set branch, the two accepted-episode missing-base cases of the new suite answer 200 where 409 is expected.)
 
 # §2. The decisions (RULED)
 
@@ -60,6 +60,14 @@ On venue generation and the Place lock:
 > "Reuse the existing Place-lock service and refusal behavior. Check the restriction before any AI generation, storage write, Scene Set creation or event-location mutation. An ADMIN cannot bypass an accepted episode's locked event location through force:true. Keep existing valid behavior for unprotected events. Test accepted, draft, filmed-only, linked and unlinked cases, including force:true. Test that a refusal produces no paid provider call, storage write, new Scene Set, event update or plan mutation. Do not introduce another locking or authorization system."
 >
 > "Retain the existing implementation rather than creating another venue-generation pathway"
+
+On the missing base of an attached set, after the first commit of this change (which refused only the new venue and asked her):
+
+> "Decision: APPROVED — refuse missing-base generation on an accepted episode whose Place is locked."
+>
+> "#3926 correction: Reuse the existing isPlaceLocked helper and established 409 PLACE_LOCKED response. Required behavior: 1. If the existing venue and base are already available, preserve the existing no-write, no-generation already_available response. 2. If the attached set has no base and the event's Place is locked, refuse before paid generation, storage or database writes. 3. If the event's Place is unlocked, preserve the existing ADMIN missing-base generation behavior. 4. If a new venue would change a locked event's Place, refuse before any paid or mutating operation, regardless of force:true. 5. Preserve the ADMIN middleware before the rate limiter. 6. Do not change filmed-only location behavior in this PR; S2 already tracks it."
+>
+> "Add regression tests for these paths, including no provider call, no storage write, no new Scene Set and no event mutation on refusal. The proposed P2b count remains 47 routes."
 
 On the PR:
 
@@ -110,10 +118,9 @@ No handler body in this file is edited.
   }
   ```
 
-  It sits where the handler has decided a new venue will be made (with `force: true`, or with no live set attached), and before the provider key is looked for, before `generateVenueImages`, so before any provider call, stored image, new scene set, new angle or change to the event. The body is the one `inject.js` answers with. `force` is `req.body.force === true` as before; any other value is not force.
-- **What is as before.** An event whose episode is not accepted (no episode, a draft, one with footage and not accepted): unchanged. An event with a live set attached and no `force`: the answer "already available", or the generation of that set's missing base, as before, on an accepted episode too, since neither changes which set the event has.
-- **A judgment to note.** `startLook` refuses the whole look generation on a locked event, its base step included. Here the missing base of the set the event already has is still generated on an accepted episode, because the ruling names the event's location and `force: true`, and that branch changes neither. If the base should be refused too, it is a one-line move of the check above the attached-set branch.
-- **No transaction or row lock** is taken for the check, as in `inject.js`: an episode accepted between the check and the generation is not caught. Not changed here.
+  One check, in this order in the handler: the event is loaded; "already available" is answered (an attached live set that has its base image, no `force`); then the lock; then everything that generates: the missing base of the attached set (`generateBaseScene`), or the provider key lookup and `generateVenueImages` for a new venue. So on a locked event the refusal comes before any provider call, stored image, new scene set, new angle or change to the set or the event. The body is the one `inject.js` answers with. `force` is `req.body.force === true` as before; any other value is not force.
+- **What is as before.** "Already available", on a locked event too: the same answer, nothing generated, nothing written. An event whose episode is not accepted (no episode, a draft, one with footage and not accepted): unchanged in every branch, the missing-base generation included.
+- **No transaction or row lock** is taken for the check, as in `inject.js`: an episode accepted between the check and the end of the generation is not caught. Not changed here; her words on it: "Do not implement a new lock system or hold a database transaction open throughout paid AI generation without separate approval."
 
 `POST …/venue-brief` (reads, answers) and `POST …/generate-social-checklist` in the same file are not changed.
 
@@ -129,12 +136,17 @@ The existing `requireAuth` (401), `authorize(['ADMIN'])` (403, `AUTH_GROUP_REQUI
 
 ## Tests
 
-- `tests/integration/p2bSceneSetAdmin.integration.test.js` (231 cases, on a migrated test database through the real app and the real auth middleware; providers, storage and the refinement queue are doubles):
+- `tests/integration/p2bSceneSetAdmin.integration.test.js` (243 cases, on a migrated test database through the real app and the real auth middleware; providers, storage and the refinement queue are doubles):
   - each of the 47 routes signed out (401), as an editor and as a viewer (403 with `authorize`'s exact body; no statement that writes, by `tests/helpers/lockTrace.js`; sets, angles, look variants, the World Location, looks, set links, events, episodes, plans and scenes as they were; no new generation job, knowledge row or location; no provider call, nothing sent to storage, no upload read, no refinement job) and as an admin (not answered by `authorize`);
   - the routes that remove or replace angles leave both angles as they were when refused;
   - the source of the scene-set file: 64 write declarations, each on one line and once; the only three without the ADMIN chain are the three named above; on the other 61 `authorize` is directly after `requireAuth` and before any rate limiter or upload;
   - nineteen reads, the brief and the estimate answer an editor and a viewer as they answer an admin;
-  - venue generation: accepted episode with `force: true`, with no provider key, and with no set attached (409 with the exact body; no provider call, no storage call, no statement that writes, every row as it was, `updated_at` included); `force` sent as `"true"`, `1`, an object or an array is not force; accepted with its set and its image, no force ("already available"); accepted with a set that has no image (not the lock's answer; the event keeps its set); an editor and a viewer on the accepted event with force (403, not 409); no episode, no episode with force, a draft with force, a filmed and not accepted episode with force (generated, as before); a draft with no force ("already available").
+  - venue generation as an admin, a table of sixteen events: the episode {accepted, draft, filmed and not accepted, none} by what is asked {set with its image; set with no base; no set; `force: true`}:
+    - set with its image, all four: "already available" with the exact body, no provider call, no statement that writes, every row as it was;
+    - accepted, the other three: 409 with the exact body, and again with no provider key set; no provider call, nothing put to or deleted from storage, no statement that writes, no new scene set, the event row whole as it was (`updated_at` included), sets, angles, plans, set links and scenes as they were;
+    - not accepted, set with no base: generated as on `main` (one provider call, the base stored on that set, the event still on it, no new set);
+    - not accepted, no set or `force: true`: a new venue, one new set, the event moved to it, as on `main`;
+  - `force` sent as `"true"`, `1`, an object or an array is not force; `force: true` on the accepted event whose set has no base is refused; an editor and a viewer on the three accepted refusals get 403, not 409.
 - `tests/unit/routes/scene-cluster-tier-promotion.test.js`: the nine remaining paid set routes are pinned with the ADMIN chain; bare `requireAuth, aiRateLimiter` chains in the file: 0 (was 20); ADMIN chains: 25 (was 5). All 25 are still rate limited.
 - `tests/unit/routes/world-cluster-tier-promotion.test.js`: `generate-venue` is pinned with the ADMIN chain; of the 23 AI handlers of the world-events files, 5 carry `authorize` (was 4).
 - Existing integration suites that drive these routes now ask as an admin (token only, no assertion changed): nine files whole; four (`sceneBriefShown`, `sceneEventChoice`, `venueBrief`, `venueAttachedSet`) keep the editor's token for the brief and use an admin's for the rest.
@@ -144,8 +156,7 @@ The existing `requireAuth` (401), `authorize(['ADMIN'])` (403, `AUTH_GROUP_REQUI
 
 - **Rate and spending limits** on the paid routes. Her words: cost limits are separate.
 - **Footage as a lock.** An episode with footage and not accepted does not lock the Place today, and does not here.
-- **The race** between the lock's read and an episode's acceptance (§3).
-- **The base of an attached set on an accepted episode** (§3, the judgment).
+- **The race** between the lock's read and an episode's acceptance (§3). Analysed and reported to Evoni separately; nothing is implemented for it here.
 - **Controls for someone who is not an admin** on the Scene Sets tab: they are still shown and enabled; the server refuses and the page says why.
 - **`CharacterPlaces/setPhotos.js` and `SetAngles.jsx`**, which call some of these routes and show their own fixed sentences on failure: not changed.
 - **Stored rows.** None is changed or removed. No migration.
@@ -154,6 +165,6 @@ The existing `requireAuth` (401), `authorize(['ADMIN'])` (403, `AUTH_GROUP_REQUI
 ---
 
 **Type:** amendment.
-**Rules:** the 47 routes of §3 are an ADMIN's, and `generate-venue` makes no new venue for an event whose episode is accepted, on Evoni's words in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** the P2b item of `F-AUTH-1_SceneSetFootageWrites_AdminOnly_Amendment_2026-11-22.md` §4, for 46 of its 48 routes; the other two stay a sign-in by her scope.
+**Rules:** the 47 routes of §3 are an ADMIN's, and `generate-venue` generates nothing (no new venue, no missing base) for an event whose episode is accepted, on Evoni's words in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** the P2b item of `F-AUTH-1_SceneSetFootageWrites_AdminOnly_Amendment_2026-11-22.md` §4, for 46 of its 48 routes; the other two stay a sign-in by her scope.
 **Host/AWS/DB/Cognito contact (this session):** the tests ran against a local PostgreSQL test database in the session's own container. No deployed host, AWS service, production or development database, or Cognito pool was contacted for this change, and no paid provider was called.
 **Production standing:** as the newest Fix Plan revision states it (`F-Deploy-1_Fix_Plan_v1.56.md`, footer): "Production's freeze is lifted (`F-Deploy-1_Fix_Plan_v1.53.md` §1)". What an agent session may do in production is set by `CLAUDE.md` and `F-Tools-5_AgentProductionAccess_Ruling_2026-10-31.md`.

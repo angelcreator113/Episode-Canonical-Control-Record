@@ -20,9 +20,10 @@
  * subject of the routes' own suites, which now ask as an admin.
  *
  * Also here: what stays any signed-in account's in the file (read from its
- * source), the reads, and generate-venue's Place lock (utils/placeLock): a
- * new venue is refused on an event whose episode is accepted, `force` or not,
- * for an admin too, before anything is generated, stored, made or changed.
+ * source), the reads, and generate-venue's Place lock (utils/placeLock): on an
+ * event whose episode is accepted a new venue, `force` or not, and the missing
+ * base of the set the event has are refused, for an admin too, before anything
+ * is generated, stored, made or changed; "already available" is as before.
  *
  * This suite deletes no scene and changes no schema.
  */
@@ -52,6 +53,7 @@ const path = require('path');
 const request = require('supertest');
 const crypto = require('crypto');
 const multer = require('multer');
+const sharp = require('sharp');
 const axios = require('axios');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
@@ -397,15 +399,58 @@ const AUTHORIZE_BODY = { error: 'Forbidden', message: 'User must be in one of th
   });
 
   describe('generate-venue and the Place lock', () => {
+    // Evoni, 2026-11-22: on an event whose episode is accepted nothing is
+    // generated: not a new venue, `force` or not, and not the missing base of
+    // the set the event has. "Already available" is answered as before, on a
+    // locked event too. An event whose Place is not locked is as on main.
     const saved = {};
     const made = {};
+    let PNG;
     const LOCKED = { success: false, code: PLACE_LOCKED_CODE, error: PLACE_LOCKED_MESSAGE };
+    const BASE = 'https://x/p2b-venue-base.jpg';
     const falCalls = () => axios.post.mock.calls.filter(([u]) => String(u).startsWith('https://fal.run/'));
     const eventRow = async (id) => (await rows('SELECT * FROM world_events WHERE id = :id', { id }))[0];
+    const setRow = async (id) => (await rows('SELECT * FROM scene_sets WHERE id = :id', { id }))[0];
+    const setCount = async () => (await rows('SELECT COUNT(*)::int AS n FROM scene_sets WHERE show_id = :show', { show }))[0].n;
     const generate = (who, eventId, body = {}) => as(who)(request(app).post(VENUE(eventId))).send(body);
 
-    // An event, with or without an episode, a set and footage.
-    async function makeEvent(name, { episode = null, accepted = false, filmed = false, withSet = false, base = 'https://x/p2b-venue-base.jpg' } = {}) {
+    // The episode an event belongs to.
+    const EPISODES = {
+      accepted: { episode: true, accepted: true },
+      draft: { episode: true },
+      // Footage and not accepted: not locked by the existing lock, and not
+      // changed here (S2 tracks it).
+      filmed: { episode: true, filmed: true },
+      unlinked: {},
+    };
+    // What the event has, and what is asked.
+    const ASKS = {
+      available: { withSet: true, base: BASE, body: {} },
+      noBase: { withSet: true, base: null, body: {} },
+      noSet: { withSet: false, body: {} },
+      force: { withSet: true, base: BASE, body: { force: true } },
+    };
+    // [episode, ask, what is expected]
+    const TABLE = [
+      ['accepted', 'available', 'already_available'],
+      ['accepted', 'noBase', 'locked'],
+      ['accepted', 'noSet', 'locked'],
+      ['accepted', 'force', 'locked'],
+      ['draft', 'available', 'already_available'],
+      ['draft', 'noBase', 'base'],
+      ['draft', 'noSet', 'venue'],
+      ['draft', 'force', 'venue'],
+      ['filmed', 'available', 'already_available'],
+      ['filmed', 'noBase', 'base'],
+      ['filmed', 'noSet', 'venue'],
+      ['filmed', 'force', 'venue'],
+      ['unlinked', 'available', 'already_available'],
+      ['unlinked', 'noBase', 'base'],
+      ['unlinked', 'noSet', 'venue'],
+      ['unlinked', 'force', 'venue'],
+    ];
+
+    async function makeEvent(name, { episode = false, accepted = false, filmed = false, withSet = false, base = null } = {}) {
       const id = uuid();
       let episodeId = null;
       if (episode) {
@@ -419,33 +464,34 @@ const AUTHORIZE_BODY = { error: 'Forbidden', message: 'User must be in one of th
         }
       }
       let setId = null;
+      const setName = `P2b ${name} set ${TAG}`;
       if (withSet) {
         setId = uuid();
-        await run(`INSERT INTO scene_sets (id, name, scene_type, show_id, world_location_id, base_still_url, generation_status, created_at, updated_at)
-                   VALUES (:setId, :name, 'EVENT_LOCATION', :show, :location, :base, 'complete', NOW(), NOW())`,
-        { setId, show, location, base, name: `P2b ${name} set ${TAG}` });
+        await run(`INSERT INTO scene_sets (id, name, scene_type, show_id, world_location_id, base_still_url, created_at, updated_at)
+                   VALUES (:setId, :setName, 'EVENT_LOCATION', :show, :location, :base, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')`,
+        { setId, show, location, base, setName });
       }
+      const eventName = `P2b ${name} ${TAG}`;
       await run(`INSERT INTO world_events (id, show_id, name, event_type, prestige, status, venue_location_id, venue_name, scene_set_id, used_in_episode_id, created_at, updated_at)
-                 VALUES (:id, :show, :name, 'invite', 5, 'ready', :location, 'The hall', :setId, :episodeId, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')`,
-      { id, show, location, setId, episodeId, name: `P2b ${name} ${TAG}` });
-      return { id, episodeId, setId };
+                 VALUES (:id, :show, :eventName, 'invite', 5, 'ready', :location, 'The hall', :setId, :episodeId, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day')`,
+      { id, show, location, setId, episodeId, eventName });
+      return { id, episodeId, setId, setName, eventName };
     }
 
     beforeAll(async () => {
-      made.unlinked = await makeEvent('unlinked');
-      made.draft = await makeEvent('draft', { episode: true, withSet: true });
-      made.filmed = await makeEvent('filmed', { episode: true, filmed: true, withSet: true });
-      made.accepted = await makeEvent('accepted', { episode: true, accepted: true, withSet: true });
-      made.acceptedNoSet = await makeEvent('accepted no set', { episode: true, accepted: true });
-      made.acceptedNoBase = await makeEvent('accepted no base', { episode: true, accepted: true, withSet: true, base: null });
+      PNG = await sharp({ create: { width: 4, height: 4, channels: 3, background: '#ffffff' } }).png().toBuffer();
+      for (const [episode, ask] of TABLE) {
+        made[`${episode}/${ask}`] = await makeEvent(`${episode} ${ask}`, { ...EPISODES[episode], ...ASKS[ask] });
+      }
     });
     beforeEach(() => {
       for (const k of ['FAL_KEY', 'AI_DAILY_IMAGE_BUDGET_USD', 'AI_DAILY_BUDGET_USD']) saved[k] = process.env[k];
       process.env.FAL_KEY = 'test-fal';
       process.env.AI_DAILY_IMAGE_BUDGET_USD = '100000';
       process.env.AI_DAILY_BUDGET_USD = '100000';
-      // A provider double: no request leaves the process.
-      axios.get.mockImplementation(async () => ({ data: Buffer.from('not really an image') }));
+      // Provider doubles: no request leaves the process. A real (tiny) image,
+      // since the base path stores it through sharp.
+      axios.get.mockImplementation(async () => ({ data: PNG }));
       axios.post.mockImplementation(async (url) => {
         if (String(url).startsWith('https://fal.run/')) return { status: 200, data: { images: [{ url: `https://fal.media/p2b-${axios.post.mock.calls.length}.jpg` }] } };
         throw new Error(`unexpected provider call ${url}`);
@@ -458,93 +504,123 @@ const AUTHORIZE_BODY = { error: 'Forbidden', message: 'User must be in one of th
       }
     });
 
-    // The refusal, and that nothing at all was done.
+    // The refusal, and that nothing at all was done: no provider call,
+    // nothing put to or deleted from storage, no statement that writes, no
+    // new scene set, and the event, sets, angles, plans, set links and
+    // scenes whole as they were (updated_at included).
     async function expectLocked(target, body) {
       const before = await snapshot();
+      const event = await eventRow(target.id);
+      const sets = await setCount();
       const trace = lockTrace.install(sequelize);
       let res;
       try { res = await generate('admin', target.id, body); } finally { trace.uninstall(); }
       expect(res.status).toBe(409);
       expect(res.body).toEqual(LOCKED);
       expect(providersCalled()).toBe(0);
+      expect(mockS3Send).not.toHaveBeenCalled();
       expect(writesIn(trace.records)).toEqual([]);
+      expect(await setCount()).toBe(sets);
+      expect(await eventRow(target.id)).toEqual(event);
       expect(await snapshot()).toEqual(before);
     }
 
-    it('an accepted episode\'s event, force: true, an admin: the Place lock\'s 409; nothing generated, stored, made or changed', async () => {
-      await expectLocked(made.accepted, { force: true });
+    describe.each(TABLE)('an admin, the event of an episode that is %s, asked "%s"', (episode, ask, expected) => {
+      const target = () => made[`${episode}/${ask}`];
+      const body = ASKS[ask].body;
+
+      if (expected === 'locked') {
+        it("the Place lock's 409; nothing generated, stored, made or changed", async () => {
+          await expectLocked(target(), body);
+        });
+        it('the same with no provider key set: the lock answers before the key is looked for', async () => {
+          delete process.env.FAL_KEY;
+          await expectLocked(target(), body);
+        });
+      }
+
+      if (expected === 'already_available') {
+        it('"already available", in the same words whatever the episode: nothing generated, nothing written', async () => {
+          const t = target();
+          const before = await snapshot();
+          const trace = lockTrace.install(sequelize);
+          let res;
+          try { res = await generate('admin', t.id, body); } finally { trace.uninstall(); }
+          expect(res.status).toBe(200);
+          expect(res.body).toEqual({
+            success: true,
+            skipped: true,
+            outcome: 'already_available',
+            data: { kind: 'base', scene_set_id: t.setId, venue_image_url: BASE, venue_name: t.setName },
+            message: `Venue images already available for "${t.eventName}": nothing generated`,
+          });
+          expect(providersCalled()).toBe(0);
+          expect(writesIn(trace.records)).toEqual([]);
+          expect(await snapshot()).toEqual(before);
+        });
+      }
+
+      if (expected === 'base') {
+        it('the missing base of the set the event has is generated, as on main: one provider call, the base stored on that set, the event still on it', async () => {
+          const t = target();
+          const sets = await setCount();
+          const res = await generate('admin', t.id, body);
+          expect(res.body.error).toBeUndefined();
+          expect(res.status).toBe(200);
+          expect(res.body).toMatchObject({ success: true, outcome: 'generated', data: { kind: 'base', scene_set_id: t.setId, venue_name: t.setName } });
+          expect(res.body.skipped).toBeUndefined();
+          expect(falCalls()).toHaveLength(1);
+          const set = await setRow(t.setId);
+          expect(set.base_still_url).toBeTruthy();
+          expect(res.body.data.venue_image_url).toBe(set.base_still_url);
+          expect(set.generation_status).toBe('complete');
+          expect((await eventRow(t.id)).scene_set_id).toBe(t.setId);
+          expect(await setCount()).toBe(sets);
+        });
+      }
+
+      if (expected === 'venue') {
+        it('a new venue is generated and the event is moved to it, as on main', async () => {
+          const t = target();
+          const sets = await setCount();
+          const res = await generate('admin', t.id, body);
+          expect(res.body.error).toBeUndefined();
+          expect(res.status).toBe(200);
+          expect(res.body).toMatchObject({ success: true, outcome: 'generated', data: { kind: 'venue' } });
+          expect(falCalls().length).toBeGreaterThanOrEqual(1);
+          expect(res.body.data.scene_set_id).toBeTruthy();
+          expect(res.body.data.scene_set_id).not.toBe(t.setId);
+          expect((await eventRow(t.id)).scene_set_id).toBe(res.body.data.scene_set_id);
+          expect(await setCount()).toBe(sets + 1);
+        });
+      }
     });
 
-    it('the same with no provider key set: the lock answers before the key is looked for', async () => {
-      delete process.env.FAL_KEY;
-      await expectLocked(made.accepted, { force: true });
-    });
-
-    it('an accepted episode\'s event with no set, no force: a new venue would be made, so the same 409 and nothing done', async () => {
-      await expectLocked(made.acceptedNoSet, {});
-      await expectLocked(made.acceptedNoSet, { force: true });
-    });
-
-    it('force sent as anything but true is not force: the set the event has is kept, and its image is already available', async () => {
+    it('force sent as anything but true is not force: on the accepted event with its image, "already available"', async () => {
+      const t = made['accepted/available'];
       for (const force of ['true', 1, { value: true }, [true]]) {
         const before = await snapshot();
-        const res = await generate('admin', made.accepted.id, { force });
+        const res = await generate('admin', t.id, { force });
         expect(res.status).toBe(200);
-        expect(res.body).toMatchObject({ success: true, skipped: true, outcome: 'already_available', data: { scene_set_id: made.accepted.setId } });
+        expect(res.body).toMatchObject({ success: true, skipped: true, outcome: 'already_available', data: { scene_set_id: t.setId } });
         expect(providersCalled()).toBe(0);
         expect(await snapshot()).toEqual(before);
       }
     });
 
-    it('an accepted episode\'s event, no force, its set has its image: "already available", as before', async () => {
-      const before = await snapshot();
-      const res = await generate('admin', made.accepted.id, {});
-      expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ success: true, skipped: true, outcome: 'already_available', data: { kind: 'base', scene_set_id: made.accepted.setId } });
-      expect(providersCalled()).toBe(0);
-      expect(await snapshot()).toEqual(before);
+    it('force: true on the accepted event whose set has no base: refused all the same', async () => {
+      await expectLocked(made['accepted/noBase'], { force: true });
     });
 
-    it('an accepted episode\'s event, no force, its set has no image: the missing base of that set is not a change of Place, so the lock does not answer and the event keeps its set', async () => {
-      const res = await generate('admin', made.acceptedNoBase.id, {});
-      expect(res.status).not.toBe(409);
-      expect(res.body.code).not.toBe(PLACE_LOCKED_CODE);
-      expect((await eventRow(made.acceptedNoBase.id)).scene_set_id).toBe(made.acceptedNoBase.setId);
-    });
-
-    it('someone who is not an admin, on the accepted event with force: authorize\'s 403, not the lock\'s answer, and nothing done', async () => {
+    it.each(['accepted/force', 'accepted/noBase', 'accepted/noSet'])("someone who is not an admin, on %s: authorize's 403, not the lock's answer, and nothing done", async (key) => {
       for (const who of ['editor', 'viewer']) {
         const before = await snapshot();
-        const res = await generate(who, made.accepted.id, { force: true });
+        const res = await generate(who, made[key].id, { force: true });
         expect(res.status).toBe(403);
         expect(res.body).toEqual(AUTHORIZE_BODY);
         expect(providersCalled()).toBe(0);
         expect(await snapshot()).toEqual(before);
       }
-    });
-
-    it.each([
-      ['an event with no episode and no set', 'unlinked', {}],
-      ['an event with no episode, force: true', 'unlinked', { force: true }],
-      ['a draft episode\'s event, force: true', 'draft', { force: true }],
-      // The existing lock is the accepted episode's only (utils/placeLock):
-      // footage alone does not lock the Place, and this route is as it was.
-      ['a filmed, not accepted, episode\'s event, force: true', 'filmed', { force: true }],
-    ])('%s, an admin: not locked; the venue is generated as before', async (_label, which, body) => {
-      const res = await generate('admin', made[which].id, body);
-      expect(res.status).not.toBe(409);
-      expect(res.body.code).not.toBe(PLACE_LOCKED_CODE);
-      expect(res.body.code).not.toBe('AUTH_GROUP_REQUIRED');
-      expect(falCalls().length).toBeGreaterThanOrEqual(1);
-      expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ success: true, outcome: 'generated', data: { kind: 'venue' } });
-    });
-
-    it('a draft episode\'s event, no force, its set has its image: "already available", as before', async () => {
-      const res = await generate('admin', made.draft.id, {});
-      expect(res.status).toBe(200);
-      expect(res.body.outcome).toBe('already_available');
-      expect(providersCalled()).toBe(0);
     });
   });
 });
