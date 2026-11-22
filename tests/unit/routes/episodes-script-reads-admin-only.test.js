@@ -9,6 +9,9 @@
  * The real router, auth middleware and controller; the models, the scripts
  * service and the two version readers are stand-ins, so no database is read.
  * The rows carry columns the routes must never send.
+ *
+ * The last block is the one script write under an episode, POST
+ * /:episodeId/scripts: an ADMIN's too (Evoni, 2026-11-22; Amendment 3).
  */
 jest.mock('../../../src/models', () => ({
   // The controllers episodes.js requires destructure this map at load.
@@ -174,13 +177,83 @@ describe('the allowlist of a version', () => {
   });
 });
 
-describe('the script write under an episode is as it was', () => {
-  test('signed out, POST /:episodeId/scripts is still a 401', async () => {
-    expect((await request(app).post(`/api/v1/episodes/${EP}/scripts`).send({})).status).toBe(401);
+// The script library's seventh write (Evoni, 2026-11-22;
+// docs/audit/F-AUTH-1_ScriptWrites_AdminOnly_Amendment3_2026-11-22.md). The
+// other six are in scripts-writes-admin-only.test.js.
+describe('the script write under an episode is an ADMIN\'s', () => {
+  const NEW = { scriptType: 'main', content: 'INT. LOFT - DAY\nLala: a new line.', versionLabel: 'Draft 4' };
+  const post = (auth, body, ep = EP) => {
+    const r = request(app).post(`/api/v1/episodes/${ep}/scripts`);
+    return (auth ? r.set('Authorization', `Bearer ${auth}`) : r).send(body);
+  };
+  const serviceCalls = () => Object.values(scriptsService).reduce((n, fn) => n + fn.mock.calls.length, 0);
+  // Nothing of a script in a refusal: not its text, not a field that would carry it.
+  const expectNothingOfAScript = (res) => {
+    const sent = JSON.stringify(res.body) + (res.text || '');
+    for (const word of ['unpublished line', 'a new line', 'content', 'script_text', 'script_json', 'current_revision', 'script_revision', 'not for anyone', 'sc-1', EP]) expect(sent).not.toContain(word);
+    expect(res.body.data).toBeUndefined();
+    expect(res.body.success).toBeUndefined();
+  };
+  // What a caller who is not an admin may try: a script, nothing, the wrong shapes.
+  const BODIES = [NEW, {}, { scriptType: 'nope' }, { scriptType: 'main' }, [NEW], { scriptType: { $ne: null }, content: 12 }];
+
+  beforeEach(() => {
+    scriptsService.createScript.mockResolvedValue({ ...DRAFT, version_number: 4 });
   });
-  test('signed in and not an admin, it is not refused for the group', async () => {
-    const res = await request(app).post(`/api/v1/episodes/${EP}/scripts`).set('Authorization', `Bearer ${token(['USER'])}`).send({});
-    expect(res.status).not.toBe(401);
-    expect(res.status).not.toBe(403);
+
+  test('signed out, it is a 401 whatever is sent; nothing is called, nothing of a script is sent', async () => {
+    for (const body of BODIES) {
+      const res = await post(null, body);
+      expect(res.status).toBe(401);
+      expect(res.body).toEqual({ error: 'Authorization required', message: 'This action requires a signed-in user.', code: 'AUTH_REQUIRED' });
+      expectNothingOfAScript(res);
+    }
+    expect(serviceCalls()).toBe(0);
+  });
+
+  test('a token that is not one is a 401; nothing is called', async () => {
+    const res = await post('not-a-token', NEW);
+    expect(res.status).toBe(401);
+    expectNothingOfAScript(res);
+    expect(serviceCalls()).toBe(0);
+  });
+
+  test.each(NOT_ADMIN)('signed in and not an admin (%j), it is a 403 whatever is sent; nothing is called, nothing of a script is sent', async (...groups) => {
+    for (const body of BODIES) {
+      const res = await post(token(groups), body);
+      expect(res.status).toBe(403);
+      expect(res.body).toEqual({ error: 'Forbidden', message: 'User must be in one of these groups: ADMIN', code: 'AUTH_GROUP_REQUIRED' });
+      expectNothingOfAScript(res);
+    }
+    expect(serviceCalls()).toBe(0);
+  });
+
+  test('an id that is not a UUID is refused before the sign-in is read, as it was: the 400 names the parameter and nothing else', async () => {
+    for (const auth of [null, token(['USER']), token(['ADMIN'])]) {
+      const res = await post(auth, NEW, 'nope');
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: 'Validation failed', details: ['episodeId must be a valid UUID or integer ID'] });
+    }
+    expect(serviceCalls()).toBe(0);
+  });
+
+  test.each([[['ADMIN']], [['admin']], [['Viewer', 'Admin']]])('an admin (%j) creates the script as before: the service gets the episode, the body and the editor; a 201 with its row', async (groups) => {
+    const res = await post(token(groups), NEW);
+    expect(res.status).toBe(201);
+    expect(scriptsService.createScript).toHaveBeenCalledWith({ episodeId: EP, ...NEW }, `ep-scripts-${groups.join('-')}`);
+    expect(res.body).toEqual({ success: true, data: { ...DRAFT, version_number: 4 }, message: 'Script created successfully' });
+    expect(serviceCalls()).toBe(1);
+  });
+
+  test.each([
+    [{}, 'Script type is required'],
+    [{ scriptType: 'main' }, 'Either content or file URL is required'],
+    [{ scriptType: 'nope', content: 'x' }, 'Invalid script type. Must be one of: trailer, main, shorts, teaser, behind-the-scenes, bonus-content'],
+  ])('an admin sending %j is refused as before, and nothing is created', async (body, message) => {
+    const res = await post(token(['ADMIN']), body);
+    expect(res.status).toBe(422);
+    expect(serviceCalls()).toBe(0);
+    // This app mounts no error handler; the message is in Express's own answer.
+    expect(res.text).toContain(message.split('.')[0]);
   });
 });
