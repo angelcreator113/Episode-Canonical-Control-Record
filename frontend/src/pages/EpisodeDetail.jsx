@@ -44,7 +44,7 @@ import { getEpisodeEvents } from '../services/episodeEventsApi';
 import { packageHref } from '../lib/eventFlow';
 import { episodeSeasonHref } from '../lib/episodePlace';
 import { EP_TABS, resolveEpisodeTab, withEpisodeTab, pillGroups, pillFor, gatedTab } from '../utils/episodeTabs';
-import { isAdmin } from '../utils/authGroups';
+import { isAdmin, sceneAdminOnlyMessage } from '../utils/authGroups';
 import { withReturn, tabOrigin } from '../utils/returnPath';
 import { voiceStudioOn } from '../lib/voiceStudioApi';
 import { closetBeat } from '../lib/scriptMoments';
@@ -765,7 +765,7 @@ const EpisodeDetail = () => {
       setEpisodeScenes(scenesData.data || []);
     } catch (err) {
       console.error('Failed to add scene to episode:', err);
-      alert('Failed to add scene. Please try again.');
+      alert(sceneAdminOnlyMessage(err) || 'Failed to add scene. Please try again.');
     }
   };
 
@@ -791,7 +791,7 @@ const EpisodeDetail = () => {
       setEpisodeScenes(scenesData.data || []);
     } catch (err) {
       console.error('Failed to reorder scenes:', err);
-      alert('Failed to reorder scenes. Please try again.');
+      alert(sceneAdminOnlyMessage(err) || 'Failed to reorder scenes. Please try again.');
     }
   };
 
@@ -806,7 +806,7 @@ const EpisodeDetail = () => {
       setEpisodeScenes(scenesData.data || []);
     } catch (err) {
       console.error('Failed to remove scene:', err);
-      alert('Failed to remove scene. Please try again.');
+      alert(sceneAdminOnlyMessage(err) || 'Failed to remove scene. Please try again.');
     }
   };
 

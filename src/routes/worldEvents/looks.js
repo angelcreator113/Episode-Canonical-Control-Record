@@ -18,7 +18,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { getModels } = require('./helpers');
 
@@ -131,7 +131,7 @@ router.post('/world/:showId/events/:eventId/look/brief', requireAuth, lookIds, a
   }
 });
 
-router.post('/world/:showId/events/:eventId/look/generate', requireAuth, aiRateLimiter, lookIds, async (req, res) => {
+router.post('/world/:showId/events/:eventId/look/generate', requireAuth, authorize(['ADMIN']), aiRateLimiter, lookIds, async (req, res) => {
   try {
     const models = await getModels();
     if (!models) return res.status(500).json({ success: false, error: 'Models not loaded' });
@@ -161,7 +161,7 @@ const lookUpload = require('../../middleware/uploadOrRefuse').uploadOrRefuse(req
   },
 }).fields([{ name: 'image', maxCount: 1 }, { name: 'images', maxCount: 1 }]), { label: 'Event look upload' });
 
-router.post('/world/:showId/events/:eventId/look/upload', requireAuth, lookUpload, lookIds, async (req, res) => {
+router.post('/world/:showId/events/:eventId/look/upload', requireAuth, authorize(['ADMIN']), lookUpload, lookIds, async (req, res) => {
   try {
     const file = [...(req.files?.images || []), ...(req.files?.image || [])][0];
     if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });

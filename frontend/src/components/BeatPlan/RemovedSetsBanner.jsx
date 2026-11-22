@@ -17,6 +17,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { fetchAllSceneSets } from '../../lib/fetchAllPages';
+import { sceneAdminOnlyMessage } from '../../utils/authGroups';
 import './BeatPlanParts.css';
 
 export default function RemovedSetsBanner({ episodeId, showId, onMoved }) {
@@ -67,7 +68,7 @@ export default function RemovedSetsBanner({ episodeId, showId, onMoved }) {
       onMoved?.();
     } catch (err) {
       console.error('[RemovedSets] move failed:', err);
-      setError(err.response?.data?.error || 'Could not move the beats');
+      setError(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not move the beats');
     }
     setMoving(false);
   };

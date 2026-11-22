@@ -1,4 +1,5 @@
 // frontend/src/components/Episodes/NextEventSuggestionsOverlay.jsx
+import { adminOnlyMessage } from '../../utils/authGroups';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
@@ -75,7 +76,7 @@ function NextEventSuggestionsOverlay({ episode, showId, onClose, onPickEvent }) 
       }
     } catch (err) {
       if (err?.offerDecisionCancelled) return;
-      alert('Failed to generate episode: ' + (err?.response?.data?.error || err.message));
+      alert(adminOnlyMessage(err) || 'Failed to generate episode: ' + (err?.response?.data?.error || err.message));
     } finally {
       setGenerating(null);
     }

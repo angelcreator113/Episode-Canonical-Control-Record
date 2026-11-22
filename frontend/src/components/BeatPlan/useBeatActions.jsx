@@ -11,6 +11,7 @@
  * (the page's name, for Scene Sets' way back).
  * Returns the state and handlers.
  */
+import { adminOnlyMessage } from '../../utils/authGroups';
 import { useState } from 'react';
 import api from '../../services/api';
 import { fetchAllSceneSets } from '../../lib/fetchAllPages';
@@ -56,7 +57,7 @@ export default function useBeatActions({ episodeId, showToast, reload, showId = 
       await reload();
     } catch (err) {
       console.error('[BeatPlan] beat save failed:', err);
-      showToast(err.response?.data?.error || 'Save failed', 'error');
+      showToast(adminOnlyMessage(err) || err.response?.data?.error || 'Save failed', 'error');
     } finally {
       setSavingBeat(false);
     }
@@ -71,7 +72,7 @@ export default function useBeatActions({ episodeId, showToast, reload, showId = 
       await reload();
     } catch (err) {
       console.error('[BeatPlan] beat release failed:', err);
-      showToast(err.response?.data?.error || 'Save failed', 'error');
+      showToast(adminOnlyMessage(err) || err.response?.data?.error || 'Save failed', 'error');
     } finally {
       setSavingBeat(false);
     }

@@ -159,10 +159,17 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
       '/:id/angles/:angleId/regenerate',
       '/:id/cascade-regenerate',
       '/:id/spec/generate',
+      '/:id/generate-all-angles',
+    ];
+
+    // The Scene Studio writes on a set are an ADMIN's (P2a; Evoni,
+    // 2026-11-22): authorize(['ADMIN']) sits after requireAuth and before
+    // the rate limiter, so no one else reaches a paid call.
+    const SCENE_SET_ADMIN_AI_POSTS = [
       '/:id/generate-object',
+      '/:id/transform-object',
       '/:id/regenerate-background',
       '/:id/angles/:angleId/generate-depth',
-      '/:id/generate-all-angles',
     ];
 
     SCENE_SET_AI_POSTS.forEach((p) => {
@@ -171,6 +178,16 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
         const escaped = p.replace(/[/]/g, '\\/').replace(/:/g, ':');
         const re = new RegExp(
           `router\\.post\\(['"]${escaped}['"],\\s*validateUUIDParam\\('id'\\),\\s*requireAuth,\\s*aiRateLimiter,`,
+        );
+        expect(readSrc('sceneSetRoutes.js')).toMatch(re);
+      });
+    });
+
+    SCENE_SET_ADMIN_AI_POSTS.forEach((p) => {
+      test(`sceneSetRoutes.js — POST ${p} wrapped requireAuth + authorize ADMIN + aiRateLimiter (P2a)`, () => {
+        const escaped = p.replace(/[/]/g, '\\/');
+        const re = new RegExp(
+          `router\\.post\\(['"]${escaped}['"],\\s*validateUUIDParam\\('id'\\),\\s*requireAuth,\\s*authorize\\(\\['ADMIN'\\]\\),\\s*aiRateLimiter,`,
         );
         expect(readSrc('sceneSetRoutes.js')).toMatch(re);
       });
@@ -187,10 +204,17 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
     // 21 with POST /:id/upload-base (third audit, 2026-10-15);
     // 23 with post-process and spec/validate-angle (fourth audit, 2026-10-15);
     // 24 with POST /:id/transform-object (show side check, 2026-10-20).
-    test('sceneSetRoutes.js — exactly 24 requireAuth + aiRateLimiter middleware-chain occurrences', () => {
+    // P2a (2026-11-22) puts authorize(['ADMIN']) between the two on four of
+    // them (generate-object, transform-object, regenerate-background,
+    // generate-depth): 20 keep the bare chain, and the ADMIN chain is on 5
+    // (those four and /model-comparison). The 24 rate-limited routes of the
+    // count above are all still rate limited.
+    test('sceneSetRoutes.js — exactly 20 requireAuth + aiRateLimiter and 5 requireAuth + authorize ADMIN + aiRateLimiter chains', () => {
       const src = readSrc('sceneSetRoutes.js');
       const matches = src.match(/requireAuth,\s*aiRateLimiter,/g) || [];
-      expect(matches.length).toBe(24);
+      expect(matches.length).toBe(20);
+      const admin = src.match(/requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/g) || [];
+      expect(admin.length).toBe(5);
     });
   });
 

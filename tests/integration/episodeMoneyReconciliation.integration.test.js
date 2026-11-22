@@ -38,7 +38,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     await migration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
       id: 'test-user-money-recon', email: 'test@money-recon.dev', name: 'Money Recon',
-      groups: ['USER', 'EDITOR'], role: 'USER',
+      groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   beforeEach(() => {
