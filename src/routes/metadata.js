@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const metadataController = require('../controllers/metadataController');
-const { requireAuth, optionalAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -12,27 +12,31 @@ const { asyncHandler } = require('../middleware/errorHandler');
  * Metadata = ML/AI extracted analysis results (text, scenes, sentiment, objects, transcription)
  *
  * Permissions:
- * - view: All (viewer, editor, admin)
+ * - view: Admin only (Evoni, 2026-11-22; see below)
  * - create: Admin, Editor
  * - edit: Admin, Editor
  * - delete: Admin only
  */
 
-// PUBLIC: metadata catalog reads are Tier 4 (no req.user consumption); 5 bare GETs below per CP12 §5.21 14th instance
-// List metadata (viewer permission)
-router.get('/', optionalAuth, asyncHandler(metadataController.listMetadata));
+// The five reads are an ADMIN's (Evoni, 2026-11-22). They carried optionalAuth
+// as a "public catalog" (F-AUTH-1 CP12 §5.21, because they do not read
+// req.user), so they answered anyone, signed in or not, with whole rows:
+// a video's transcription and extracted text among them. Correction filed as
+// docs/audit/F-AUTH-1_MetadataReads_AdminOnly_Amendment_2026-11-22.md.
+// List metadata
+router.get('/', requireAuth, authorize(['ADMIN']), asyncHandler(metadataController.listMetadata));
 
 // Get all metadata - special route for /ALL
-router.get('/ALL', optionalAuth, asyncHandler(metadataController.listMetadata));
+router.get('/ALL', requireAuth, authorize(['ADMIN']), asyncHandler(metadataController.listMetadata));
 
-// Get single metadata (viewer permission)
-router.get('/:id', optionalAuth, asyncHandler(metadataController.getMetadata));
+// Get single metadata (admin)
+router.get('/:id', requireAuth, authorize(['ADMIN']), asyncHandler(metadataController.getMetadata));
 
 // Get metadata summary (lightweight, viewer permission)
-router.get('/:id/summary', optionalAuth, asyncHandler(metadataController.getMetadataSummary));
+router.get('/:id/summary', requireAuth, authorize(['ADMIN']), asyncHandler(metadataController.getMetadataSummary));
 
-// Get metadata for specific episode (viewer permission)
-router.get('/episode/:episodeId', optionalAuth, asyncHandler(metadataController.getMetadataForEpisode));
+// Get metadata for specific episode (admin)
+router.get('/episode/:episodeId', requireAuth, authorize(['ADMIN']), asyncHandler(metadataController.getMetadataForEpisode));
 
 // Create or update metadata (requires authentication + editor role)
 router.post(
