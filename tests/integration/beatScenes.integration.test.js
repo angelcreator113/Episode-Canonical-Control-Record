@@ -254,6 +254,21 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const scenes = await scenesOf(ep);
     expect(scenes.find((s) => s.scene_number === 11).background_url).toBe('https://x/wide-dressed.jpg');
     expect(scenes.find((s) => s.scene_number === 1).background_url).toBe('https://x/apartment.jpg');
+
+    // A dressed angle stuck generating reads as failed, and the reads leave its
+    // row as it is (Evoni, 2026-11-22: a read writes nothing). The plan's read
+    // and the dressed angles list both go through it.
+    await run(`INSERT INTO scene_set_look_angles (id, look_id, scene_angle_id, status, source, created_at, updated_at)
+               VALUES (gen_random_uuid(), :look, :door, 'generating', 'generated', NOW(), NOW() - INTERVAL '20 minutes')`, { look, door: sets.doorway });
+    const dressedRows = () => rows('SELECT * FROM scene_set_look_angles WHERE look_id = :look ORDER BY id', { look });
+    const before = await dressedRows();
+    expect(before.map((r) => r.status).sort()).toEqual(['complete', 'generating']);
+    expect((await auth(request(app).get(`/api/v1/episode-brief/${ep}/plan`))).status).toBe(200);
+    const list = await auth(request(app).get(`/api/v1/episode-brief/${ep}/dressed-angles?scene_set_id=${sets.glasshouse}`));
+    expect(list.status).toBe(200);
+    expect(JSON.stringify(list.body)).toContain('did not finish within 10 minutes');
+    expect(await dressedRows()).toEqual(before);
+    await run('DELETE FROM scene_set_look_angles WHERE look_id = :look AND scene_angle_id = :door', { look, door: sets.doorway });
   });
 
   it("a re-plan keeps each beat's scene and its Timeline edits; a beat losing its set loses its scene", async () => {
