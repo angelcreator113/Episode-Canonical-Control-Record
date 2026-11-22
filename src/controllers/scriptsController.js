@@ -4,8 +4,9 @@
  */
 
 const scriptsService = require('../services/scriptsService');
-// What the four reads of routes/scripts.js answer with: named fields only.
-const { listScript, singleScript, historyEntry } = require('../services/scriptReadFields');
+// What the four reads of routes/scripts.js, and the two script reads under
+// an episode (routes/episodes.js), answer with: named fields only.
+const { listScript, singleScript, historyEntry, versionEntry } = require('../services/scriptReadFields');
 const { ValidationError, asyncHandler } = require('../middleware/errorHandler');
 const Logger = require('../services/Logger');
 
@@ -18,11 +19,14 @@ module.exports = {
     const { episodeId } = req.params;
     const { includeAllVersions, includeContent, scriptType } = req.query;
 
-    const scripts = await scriptsService.getScriptsByEpisode(episodeId, {
+    // The text only for ?includeContent=true, whatever the rows carry: the
+    // service's fallback query reads every column.
+    const withContent = includeContent === 'true';
+    const scripts = (await scriptsService.getScriptsByEpisode(episodeId, {
       includeAllVersions: includeAllVersions === 'true',
-      includeContent: includeContent === 'true',
+      includeContent: withContent,
       scriptType,
-    });
+    })).map((row) => singleScript(row, { content: withContent }));
 
     res.json({
       success: true,
@@ -55,7 +59,7 @@ module.exports = {
   getScriptVersions: asyncHandler(async (req, res) => {
     const { episodeId, scriptType } = req.params;
 
-    const versions = await scriptsService.getScriptVersions(episodeId, scriptType);
+    const versions = (await scriptsService.getScriptVersions(episodeId, scriptType)).map(versionEntry);
 
     res.json({
       success: true,

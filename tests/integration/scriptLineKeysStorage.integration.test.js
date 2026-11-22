@@ -31,11 +31,15 @@ const KEYS = { v: 1, text_hash: 'deadbeef', lines: [{ k: 'ln_marker2222', b: 1, 
 
 (shouldSkip ? describe.skip : describe)('script_line_keys storage (A1b)', () => {
   let token;
+  let adminToken;
   const shows = [];
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
       id: 'test-user-a1b', email: 'test@a1b.dev', name: 'A1b', groups: ['USER', 'EDITOR'], role: 'USER',
+    }).accessToken;
+    adminToken = TokenService.generateTokenPair({
+      id: 'test-admin-a1b', email: 'admin@a1b.dev', name: 'A1b Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
@@ -62,6 +66,8 @@ const KEYS = { v: 1, text_hash: 'deadbeef', lines: [{ k: 'ln_marker2222', b: 1, 
   }
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
+  // The version reads are an ADMIN's (Evoni, 2026-11-22); the other reads keep the token they had.
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   const noKeys = (body) => {
     const text = JSON.stringify(body);
     expect(text).not.toContain('script_line_keys');
@@ -104,10 +110,10 @@ const KEYS = { v: 1, text_hash: 'deadbeef', lines: [{ k: 'ln_marker2222', b: 1, 
     const list = await auth(request(app).get(`/api/v1/episodes?show_id=${ids.show}`));
     expect(list.status).toBe(200);
     noKeys(list.body);
-    const history = await auth(request(app).get(`/api/v1/episodes/${ids.ep}/script-versions`));
+    const history = await asAdmin(request(app).get(`/api/v1/episodes/${ids.ep}/script-versions`));
     expect(history.status).toBe(200);
     noKeys(history.body);
-    const version = await auth(request(app).get(`/api/v1/episodes/${ids.ep}/script-versions/${ids.version}`));
+    const version = await asAdmin(request(app).get(`/api/v1/episodes/${ids.ep}/script-versions/${ids.version}`));
     expect(version.status).toBe(200);
     expect(JSON.stringify(version.body)).toContain('Coffee first');
     noKeys(version.body);

@@ -5,6 +5,7 @@
 
 const { Pool } = require('pg');
 const Logger = require('./Logger');
+const { singleScript } = require('./scriptReadFields');
 
 class ScriptsService {
   constructor() {
@@ -75,15 +76,20 @@ class ScriptsService {
       const result = await this.pool.query(query, params);
       return result.rows;
     } catch (error) {
-      // Table may have a simpler schema — try basic query
+      // Table may have a simpler schema — try basic query. Both migrations
+      // that create episode_scripts (20240101000007, 20260718000000) give it
+      // deleted_at, and neither gives it script_type or version_number, so
+      // the query above fails where only they have run. A soft-deleted
+      // script is never read here; the columns differ by schema, so each row
+      // is cut to the named fields (its text only when asked for).
       try {
         const basicResult = await this.pool.query(
-          'SELECT * FROM episode_scripts WHERE episode_id = $1 ORDER BY created_at DESC',
+          'SELECT * FROM episode_scripts WHERE episode_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC',
           [episodeId]
         );
-        return basicResult.rows;
-      } catch {
-        Logger.error('Error fetching scripts by episode:', error.message);
+        return basicResult.rows.map((row) => singleScript(row, { content: includeContent }));
+      } catch (fallbackError) {
+        Logger.error('Error fetching scripts by episode:', { query: error.message, fallback: fallbackError.message });
         return []; // Return empty instead of crashing
       }
     }

@@ -34,10 +34,12 @@ const V3 = beat(1, 'Opening Ritual', 'Lala: "Third draft"');
   const show = uuid();
   const ep = uuid();
   let token;
+  let adminToken;
   const keyBefore = process.env.ANTHROPIC_API_KEY;
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({ id: `test-versions-${show.slice(0, 8)}`, email: 'v@versions.dev', name: 'Versions', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+    adminToken = TokenService.generateTokenPair({ id: `test-versions-admin-${show.slice(0, 8)}`, email: 'admin@versions.dev', name: 'Versions Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :n, :n, NOW(), NOW())`, { id: show, n: `versions-${show.slice(0, 8)}` });
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, script_content, created_at, updated_at)
                VALUES (:ep, :show, 'Gala Night', 1, 'draft', :script, NOW(), NOW())`, { ep, show, script: V1 });
@@ -54,9 +56,11 @@ const V3 = beat(1, 'Opening Ritual', 'Lala: "Third draft"');
   });
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
+  // The version reads are an ADMIN's (Evoni, 2026-11-22); the writes keep the token they had.
+  const asAdmin = (r) => r.set('Authorization', `Bearer ${adminToken}`);
   // Each script write carries the revision the page read (A1c R1).
   const rev = async () => (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
-  const list = async () => (await auth(request(app).get(`/api/v1/episodes/${ep}/script-versions`))).body.data;
+  const list = async () => (await asAdmin(request(app).get(`/api/v1/episodes/${ep}/script-versions`))).body.data;
 
   test('a save keeps the script it replaces; saving the same text keeps nothing', async () => {
     expect((await auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_content: V2, script_revision: await rev() })).status).toBe(200);
@@ -84,15 +88,15 @@ const V3 = beat(1, 'Opening Ritual', 'Lala: "Third draft"');
     expect(res.status).toBe(200);
     const versions = await list();
     expect(versions.map((v) => v.source)).toEqual(['generate', 'lock', 'save']);
-    const one = await auth(request(app).get(`/api/v1/episodes/${ep}/script-versions/${versions[0].id}`));
+    const one = await asAdmin(request(app).get(`/api/v1/episodes/${ep}/script-versions/${versions[0].id}`));
     expect(one.status).toBe(200);
     expect(one.body.data.script_content).toBe(V3);
     expect(Number.isNaN(Date.parse(one.body.data.created_at))).toBe(false);
   });
 
   test("another episode's version, or none, is not found", async () => {
-    expect((await auth(request(app).get(`/api/v1/episodes/${uuid()}/script-versions/${(await list())[0].id}`))).status).toBe(404);
-    expect((await auth(request(app).get(`/api/v1/episodes/${ep}/script-versions/${uuid()}`))).status).toBe(404);
+    expect((await asAdmin(request(app).get(`/api/v1/episodes/${uuid()}/script-versions/${(await list())[0].id}`))).status).toBe(404);
+    expect((await asAdmin(request(app).get(`/api/v1/episodes/${ep}/script-versions/${uuid()}`))).status).toBe(404);
   });
 
   // History audit H6 (2026-10-24): the cap is per family, so many saves

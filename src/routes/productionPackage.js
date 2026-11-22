@@ -6,7 +6,11 @@
 const express = require('express');
 const router = express.Router();
 const productionPackageController = require('../controllers/productionPackageController');
-const { requireAuth } = require('../middleware/auth');
+// The four reads are an ADMIN's (Evoni, 2026-11-22): a package is built from
+// the episode's script, and a non-admin account is never sent internal script
+// text (docs/audit/F-AUTH-1_ScriptReads_AdminOnly_Amendment2_2026-11-22.md).
+// The two writes are as they were.
+const { requireAuth, authorize } = require('../middleware/auth');
 
 // ============================================================================
 // PACKAGE GENERATION
@@ -28,7 +32,7 @@ router.post(
  */
 router.get(
   '/:episodeId/production-package/latest',
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   productionPackageController.getLatestPackage
 );
 
@@ -38,7 +42,7 @@ router.get(
  */
 router.get(
   '/:episodeId/production-package/versions',
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   productionPackageController.listPackageVersions
 );
 
@@ -48,7 +52,7 @@ router.get(
  */
 router.get(
   '/:episodeId/production-package/:packageId',
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   productionPackageController.getPackage
 );
 
@@ -58,7 +62,7 @@ router.get(
  */
 router.get(
   '/:episodeId/production-package/:packageId/download',
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   productionPackageController.downloadPackage
 );
 

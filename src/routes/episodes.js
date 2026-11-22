@@ -828,7 +828,10 @@ router.put(
 // with its text. Read-only; a restore on the Script tab is a save that
 // names the version (PUT /episodes/:id { script_content, restored_from }),
 // and the script it replaced is listed with source 'restore'.
-router.get('/:id/script-versions', validateUUIDParam('id'), requireAuth, async (req, res) => {
+// ADMIN only (Evoni, 2026-11-22): a kept version is the script's text, and a
+// non-admin account is never sent internal script text
+// (docs/audit/F-AUTH-1_ScriptReads_AdminOnly_Amendment2_2026-11-22.md).
+router.get('/:id/script-versions', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { listVersions } = require('../services/scriptVersions');
@@ -839,7 +842,7 @@ router.get('/:id/script-versions', validateUUIDParam('id'), requireAuth, async (
   }
 });
 
-router.get('/:id/script-versions/:versionId', validateUUIDParam('id'), validateUUIDParam('versionId'), requireAuth, async (req, res) => {
+router.get('/:id/script-versions/:versionId', validateUUIDParam('id'), validateUUIDParam('versionId'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const models = require('../models');
     const { getVersion } = require('../services/scriptVersions');
@@ -967,10 +970,12 @@ router.delete(
  */
 
 // GET /api/v1/episodes/:episodeId/scripts - Get all scripts for episode
+// ADMIN only (Evoni, 2026-11-22); named fields, the text for ?includeContent=true
+// (services/scriptReadFields).
 router.get(
   '/:episodeId/scripts',
   validateUUIDParam('episodeId'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(scriptsController.getScriptsByEpisode)
 );
 
@@ -983,10 +988,11 @@ router.post(
 );
 
 // GET /api/v1/episodes/:episodeId/scripts/:scriptType/versions - Get versions
+// ADMIN only (Evoni, 2026-11-22).
 router.get(
   '/:episodeId/scripts/:scriptType/versions',
   validateUUIDParam('episodeId'),
-  requireAuth,
+  requireAuth, authorize(['ADMIN']),
   asyncHandler(scriptsController.getScriptVersions)
 );
 
