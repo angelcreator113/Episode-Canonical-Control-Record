@@ -2,23 +2,26 @@ const express = require('express');
 const router = express.Router();
 const scriptsController = require('../controllers/scriptsController');
 const { asyncHandler } = require('../middleware/errorHandler');
-// F-AUTH-1 Step 3 CP9: mixed Tier 1+4 within single file (per v2.33 §5.21,
-// 6th cumulative instance after worldStudio.js @ CP3 + universe.js @ CP6 +
-// franchiseBrainRoutes.js @ CP7 + socialProfileRoutes.js + feedPostRoutes.js
-// @ CP8). 4 GETs are public catalog reads (no req.user consumption); 6 writes
-// are Tier 1. Legacy authenticateToken alias converted to requireAuth per
-// v2.33 §5.53 (5 instances; 2nd legacy-alias conversion in CP-zone work after
-// franchiseBrainRoutes:560 @ CP7).
-const { requireAuth, optionalAuth } = require('../middleware/auth');
+// The four reads are an ADMIN's (Evoni, 2026-11-21). They were classed as a
+// public catalog at F-AUTH-1 Step 3 CP9 because they did not read req.user,
+// and answered anyone, signed in or not, with every latest script, a script's
+// text for ?includeContent=true and its edit history. Scripts are production
+// material: Prime Studios is admin only (her ruling of 2026-10-29). The
+// correction is recorded in docs/audit/F-AUTH-1_ScriptsReads_AdminOnly_
+// Amendment_2026-11-21.md. What each read answers with is named in
+// services/scriptReadFields.
+// The 6 writes are as CP9 left them: requireAuth (the legacy
+// authenticateToken alias was converted there, v2.33 §5.53).
+const { requireAuth, authorize } = require('../middleware/auth');
 
 /**
  * Scripts Routes
  * Base path: /api/v1/scripts
  */
 
-// PUBLIC: scripts catalog endpoints (Tier 4); no req.user consumption.
-router.get('/', optionalAuth, asyncHandler(scriptsController.getAllScripts));
-router.get('/search', optionalAuth, asyncHandler(scriptsController.searchScripts));
+// ADMIN only: the list of scripts, and its search.
+router.get('/', requireAuth, authorize(['ADMIN']), asyncHandler(scriptsController.getAllScripts));
+router.get('/search', requireAuth, authorize(['ADMIN']), asyncHandler(scriptsController.searchScripts));
 
 // POST /api/v1/scripts/bulk-delete - Bulk delete scripts
 router.post(
@@ -27,8 +30,8 @@ router.post(
   asyncHandler(scriptsController.bulkDelete)
 );
 
-// PUBLIC: single-script + history catalog reads (Tier 4); no req.user consumption.
-router.get('/:scriptId', optionalAuth, asyncHandler(scriptsController.getScriptById));
+// ADMIN only: one script; its text for ?includeContent=true.
+router.get('/:scriptId', requireAuth, authorize(['ADMIN']), asyncHandler(scriptsController.getScriptById));
 
 // PATCH /api/v1/scripts/:scriptId - Update script
 router.patch(
@@ -58,8 +61,8 @@ router.post(
   asyncHandler(scriptsController.restoreVersion)
 );
 
-// PUBLIC: edit history catalog read (Tier 4); no req.user consumption.
-router.get('/:scriptId/history', optionalAuth, asyncHandler(scriptsController.getEditHistory));
+// ADMIN only: a script's edit history (never the sender's IP address or user agent).
+router.get('/:scriptId/history', requireAuth, authorize(['ADMIN']), asyncHandler(scriptsController.getEditHistory));
 
 // POST /api/v1/scripts/:scriptId/parse-scenes - Parse scenes from script (Tier 1)
 router.post('/:scriptId/parse-scenes', requireAuth, asyncHandler(scriptsController.parseScenes));

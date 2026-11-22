@@ -1,43 +1,52 @@
 // ============================================================================
-// UNIT TESTS — scripts.js (Step 3 CP9, D2 + D11 locks)
+// UNIT TESTS — scripts.js (Step 3 CP9, D2 + D11 locks; the reads corrected
+// 2026-11-21)
 // ============================================================================
-// 10 handlers (surface-correction: 10 not 9; agent missed POST /:scriptId/parse-scenes
-// at L60 which had ZERO middleware and is now ADD requireAuth):
-//   - 4 GETs Tier 4 PUBLIC (catalog reads — list, search, single, history)
-//   - 6 writes Tier 1
-//   - 5 legacy authenticateToken converted to requireAuth per D11 (largest
-//     legacy-alias conversion in CP-zone work; CP7 had 1 instance)
-// 6th cumulative §5.21 instance.
+// 10 handlers:
+//   - 4 GETs (list, search, single, history): requireAuth + authorize(['ADMIN']).
+//     CP9 classed them Tier 4 PUBLIC because they did not read req.user, so
+//     they answered anyone with every script, a script's text and its edit
+//     history. Evoni, 2026-11-21: they are an ADMIN's
+//     (docs/audit/F-AUTH-1_ScriptsReads_AdminOnly_Amendment_2026-11-21.md).
+//     How they behave is in scripts-reads-admin-only.test.js.
+//   - 6 writes Tier 1, as CP9 left them (5 legacy authenticateToken converted
+//     to requireAuth per D11; POST /:scriptId/parse-scenes had no middleware).
 
 const fs = require('fs');
 const path = require('path');
 
 const SRC = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'routes', 'scripts.js'), 'utf8');
 
-describe('Step 3 CP9 — scripts.js mixed Tier 1+4 + legacy authenticateToken conversion', () => {
-  test('imports requireAuth + optionalAuth (legacy authenticateToken alias eliminated; optionalAuth added by FD-67 Option 1)', () => {
-    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*optionalAuth\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
+describe('scripts.js — ADMIN reads, Tier 1 writes', () => {
+  test('imports requireAuth + authorize (legacy authenticateToken alias eliminated; optionalAuth gone)', () => {
+    expect(SRC).toMatch(/const\s*\{\s*requireAuth,\s*authorize\s*\}\s*=\s*require\(['"]\.\.\/middleware\/auth['"]\)/);
     // No active import of authenticateToken (only allowed in comment-block prose)
     expect(SRC).not.toMatch(/const\s*\{[^}]*\bauthenticateToken\b[^}]*\}\s*=\s*require/);
   });
 
-  test('mixed-tier comment block documents §5.21 6th cumulative instance', () => {
-    expect(SRC).toMatch(/§5\.21|mixed Tier 1\+4/);
-    expect(SRC).toMatch(/6th cumulative instance/);
+  test('the comment block names the correction and its register amendment', () => {
+    expect(SRC).toMatch(/The four reads are an ADMIN's \(Evoni, 2026-11-21\)/);
+    expect(SRC).toMatch(/F-AUTH-1_ScriptsReads_AdminOnly_/);
   });
 
-  describe('Tier 4 PUBLIC GETs (4 catalog reads — D2; explicit optionalAuth per FD-67 Option 1)', () => {
-    test('GET / (list) carries explicit optionalAuth (Tier 4 PUBLIC)', () => {
-      expect(SRC).toMatch(/router\.get\('\/',\s*optionalAuth,\s*asyncHandler/);
+  describe('the 4 reads are an ADMIN\'s', () => {
+    const ADMIN = String.raw`requireAuth,\s*authorize\(\['ADMIN'\]\),\s*asyncHandler`;
+    test('GET / (list)', () => {
+      expect(SRC).toMatch(new RegExp(String.raw`router\.get\('\/',\s*${ADMIN}`));
     });
-    test('GET /search (catalog search) carries explicit optionalAuth (Tier 4 PUBLIC)', () => {
-      expect(SRC).toMatch(/router\.get\('\/search',\s*optionalAuth,\s*asyncHandler/);
+    test('GET /search', () => {
+      expect(SRC).toMatch(new RegExp(String.raw`router\.get\('\/search',\s*${ADMIN}`));
     });
-    test('GET /:scriptId (single read) carries explicit optionalAuth (Tier 4 PUBLIC)', () => {
-      expect(SRC).toMatch(/router\.get\('\/:scriptId',\s*optionalAuth,\s*asyncHandler/);
+    test('GET /:scriptId (single read)', () => {
+      expect(SRC).toMatch(new RegExp(String.raw`router\.get\('\/:scriptId',\s*${ADMIN}`));
     });
-    test('GET /:scriptId/history carries explicit optionalAuth (Tier 4 PUBLIC)', () => {
-      expect(SRC).toMatch(/router\.get\('\/:scriptId\/history',\s*optionalAuth,\s*asyncHandler/);
+    test('GET /:scriptId/history', () => {
+      expect(SRC).toMatch(new RegExp(String.raw`router\.get\('\/:scriptId\/history',\s*${ADMIN}`));
+    });
+    test('every GET in the file carries both, and there are four', () => {
+      const gets = SRC.match(/^router\.get\(.*$/gm) || [];
+      expect(gets).toHaveLength(4);
+      for (const line of gets) expect(line).toMatch(/requireAuth,\s*authorize\(\['ADMIN'\]\)/);
     });
   });
 
@@ -62,9 +71,8 @@ describe('Step 3 CP9 — scripts.js mixed Tier 1+4 + legacy authenticateToken co
     });
   });
 
-  test('optionalAuth present on the 4 Tier 4 catalog reads only, not on the 6 Tier 1 writes (FD-67 Option 1)', () => {
-    const optionalAuthCount = (SRC.match(/\boptionalAuth\b/g) || []).length;
-    // 1 import + 4 route declarations
-    expect(optionalAuthCount).toBe(5);
+  test('nothing in the file is public: no optionalAuth, no PUBLIC route comment', () => {
+    expect(SRC).not.toMatch(/\boptionalAuth\b/);
+    expect(SRC).not.toMatch(/\/\/ PUBLIC:/);
   });
 });
