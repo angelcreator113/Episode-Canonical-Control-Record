@@ -439,6 +439,177 @@ function call(handler, req) {
       expect(await live(shape, epA)).toEqual([[a[1], 1], [a[2], 2]]);
       expect((await live(shape, epB)).map(([, n]) => n)).toEqual([1, 2, 3, 4]);
     });
+
+    // ── reorderScenes: the same numbering, so the same lock (Evoni, 2026-11-22) ──
+
+    it('a reorder: the answer is as it was, in one transaction that locks the episode before it reads a scene, with no DDL and the indexes untouched', async () => {
+      const ep = await episode();
+      const ids = await seed(shape, ep, [1, 2, 3, 4]);
+      const wanted = [ids[2], ids[0], ids[3], ids[1]];
+      const before = await indexes(shape);
+      // Every statement in full (the tracer keeps only the start of a long SELECT), with its transaction.
+      const sequelize = reg().sequelize;
+      const real = sequelize.query.bind(sequelize);
+      const sent0 = [];
+      jest.spyOn(sequelize, 'query').mockImplementation(async (sql, options) => {
+        const text = String(typeof sql === 'object' && sql !== null && sql.query ? sql.query : sql).replace(/\s+/g, ' ').trim();
+        sent0.push({ text, txId: options?.transaction?.id || null });
+        return real(sql, options);
+      });
+      const res = await reorder(reg(), ep, wanted);
+      jest.restoreAllMocks();
+
+      // The body main's handler sends: success, the reordered scenes, the message; nothing added.
+      expect(res.status).toBe(200);
+      expect(Object.keys(res.body)).toEqual(['success', 'data', 'message']);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toBe('Scenes reordered successfully');
+      const sent = JSON.parse(JSON.stringify(res.body.data));
+      expect(sent.map((s) => [s.id, s.sceneNumber])).toEqual(wanted.map((id, i) => [id, i + 1])); // the model's own JSON names it sceneNumber
+      const stored = JSON.parse(JSON.stringify(await reg().models.Scene.findAll({ where: { episode_id: ep }, order: [['scene_number', 'ASC']] })));
+      expect(sent).toEqual(stored); // each scene as the model serializes it, as before
+      expect(await live(shape, ep)).toEqual(wanted.map((id, i) => [id, i + 1]));
+      expect(await indexes(shape)).toEqual(before);
+
+      const texts = sent0.map((s) => s.text);
+      expect(texts.filter((s) => DDL.test(s))).toEqual([]);
+      expect(texts.join('\n')).not.toMatch(/idx_scenes_episode_scene_number|\bINDEX\b/i);
+      expect(texts.filter((s) => /^START TRANSACTION|^BEGIN/i.test(s))).toHaveLength(1);
+      expect(texts.filter((s) => /^COMMIT/i.test(s))).toHaveLength(1);
+      expect(texts.filter((s) => /^ROLLBACK/i.test(s))).toEqual([]);
+      // Every statement on scenes (the reads of the rows to reorder, and both passes) is in the one transaction...
+      const onScenes = sent0.filter((s) => /\b(?:FROM|UPDATE|INTO)\s+"?scenes"?\b/i.test(s.text));
+      const reads = onScenes.filter((s) => /^SELECT/i.test(s.text));
+      const writes = onScenes.filter((s) => /^UPDATE/i.test(s.text));
+      expect([reads.length, writes.length]).toEqual([4, 8]); // four reads, then the two passes of four, as before
+      const tx = new Set(onScenes.map((s) => s.txId));
+      expect(tx.size).toBe(1);
+      expect([...tx][0]).toBeTruthy();
+      // ...and the episode's lock, in that transaction, comes before the first of them.
+      const episodeLock = sent0.findIndex((s) => /FROM episodes WHERE id IN .* FOR UPDATE/i.test(s.text));
+      expect(episodeLock).toBeGreaterThanOrEqual(0);
+      expect(sent0[episodeLock].txId).toBe([...tx][0]);
+      expect(episodeLock).toBeLessThan(sent0.indexOf(onScenes[0]));
+      // The only statement outside the transaction is the episode's existence check, as before.
+      expect(sent0.filter((s) => !s.txId && !/^START TRANSACTION|^BEGIN|^COMMIT/i.test(s.text)).every((s) => /FROM "?episodes"?/i.test(s.text))).toBe(true);
+    });
+
+    it('a reorder asked wrongly answers as it did: 400 for no list, 404 for no such episode, nothing begun', async () => {
+      const ep = await episode();
+      const ids = await seed(shape, ep, [1, 2]);
+      const before = await all(shape, ep);
+      const trace = lockTrace.install(reg().sequelize);
+      try {
+        for (const sceneIds of [undefined, null, 'x', {}, []]) {
+          expect(await call(reg().controller.reorderScenes, { params: { episodeId: ep }, body: { sceneIds } }))
+            .toEqual({ status: 400, body: { success: false, error: 'sceneIds must be a non-empty array' } });
+        }
+        expect(await reorder(reg(), uuid(), ids)).toEqual({ status: 404, body: { success: false, error: 'Episode not found' } });
+      } finally { trace.uninstall(); }
+      expect(trace.records.filter((r) => r.kind === 'begin' || r.kind === 'write' || r.kind === 'lock')).toEqual([]);
+      expect(await all(shape, ep)).toEqual(before);
+      // Ids of another episode, and ids that are no scene, are passed over as before.
+      const other = await episode();
+      const [foreign] = await seed(shape, other, [1]);
+      const res = await reorder(reg(), ep, [ids[1], foreign, uuid(), ids[0]]);
+      expect(res.status).toBe(200);
+      expect(res.body.data.map((s) => s.id)).toEqual([ids[1], ids[0]]);
+      expect(await live(shape, ep)).toEqual([[ids[1], 1], [ids[0], 2]]);
+      expect(await live(shape, other)).toEqual([[foreign, 1]]);
+    });
+
+    it.each([
+      ['between the two passes (the first statement of the second pass never runs)', 5, false],
+      ['during the second pass (its second statement runs, then fails)', 6, true],
+      ['during the first pass', 2, true],
+    ])('a reorder that fails %s: 500, and every number and updated_at is as it was', async (_name, failAt, runFirst) => {
+      const ep = await episode();
+      const ids = await seed(shape, ep, [1, 2, 3, 4]);
+      const before = await all(shape, ep);
+      const indexesBefore = await indexes(shape);
+      const sequelize = reg().sequelize;
+      const real = sequelize.query.bind(sequelize);
+      let seen = 0;
+      const statements = [];
+      jest.spyOn(sequelize, 'query').mockImplementation(async (sql, options) => {
+        const text = String(typeof sql === 'object' && sql !== null && sql.query ? sql.query : sql).replace(/\s+/g, ' ').trim();
+        statements.push(text);
+        if (/^UPDATE "?scenes"?/i.test(text)) {
+          seen += 1;
+          if (seen === failAt) {
+            if (runFirst) await real(sql, options);
+            throw new Error('reorder interrupted');
+          }
+        }
+        return real(sql, options);
+      });
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const res = await reorder(reg(), ep, [ids[3], ids[2], ids[1], ids[0]]);
+
+      expect(res).toEqual({ status: 500, body: { success: false, error: 'Failed to reorder scenes', message: 'reorder interrupted' } });
+      expect(seen).toBe(failAt);
+      expect(statements.some((s) => /^ROLLBACK/i.test(s))).toBe(true);
+      expect(statements.some((s) => /^COMMIT/i.test(s))).toBe(false);
+      jest.restoreAllMocks();
+      expect(await all(shape, ep)).toEqual(before); // scene_number and updated_at of every row
+      expect(await indexes(shape)).toEqual(indexesBefore);
+      // The same reorder, tried again, works.
+      expect((await reorder(reg(), ep, [ids[3], ids[2], ids[1], ids[0]])).status).toBe(200);
+      expect(await live(shape, ep)).toEqual([[ids[3], 1], [ids[2], 2], [ids[1], 3], [ids[0], 4]]);
+    });
+
+    it('two reorders of one episode at the same moment: the second waits for the first, both succeed, and the second order stands', async () => {
+      const ep = await episode();
+      const ids = await seed(shape, ep, [1, 2, 3, 4]);
+      const trace = lockTrace.install(reg().sequelize);
+      try {
+        const gate = trace.gate((r) => r.kind === 'lock' && r.table === 'episodes');
+        const first = reorder(reg(), ep, [ids[3], ids[2], ids[1], ids[0]]);
+        await gate.reached;
+        const second = reorder(reg(), ep, [ids[1], ids[0], ids[3], ids[2]]);
+        expect(await settledWithin(second, 400)).toBe('pending');
+        expect(await live(shape, ep)).toEqual(ids.map((id, i) => [id, i + 1])); // nothing committed yet
+        gate.open();
+        const [a, b] = await Promise.all([first, second]);
+        expect([a.status, b.status]).toEqual([200, 200]);
+      } finally { trace.uninstall(); }
+      expect(await live(shape, ep)).toEqual([[ids[1], 1], [ids[0], 2], [ids[3], 3], [ids[2], 4]]);
+      expect(trace.records.filter((r) => r.error)).toEqual([]);
+    });
+
+    it('another episode is not held up while a reorder is part-way: it reads, reorders, deletes and gains a scene', async () => {
+      const epA = await episode();
+      const epB = await episode();
+      const a = await seed(shape, epA, [1, 2, 3]);
+      const b = await seed(shape, epB, [1, 2, 3, 4]);
+      const trace = lockTrace.install(reg().sequelize);
+      try {
+        // Episode A's reorder is held after the first statement of its first pass: it holds A's lock and one of A's rows.
+        const gate = trace.gate((r) => r.kind === 'write' && r.table === 'scenes');
+        const reorderingA = reorder(reg(), epA, [a[2], a[1], a[0]]);
+        await gate.reached;
+
+        const started = Date.now();
+        const read = await reg().models.Scene.findAll({ where: { episode_id: epB }, order: [['scene_number', 'ASC']] });
+        expect(read.map((s) => s.id)).toEqual(b);
+        expect((await reorder(reg(), epB, [b[3], b[2], b[1], b[0]])).status).toBe(200);
+        expect((await del(reg(), b[1])).status).toBe(200);
+        await reg().sequelize.query(
+          `INSERT INTO scenes (id, episode_id, scene_number, title, created_at, updated_at) VALUES (:id, :ep, 4, 'Added', NOW(), NOW())`,
+          { replacements: { id: uuid(), ep: epB } });
+        expect(Date.now() - started).toBeLessThan(5000);
+        expect(await settledWithin(reorderingA, 50)).toBe('pending');
+        // A's own readers are not blocked either: its committed numbers are still the old ones.
+        expect(await live(shape, epA)).toEqual(a.map((id, i) => [id, i + 1]));
+
+        gate.open();
+        expect((await reorderingA).status).toBe(200);
+      } finally { trace.uninstall(); }
+      expect(await live(shape, epA)).toEqual([[a[2], 1], [a[1], 2], [a[0], 3]]);
+      expect((await live(shape, epB)).map(([, n]) => n)).toEqual([1, 2, 3, 4]);
+      expect(trace.records.filter((r) => r.error)).toEqual([]);
+    });
   });
 
   it('where the numbers repeat or are missing (no index to forbid it), the delete still leaves 1..n', async () => {
@@ -494,6 +665,21 @@ function call(handler, req) {
       try { res = await del(asRole, ids[0]); } finally { trace.uninstall(); }
       expect(res).toEqual({ status: 200, body: { success: true, message: 'Scene deleted successfully', data: { deletedSceneId: ids[0], episode_id: ep } } });
       expect(await live('present', ep)).toEqual([[ids[1], 1], [ids[2], 2], [ids[3], 3]]);
+      expect(await indexes('present')).toEqual(before);
+      expect(trace.records.map((r) => r.sql || r.kind).filter((s) => DDL.test(s))).toEqual([]);
+      expect(trace.records.filter((r) => r.error)).toEqual([]);
+    });
+
+    it('a reorder succeeds for that role: the order is saved, the index is the same object and no DDL was sent', async () => {
+      const ep = await episode();
+      const ids = await seed('present', ep, [1, 2, 3]);
+      const before = await indexes('present');
+      const trace = lockTrace.install(asRole.sequelize);
+      let res;
+      try { res = await reorder(asRole, ep, [ids[2], ids[0], ids[1]]); } finally { trace.uninstall(); }
+      expect(res.status).toBe(200);
+      expect(res.body.data.map((s) => [s.id, s.scene_number])).toEqual([[ids[2], 1], [ids[0], 2], [ids[1], 3]]);
+      expect(await live('present', ep)).toEqual([[ids[2], 1], [ids[0], 2], [ids[1], 3]]);
       expect(await indexes('present')).toEqual(before);
       expect(trace.records.map((r) => r.sql || r.kind).filter((s) => DDL.test(s))).toEqual([]);
       expect(trace.records.filter((r) => r.error)).toEqual([]);
