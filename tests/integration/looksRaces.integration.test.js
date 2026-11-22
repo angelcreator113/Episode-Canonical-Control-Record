@@ -144,6 +144,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                VALUES (gen_random_uuid(), :look, :angle, 'generating', 'generated', NOW(), NOW() - INTERVAL '20 minutes')`, { look: look.id, angle });
     const map = await dressed.lookAngles(sequelize, [look.id]);
     expect(map.get(`${look.id}:${angle}`)).toMatchObject({ status: 'failed' });
+    // It reads as failed; the read does not write the row (Evoni, 2026-11-22).
+    // The next run's claim is what takes a row stuck this long.
+    const [[row]] = await sequelize.query('SELECT status, error FROM scene_set_look_angles WHERE look_id = :look AND scene_angle_id = :angle', { replacements: { look: look.id, angle } });
+    expect(row).toEqual({ status: 'generating', error: null });
   });
 
   it('a generated look on a set with no location of its own is shown (its venue is the brief\'s)', async () => {

@@ -389,6 +389,8 @@ async function resumeEpisodeSetup(models, episodeId) {
     console.warn('[EpisodeGenerator] Episode locations read failed on resume:', locErr.message);
   }
   const result = await createScenePlanRows(episode, event || { show_id: episode.show_id }, models, locations);
+  // L12a: the beats made here get their scene rows now (the plan's read no longer makes them).
+  await require('./beatScenesService').syncBeatScenesQuietly(models.sequelize, episodeId, 'resume setup');
   const steps = { ...(episode.setup_status?.steps || {}), scene_plan: scenePlanStep(result) };
   if (!steps.locations) steps.locations = { status: 'complete' };
   const setup_status = await recordSetupStatus(models, episodeId, steps);
@@ -973,6 +975,9 @@ Return ONLY JSON.` }],
   // Use a container object instead of bare identifiers so downstream
   // access is resilient even if a scope mutation slips in later edits.
   const scenePlanResult = await createScenePlanRows(episode, event, models, locations);
+  // L12a: each beat's scene row is made with the plan (the plan's read no
+  // longer makes them). A failure is logged and never stops Start Episode.
+  await require('./beatScenesService').syncBeatScenesQuietly(models.sequelize, episode.id, 'Start Episode');
   const { scenePlanRows } = scenePlanResult;
   const setupSteps = { scene_plan: scenePlanStep(scenePlanResult), season_slot: seasonSlotStep };
 

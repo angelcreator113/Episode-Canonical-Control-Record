@@ -29,6 +29,7 @@ const chosenMigration = require('../../src/migrations/20261002140000-add-scene-p
 const lookAnglesMigration = require('../../src/migrations/20261002150000-create-scene-set-look-angles');
 const planIdMigration = require('../../src/migrations/20261002160000-add-scenes-scene-plan-id');
 const { generateScenePlan } = require('../../src/services/scenePlannerService');
+const lockTrace = require('../helpers/lockTrace');
 
 const { sequelize } = models;
 
@@ -66,6 +67,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   const scenesOf = (ep) => rows(`SELECT id, scene_plan_id, scene_number, title, background_url, scene_set_id, scene_angle_id, duration_seconds, characters
                                    FROM scenes WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY scene_number`, { ep });
   const plan = async (ep) => (await auth(request(app).get(`/api/v1/episode-brief/${ep}/plan`))).body;
+  // The plan's read writes nothing (Evoni, 2026-11-22). These episodes are made
+  // by SQL, not by Start Episode, so their scene rows are made the way Start
+  // Episode, generate-plan and a beat's save make them: by the sync itself.
+  const sync = (ep) => require('../../src/services/beatScenesService').syncBeatScenes(sequelize, ep);
   const planId = async (ep, b) => (await rows('SELECT id FROM scene_plans WHERE episode_id = :ep AND beat_number = :b AND deleted_at IS NULL', { ep, b }))[0].id;
 
   beforeAll(async () => {
@@ -105,8 +110,14 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(index.indexdef).toMatch(/UNIQUE.*\(scene_plan_id\).*deleted_at IS NULL/);
   });
 
-  it('reading the plan gives every beat with a set its scene: beat number, angle image (else the base), 5s; a beat with no set has none', async () => {
+  it('every beat with a set has its scene: beat number, angle image (else the base), 5s; a beat with no set has none; the plan reads their ids and writes nothing', async () => {
     const ep = await episode();
+    // Before any sync the read makes no scene, and says none.
+    const first = await plan(ep);
+    expect(await scenesOf(ep)).toEqual([]);
+    expect(first.data.every((b) => b.scene_id === null)).toBe(true);
+
+    await sync(ep);
     const body = await plan(ep);
     const scenes = await scenesOf(ep);
     expect(scenes.map((s) => [s.scene_number, s.background_url, s.scene_angle_id])).toEqual([
@@ -127,9 +138,126 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await scenesOf(ep)).map((s) => s.id)).toEqual(scenes.map((s) => s.id));
   });
 
+  it('the plan\'s read writes nothing, whoever reads it: no scene or plan row is made, changed or removed', async () => {
+    const ep = await episode();
+    const as = (groups) => TokenService.generateTokenPair({ id: `reader-${groups.join('-')}`, email: 'reader@beatscenes.dev', name: 'Reader', groups, role: groups[0] }).accessToken;
+    // Every column of every scene and plan row of the episode, deleted ones too.
+    const snapshot = async () => ({
+      scenes: await rows('SELECT * FROM scenes WHERE episode_id = :ep ORDER BY id', { ep }),
+      plans: await rows('SELECT * FROM scene_plans WHERE episode_id = :ep ORDER BY id', { ep }),
+    });
+    const read = (t) => request(app).get(`/api/v1/episode-brief/${ep}/plan`).set('Authorization', `Bearer ${t}`);
+
+    // With no scene rows yet: none is made.
+    let before = await snapshot();
+    expect(before.scenes).toEqual([]);
+    for (const groups of [['viewer'], ['USER', 'EDITOR'], ['ADMIN']]) {
+      const res = await read(as(groups));
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(6);
+      expect(await snapshot()).toEqual(before);
+    }
+
+    // With scene rows that are out of date (a finished image, a beat that lost
+    // its set): the read changes none of them and removes none.
+    await sync(ep);
+    await run(`UPDATE scene_angles SET still_image_url = 'https://x/doorway.jpg', generation_status = 'complete' WHERE id = :d`, { d: sets.doorway });
+    await run('UPDATE scene_plans SET scene_set_id = NULL WHERE episode_id = :ep AND beat_number = 3', { ep });
+    before = await snapshot();
+    for (const groups of [['viewer'], ['USER', 'EDITOR'], ['ADMIN']]) {
+      expect((await read(as(groups))).status).toBe(200);
+      expect(await snapshot()).toEqual(before);
+    }
+    expect((await request(app).get(`/api/v1/episode-brief/${ep}/plan`)).status).toBe(401);
+    expect(await snapshot()).toEqual(before);
+    await run(`UPDATE scene_angles SET still_image_url = NULL, generation_status = 'pending' WHERE id = :d`, { d: sets.doorway });
+  });
+
+  it('the plan\'s own writes still bring the scenes up to date: POST generate-plan, and a beat\'s save', async () => {
+    const ep = await episode();
+    expect(await scenesOf(ep)).toEqual([]);
+    await run(`INSERT INTO episode_briefs (id, episode_id, show_id, created_at, updated_at) VALUES (gen_random_uuid(), :ep, :show, NOW(), NOW())`, { ep, show });
+    mockCreate.mockResolvedValue({ content: [{ text: JSON.stringify([1, 2, 3, 10, 11, 14].map((n) => ({
+      beat_number: n, scene_set_id: n === 14 ? null : (n >= 10 ? sets.glasshouse : sets.apartment), angle_label: n === 2 ? 'VANITY' : null,
+      shot_type: 'medium', emotional_intent: 'x', transition_in: 'cut',
+    }))) }] });
+    const made = await auth(request(app).post(`/api/v1/episode-brief/${ep}/generate-plan`)).send({});
+    expect(made.status).toBe(200);
+    // Each beat the new plan gives a set has its scene, with no read in between
+    // (the route's planner also places the closing beat, so it has one too).
+    const scenes = await scenesOf(ep);
+    const planned = await rows('SELECT beat_number FROM scene_plans WHERE episode_id = :ep AND deleted_at IS NULL AND scene_set_id IS NOT NULL ORDER BY beat_number', { ep });
+    expect(scenes.map((s) => s.scene_number)).toEqual(planned.map((r) => r.beat_number));
+    expect(scenes.map((s) => s.scene_number)).toEqual(expect.arrayContaining([1, 2, 3, 10, 11]));
+    const body = await plan(ep);
+    expect(body.data.find((b) => b.beat_number === 2).scene_id).toBe(scenes[1].id);
+
+    // A beat's save moves its scene, again with no read.
+    expect((await auth(request(app).put(`/api/v1/episode-brief/${ep}/plan/1`)).send({ scene_set_id: sets.cafe, chosen: true })).status).toBe(200);
+    expect((await scenesOf(ep))[0]).toMatchObject({ id: scenes[0].id, scene_set_id: sets.cafe, background_url: 'https://x/cafe.jpg' });
+    await run('DELETE FROM episode_briefs WHERE episode_id = :ep', { ep });
+  });
+
+  // Not table by table: every statement the request runs is recorded
+  // (tests/helpers/lockTrace wraps sequelize.query, which model writes and
+  // raw SQL both go through), and none may be a write. A write to a table
+  // nobody thought to snapshot would show here.
+  const WRITE = /^\s*(?:WITH\b[\s\S]*?\b)?(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|ALTER|CREATE|DROP)\b/i;
+  async function statementsOf(send) {
+    const trace = lockTrace.install(sequelize);
+    try {
+      const res = await send();
+      return { res, records: [...trace.records] };
+    } finally {
+      trace.uninstall();
+    }
+  }
+  const writesIn = (records) => records.filter((r) => ['write', 'insert', 'lock', 'begin'].includes(r.kind) || WRITE.test(r.sql || ''));
+
+  it('every statement the plan\'s read and the dressed angles list run is a read, for a viewer, an editor and an admin', async () => {
+    const ep = await episode();
+    const as = (groups) => TokenService.generateTokenPair({ id: `stmt-${groups.join('-')}`, email: 'stmt@beatscenes.dev', name: 'Reader', groups, role: groups[0] }).accessToken;
+    // An event with a look on the venue, one dressed angle done and one stuck
+    // generating, scenes that are out of date, and a beat that lost its set:
+    // every state in which these reads used to write.
+    const ev = uuid(); const look = uuid();
+    await run(`INSERT INTO world_events (id, show_id, name, event_type, status, prestige, scene_set_id, used_in_episode_id, created_at, updated_at)
+               VALUES (:ev, :show, 'Gala', 'invite', 'used', 5, :venue, :ep, NOW(), NOW())`, { ev, show, venue: sets.glasshouse, ep });
+    await run(`INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, image_url, created_at, updated_at)
+               VALUES (:look, :venue, :ev, 'complete', 'https://x/look.jpg', NOW(), NOW())`, { look, venue: sets.glasshouse, ev });
+    await run(`INSERT INTO scene_set_look_angles (id, look_id, scene_angle_id, status, image_url, source, created_at, updated_at)
+               VALUES (gen_random_uuid(), :look, :wide, 'complete', 'https://x/wide-dressed.jpg', 'generated', NOW(), NOW()),
+                      (gen_random_uuid(), :look, :door, 'generating', NULL, 'generated', NOW(), NOW() - INTERVAL '20 minutes')`, { look, wide: sets.wide, door: sets.doorway });
+    await sync(ep);
+    await run('UPDATE scene_plans SET scene_set_id = NULL WHERE episode_id = :ep AND beat_number = 3', { ep });
+    await run(`UPDATE scenes SET background_url = 'https://x/stale.jpg' WHERE episode_id = :ep AND scene_number = 1`, { ep });
+
+    const reads = [
+      `/api/v1/episode-brief/${ep}/plan`,
+      `/api/v1/episode-brief/${ep}/dressed-angles?scene_set_id=${sets.glasshouse}`,
+    ];
+    for (const path of reads) {
+      for (const groups of [['viewer'], ['USER', 'EDITOR'], ['ADMIN']]) {
+        const { res, records } = await statementsOf(() => request(app).get(path).set('Authorization', `Bearer ${as(groups)}`));
+        expect([path, groups, res.status]).toEqual([path, groups, 200]);
+        // The read did run queries (the recorder is on), and none wrote, locked a row or opened a transaction.
+        expect(records.length).toBeGreaterThan(0);
+        expect(writesIn(records).map((r) => r.sql || r.kind)).toEqual([]);
+      }
+    }
+    // The recorder does see a write when there is one: a beat's save, through the same app.
+    const saved = await statementsOf(() => auth(request(app).put(`/api/v1/episode-brief/${ep}/plan/1`)).send({ scene_set_id: sets.cafe, chosen: true }));
+    expect(saved.res.status).toBe(200);
+    expect(writesIn(saved.records).length).toBeGreaterThan(0);
+
+    await run('DELETE FROM scene_set_look_angles WHERE look_id = :look', { look });
+    await run('DELETE FROM scene_set_looks WHERE id = :look', { look });
+    await run('DELETE FROM world_events WHERE id = :ev', { ev });
+  });
+
   it("a beat's change reaches its scene; the Timeline's edits stay", async () => {
     const ep = await episode();
-    await plan(ep);
+    await sync(ep);
     const [s1] = await scenesOf(ep);
     const saved = await auth(request(app).post(`/api/v1/episodes/${ep}/save`)).send({ scenes: (await scenesOf(ep)).map((s) => ({
       id: s.id, scene_number: s.scene_number, title: s.title, duration_seconds: s.id === s1.id ? 9 : 5,
@@ -180,15 +308,30 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                VALUES (:look, :venue, :ev, 'complete', 'https://x/look.jpg', NOW(), NOW())`, { look, venue: sets.glasshouse, ev });
     await run(`INSERT INTO scene_set_look_angles (id, look_id, scene_angle_id, status, image_url, source, created_at, updated_at)
                VALUES (gen_random_uuid(), :look, :wide, 'complete', 'https://x/wide-dressed.jpg', 'generated', NOW(), NOW())`, { look, wide: sets.wide });
-    await plan(ep);
+    await sync(ep);
     const scenes = await scenesOf(ep);
     expect(scenes.find((s) => s.scene_number === 11).background_url).toBe('https://x/wide-dressed.jpg');
     expect(scenes.find((s) => s.scene_number === 1).background_url).toBe('https://x/apartment.jpg');
+
+    // A dressed angle stuck generating reads as failed, and the reads leave its
+    // row as it is (Evoni, 2026-11-22: a read writes nothing). The plan's read
+    // and the dressed angles list both go through it.
+    await run(`INSERT INTO scene_set_look_angles (id, look_id, scene_angle_id, status, source, created_at, updated_at)
+               VALUES (gen_random_uuid(), :look, :door, 'generating', 'generated', NOW(), NOW() - INTERVAL '20 minutes')`, { look, door: sets.doorway });
+    const dressedRows = () => rows('SELECT * FROM scene_set_look_angles WHERE look_id = :look ORDER BY id', { look });
+    const before = await dressedRows();
+    expect(before.map((r) => r.status).sort()).toEqual(['complete', 'generating']);
+    expect((await auth(request(app).get(`/api/v1/episode-brief/${ep}/plan`))).status).toBe(200);
+    const list = await auth(request(app).get(`/api/v1/episode-brief/${ep}/dressed-angles?scene_set_id=${sets.glasshouse}`));
+    expect(list.status).toBe(200);
+    expect(JSON.stringify(list.body)).toContain('did not finish within 10 minutes');
+    expect(await dressedRows()).toEqual(before);
+    await run('DELETE FROM scene_set_look_angles WHERE look_id = :look AND scene_angle_id = :door', { look, door: sets.doorway });
   });
 
   it("a re-plan keeps each beat's scene and its Timeline edits; a beat losing its set loses its scene", async () => {
     const ep = await episode();
-    await plan(ep);
+    await sync(ep);
     const before = await scenesOf(ep);
     await run(`UPDATE scenes SET duration_seconds = 12 WHERE id = :id`, { id: before[1].id });
     mockCreate.mockResolvedValue({ content: [{ text: JSON.stringify([1, 2, 3, 10, 11, 14].map((n) => ({
@@ -197,7 +340,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     }))) }] });
     await generateScenePlan(ep, show, {}, { save: true });
     expect(await planId(ep, 2)).not.toBe(before[1].scene_plan_id);
-    await plan(ep);
+    // The service is called here without its route; POST generate-plan runs this sync after it.
+    await sync(ep);
     const after = await scenesOf(ep);
     const two = after.find((s) => s.scene_number === 2);
     expect(two.id).toBe(before[1].id);
