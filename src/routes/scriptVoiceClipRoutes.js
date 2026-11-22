@@ -4,14 +4,16 @@
  * Voice clips: lines of an episode's script spoken by Evoni (Teleprompter
  * batch 3; Evoni, 2026-10-20). Mounted at /api/v1/script-voice-clips.
  *
- *   GET    /:episodeId            the episode's live clips
+ *   GET    /:episodeId            the episode's live clips (admins only)
  *   POST   /:episodeId            upload one (multipart: audio, beat_number, line_index,
  *                                 speaker, line_text, duration_seconds?); the line's
  *                                 earlier clip is soft-deleted
  *   DELETE /:episodeId/:clipId    soft delete (the file stays in S3)
  *
- * Recording a clip (POST, new or over a line's clip) is for admins only
- * (403 otherwise). Removing one is for its recorder or an admin (V-1;
+ * Reading the clips is for admins only (Evoni, 2026-11-22: each clip carries
+ * the script line it speaks; docs/audit/F-AUTH-1_ScriptReads_AdminOnly_
+ * Amendment2_2026-11-22.md). Recording a clip (POST, new or over a line's
+ * clip) is for admins only (403 otherwise). Removing one is for its recorder or an admin (V-1;
  * scriptVoiceClipsService.mayChange; else 403 NOT_CLIP_OWNER). While Voice
  * Studio is on (VOICE_STUDIO=on) both are refused with a 409
  * VOICE_CLIPS_FROZEN: lines are recorded in Voice Studio then. A refused
@@ -75,7 +77,7 @@ const checkEpisodeId = (id) => {
   if (!UUID_RE.test(String(id || ''))) throw new voice.VoiceClipError(404, 'Episode not found');
 };
 
-router.get('/:episodeId', requireAuth, async (req, res) => {
+router.get('/:episodeId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     checkEpisodeId(req.params.episodeId);
     const rows = await voice.listClips(models.sequelize, req.params.episodeId);

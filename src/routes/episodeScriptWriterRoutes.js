@@ -10,7 +10,13 @@
 
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
+// The four reads are an ADMIN's (Evoni, 2026-11-22): a Script Writer version
+// is internal script text at any status, and a non-admin account is never
+// sent it (docs/audit/F-AUTH-1_ScriptReads_AdminOnly_Amendment2_2026-11-22.md).
+// What a version read answers with is named in services/scriptReadFields.
+// The writes are as they were.
+const { requireAuth, authorize } = require('../middleware/auth');
+const { WRITER_SCRIPT_LIST_FIELDS, WRITER_SCRIPT_FIELDS } = require('../services/scriptReadFields');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { scriptOverwriteBlocked, scriptOverwriteRefusalBody } = require('../utils/scriptOverwriteGuard');
 
@@ -81,26 +87,24 @@ router.post('/:episodeId/generate', requireAuth, aiRateLimiter, async (req, res)
 
 // ── LIST SCRIPT VERSIONS ─────────────────────────────────────────────────────
 // GET /api/v1/episode-scripts/:episodeId
-router.get('/:episodeId', requireAuth, async (req, res) => {
+router.get('/:episodeId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { EpisodeScript } = require('../models');
     const scripts = await EpisodeScript.findAll({
       where: { episode_id: req.params.episodeId, deleted_at: null },
       order: [['version', 'DESC']],
-      attributes: ['id', 'version', 'status', 'title', 'word_count', 'beat_count',
-                   'voice_score', 'generation_model', 'generation_tokens',
-                   'financial_context', 'author_notes', 'edited_by', 'edited_at',
-                   'created_at'],
+      attributes: [...WRITER_SCRIPT_LIST_FIELDS],
     });
     return res.json({ data: scripts, count: scripts.length });
   } catch (err) {
+    console.error('[ScriptWriter] List versions error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });
 
 // ── GET SPECIFIC VERSION ─────────────────────────────────────────────────────
 // GET /api/v1/episode-scripts/:episodeId/version/:version
-router.get('/:episodeId/version/:version', requireAuth, async (req, res) => {
+router.get('/:episodeId/version/:version', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { EpisodeScript } = require('../models');
     const script = await EpisodeScript.findOne({
@@ -109,26 +113,30 @@ router.get('/:episodeId/version/:version', requireAuth, async (req, res) => {
         version: parseInt(req.params.version, 10),
         deleted_at: null,
       },
+      attributes: [...WRITER_SCRIPT_FIELDS],
     });
     if (!script) return res.status(404).json({ error: 'Script version not found' });
     return res.json({ data: script });
   } catch (err) {
+    console.error('[ScriptWriter] Get version error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });
 
 // ── GET LATEST VERSION ───────────────────────────────────────────────────────
 // GET /api/v1/episode-scripts/:episodeId/latest
-router.get('/:episodeId/latest', requireAuth, async (req, res) => {
+router.get('/:episodeId/latest', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { EpisodeScript } = require('../models');
     const script = await EpisodeScript.findOne({
       where: { episode_id: req.params.episodeId, deleted_at: null },
       order: [['version', 'DESC']],
+      attributes: [...WRITER_SCRIPT_FIELDS],
     });
     if (!script) return res.status(404).json({ error: 'No scripts found for this episode' });
     return res.json({ data: script });
   } catch (err) {
+    console.error('[ScriptWriter] Get latest error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -220,7 +228,7 @@ router.post('/:scriptId/lock', requireAuth, async (req, res) => {
 
 // ── GET GENERATION CONTEXT (preview what will feed the AI) ───────────────────
 // GET /api/v1/episode-scripts/:episodeId/context
-router.get('/:episodeId/context', requireAuth, async (req, res) => {
+router.get('/:episodeId/context', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId } = req.query;
     if (!showId) return res.status(400).json({ error: 'showId query param required' });
@@ -248,6 +256,7 @@ router.get('/:episodeId/context', requireAuth, async (req, res) => {
       },
     });
   } catch (err) {
+    console.error('[ScriptWriter] Context error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });

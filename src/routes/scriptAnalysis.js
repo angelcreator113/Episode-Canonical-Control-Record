@@ -10,7 +10,9 @@ const { Pool } = require('pg');
 // handlers were unprotected pre-CP9). Service-mediated AI POST classification per
 // v2.32 §5.58: claudeService.analyzeScript wraps Anthropic — POST /:scriptId/analyze
 // gets requireAuth + aiRateLimiter; remaining handlers get plain requireAuth.
-const { requireAuth } = require('../middleware/auth');
+// GET /:scriptId/metadata is an ADMIN's (Evoni, 2026-11-22): it is a script's
+// scene breakdown (docs/audit/F-AUTH-1_ScriptReads_AdminOnly_Amendment2_2026-11-22.md).
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 
 // Create pool for raw SQL queries (scripts use raw SQL, not Sequelize)
@@ -124,7 +126,7 @@ router.post('/:scriptId/analyze', requireAuth, aiRateLimiter, async (req, res) =
  * GET /api/scripts/:scriptId/metadata
  * Get analysis results for a script
  */
-router.get('/:scriptId/metadata', requireAuth, async (req, res) => {
+router.get('/:scriptId/metadata', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { scriptId } = req.params;
 
