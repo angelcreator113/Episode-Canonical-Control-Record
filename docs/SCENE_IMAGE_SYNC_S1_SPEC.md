@@ -6,10 +6,11 @@ Design specification. Approved in design by Evoni on 2026-11-22 with the conditi
 
 - **S1 code implementation is NOT authorized.** Nothing described here is implemented.
 - **Design:** approved by Evoni on 2026-11-22, with the conditions and rulings recorded in sections 2, 7, 10A, 16 and 18.
-- **Before implementation:** #3922 (P1), #3923 (P2a) and P2b must be merged (#3921, PR A, has merged) (section 0, "Dependency order"), the verification gaps in section 16 remain open, and Evoni must authorize implementation separately.
-- **Date of this revision:** 2026-11-22.
+- **Before implementation:** #3921 (PR A), #3922 (P1) and #3923 (P2a) have merged. Still required: P2b (#3926) integrated together with the Place-lock concurrency work A and B (section 0A; #3926 alone is not an independently safe deployment unit), the verification gaps in section 16 remain open, and Evoni must authorize implementation separately. None of A, B, C or S1 is authorized for implementation at this revision.
+- **Unresolved production-integrity risk until S1 is implemented and verified:** today's automatic scene sync rewrites the saved scenes of accepted and filmed episodes (section 6, "Current behaviour").
+- **Date of this revision:** 2026-11-22 (later the same day: sections 0A and 6 and items 10 to 14 of section 16 added; nothing removed).
 
-**Code basis:** `origin/main` at `01a5037f93c899a2ddd1060adaa8ca0ecdea1d33` (#3919 and #3920 merged). Code is cited by function, route or component name; a line number, where given, is at that commit and is only a convenience. #3921 merged after this basis (main then at `878a22d87a9b14d6a3535f5ec18528115510e220`); nothing cited here was re-read at that commit.
+**Code basis:** `origin/main` at `01a5037f93c899a2ddd1060adaa8ca0ecdea1d33` (#3919 and #3920 merged). Code is cited by function, route or component name; a line number, where given, is at that commit and is only a convenience. #3921 merged after this basis (main then at `878a22d87a9b14d6a3535f5ec18528115510e220`); nothing cited here was re-read at that commit. #3922, #3923 and #3925 have merged since (main at `5068bd137515f77cb66bc099218df9e52a82d4ae`); the body's line numbers were not re-read there either. Section 0A and the additions to sections 6 and 16 were read at `5068bd13` and at #3926's head `8ce15b38`.
 **Standings:** **M** = measured (the named code was read at the basis commit, or a lock experiment was run on a local PostgreSQL 16 test database). **I** = inferred.
 **History:** this document consolidates a first design draft, three addenda to it (locking and outcomes; the filmed race; the remaining code checks) and an image-dependency review, all working papers of 2026-11-22 that are not kept in the repository. Where a later paper corrected an earlier one, only the final position is stated in the body; section 17 lists what changed. In section 15, "old N" is a test's number in the first draft and its later additions, and "addendum N" its number in the locking addendum.
 
@@ -37,13 +38,38 @@ Design specification. Approved in design by Evoni on 2026-11-22 with the conditi
 | Order | Work | Why it comes before S1 |
 |---|---|---|
 | 1 | #3921 (PR A): destructive scene, beat and package operations ADMIN-only. **Merged** (main at `878a22d8`) | Shared a pinned route test with the PRs below; made `apply-scene-plan`, which hard-deletes scenes and assigns scene numbers, ADMIN-only |
-| 2 | #3922 (P1): plan and Start Episode writes ADMIN-only; event-edit field rule | Gates event look generate and upload (two completion hooks) and every caller of the sync on the plan side; its rule on `scene_set_id` is what `generate-venue` must not bypass |
-| 3 | #3923 (P2a): scene, set-link and footage writes ADMIN-only | Gates set restyle, dressed-angle generate and upload, the scene update route used by Restore, `from-angle`, and every Scene Studio write S1 edits |
-| 4 | P2b (47 routes, subject to final verification) | Gates the seven base and angle completion routes and the destructive angle routes; makes `generate-venue` ADMIN-only; and adds the Place-lock refusal to `generate-venue` (ruled 2026-11-22) |
+| 2 | #3922 (P1): plan and Start Episode writes ADMIN-only; event-edit field rule. **Merged** (main at `809f9442`) | Gates event look generate and upload (two completion hooks) and every caller of the sync on the plan side; its rule on `scene_set_id` is what `generate-venue` must not bypass |
+| 3 | #3923 (P2a): scene, set-link and footage writes ADMIN-only. **Merged** (main at `558b4409`) | Gates set restyle, dressed-angle generate and upload, the scene update route used by Restore, `from-angle`, and every Scene Studio write S1 edits |
+| 4 | P2b (47 routes, subject to final verification) | Gates the seven base and angle completion routes and the destructive angle routes; makes `generate-venue` ADMIN-only; and adds the Place-lock refusal to `generate-venue` (ruled 2026-11-22). **That refusal is an early check only: it does not complete concurrency protection (section 0A). #3926 is open and unmerged** |
+| 4a | Place-lock concurrency work **A** (shared rule and transactional finalizer) and **B** (paid generation and late refusal), integrated with P2b. Planned; not authorized | Section 2a and tests 82 and 88 assume `generate-venue` changes nothing on an accepted episode's event. That holds against a concurrent acceptance only after B (section 0A) |
+| 4b | Place-lock concurrency work **C** (other event, Scene Set and episode writers). Planned; not authorized | Removes existing deadlocks between acceptance and event-first writers, and adds reference-aware guards. Its order relative to S1 is not yet decided |
 | 5 | **S1** (this document) | Every request-side hook then sits behind an ADMIN-only write |
 | 6 | S2 | Non-image propagation, built on S1's sync and warnings |
 
 **Not required but assumed absent:** no migration, no new endpoint, no new database grant, no IAM change (section 14).
+
+### 0A. What P2b does not do: Place-lock concurrency (A, B, C) and the S1 freeze dependency
+
+Added 2026-11-22 after the lock-order review of #3926 (Evoni: "Clarify that P2b provides ADMIN authorization and early Place-lock checks, but does not complete concurrency protection. Document the required A/B/C integration and the S1 freeze dependency. State clearly that #3926 alone is not an independently safe deployment unit.").
+
+**What P2b (#3926) provides.** `authorize(['ADMIN'])` on 47 routes, and on `generate-venue` one Place-lock check before any generation, storage write or event update, including the attached-set missing-base branch.
+
+**What it does not provide.** The check runs once, with no transaction and no row lock, and generation then takes minutes. An episode accepted after the check still has its event's place changed. **#3926 alone is therefore not an independently safe deployment unit.** The same check-then-write shape exists in event look generate and upload, dressed-angle generate and upload, `scene-set-link`, return-to-everyday, Locations save and Scene Set delete.
+
+**The planned protection (design accepted for planning; implementation not authorized).**
+
+| Scope | Contents |
+|---|---|
+| A | `isPlaceLocked` becomes "locked when any canonically linked live episode is accepted" (primary by brief, non-primary by stamp, both parts of a two-part special). One finalizer helper in `utils/placeLock`: `lockEpisodes(…, { mode: 'share' })` on the linked episodes in id order, then the event row `FOR UPDATE` (`lockLiveEvent`), its own lock timeout, a re-read of the links, a re-check of the Place lock and of the event's source Scene Set, at most three attempts. No new lock service |
+| B | `generate-venue` (both branches), `generateBaseScene` and its callers, event look generate and upload, dressed-angle generate and upload, and the venue-look draft finalize through A's helper after generation, with no transaction open during generation. A late refusal writes nothing, repeats no provider or storage call, and records the unlinked image's URL. Also in B: Locations save locks the event before the episode's set rows, and Start Episode re-reads the event's set under its event lock |
+| C | The event-first writers (event edit, `makeEventVersion`, return-to-everyday, `scene-set-link`, `moveUses`) take the episode share lock first, together; reference-aware guards for sets and angles that accepted episodes use; venue-look save and draft ADMIN-only |
+
+- **Minimum safe integration and deployment unit:** #3926 + A + B.
+- **Why episode `FOR SHARE`, not `FOR UPDATE`:** the event-first writers insert a `scene_set_episodes` row, whose foreign key takes a key-share lock on the episode. That conflicts with `FOR UPDATE` and deadlocks; it does not conflict with `FOR SHARE`, which still makes both acceptance writes (the completion transaction and Part 2's separate update) wait.
+- **Evidence (M, isolated local PostgreSQL 16 databases, the finalizer a stand-in calling the real helpers, opponents the real routes and services):** 74 interleavings. No deadlock with acceptance for primary, non-primary and two-part cases in either order; the `FOR UPDATE` variant deadlocks; the four event-first writers deadlock with acceptance on `main` today; Locations save deadlocks with the finalizer and with the event edit until it locks the event first; Start Episode writes a stale event set on `main` today.
+- **Not run (I):** `moveUses` and the deliverable routes; the real finalizer inside the generation services.
+
+**The S1 freeze dependency.** A, B and C protect what feeds an accepted episode (the event's place, sets, bases, looks, angles). They do not stop the scene sync from rewriting an accepted or filmed episode's saved scene rows; only S1's freeze does (section 6). Two ADMIN recovery workflows (a removed Scene Set under an accepted episode's beats; a deleted event Place) are designed to change plan references and links only, never saved backgrounds, and are **not to be implemented before S1's freeze is available**. A deliberate background replacement belongs to S1's Restore (section 5), not to a second image-replacement path.
 
 ### Out of scope (S2)
 
@@ -102,7 +128,7 @@ Classes: **Hook** = a new or changed image should reach unprotected scenes, so t
 
 **`generate-venue` in P2b:** `authorize(['ADMIN'])` goes directly after `requireAuth`, before `aiRateLimiter`, so no paid generation, storage write or event-location update runs for a signed-out or non-admin caller. The existing implementation is kept; no second venue-generation pathway is added.
 
-**Place lock on `generate-venue` (P2b, not S1; ruled 2026-11-22):** P2b also makes the route refuse, with the existing Place-lock service and refusal, when the event's episode is accepted, before any generation, storage write, set creation or event update, including with `force: true`. S1 is written for the state after P2b: on an accepted episode's event the route changes nothing, so no inconsistency is created there by this route. Before P2b the route had no such check and could move such an event's place; that is history, not a state S1 runs in.
+**Place lock on `generate-venue` (P2b, not S1; ruled 2026-11-22):** P2b also makes the route refuse, with the existing Place-lock service and refusal, when the event's episode is accepted, before any generation, storage write, set creation or event update, including with `force: true`. S1 is written for the state after P2b: on an accepted episode's event the route changes nothing, so no inconsistency is created there by this route. Before P2b the route had no such check and could move such an event's place; that is history, not a state S1 runs in. **Correction (same day):** P2b's check is an early check. Against an acceptance that commits while generation is running, "changes nothing" holds only after scope B (section 0A); S1 therefore follows the integrated unit #3926 + A + B, not #3926 alone.
 
 ### 2b. Deletion points
 
@@ -308,6 +334,8 @@ None records an author, lock or log.
 - **Filmed race, closed:** the only raw-clip insert in `src/` and `scripts/` is in `rawClipsService.attachClip`, whose first statement is `lockEpisodes(…, { mode: 'share' })`. The sync's `FOR UPDATE` and the clip's `FOR SHARE` wait for each other in both orders (section 8, experiments). No clip writer changes.
 - **Beat save on a protected episode:** the plan row still saves; the sync returns `protected`; the response says scenes are frozen.
 - **Export:** calls the same sync; on a protected episode it renders stored images. On an unprotected episode manual backgrounds are kept by section 5.
+- **Scope, restated (Evoni, 2026-11-22, section 16 item 10):** the freeze applies when an episode is accepted **or** has raw footage, at every automatic entry point: the scenes read, export, Resume setup, beat saves and the image-completion hooks. It preserves backgrounds, Scene Sets, angles, canvas data and manually approved imagery. It stays in S1's scope; no partial version of it goes into A, B or C.
+- **Current behaviour (M at `8ce15b38`; an unresolved production-integrity risk until S1 is implemented and verified):** `syncBeatScenes` has no accepted or filmed check. It runs on `GET /episodes/:id/scenes`, on export, at Start and Resume setup, after generate-plan and after a beat save, and rewrites `scenes.background_url`, `scene_set_id` and `scene_angle_id` whenever live resolution differs from the stored row. For an accepted episode a base-served beat at a soft-deleted Scene Set gets an empty background at the next read (the sync joins live sets only): read from the code, not run, and whether it has happened on any server is not known. An accepted episode can also have no scene rows at all (nothing at acceptance creates them; Part 2 of a two-part special starts with none).
 
 ---
 
@@ -537,7 +565,7 @@ The clear is conditional on the warning's `at`, so a newer warning is never clea
 ### Who resolves it
 
 - **Unfinished episode:** an ADMIN saves the episode's Locations (`PUT /episodes/:episodeId/locations`, P2a), which moves the beats and writes the event's place from the episode; or edits the event's place (P1 field rule), which runs `syncEpisodeEventLocation`. S2 will do this propagation automatically.
-- **Accepted episode:** after P2b `generate-venue` can no longer create the inconsistency there (it is refused by the Place lock). Where it exists for another reason, the Locations save refuses (409 `EPISODE_ACCEPTED`) and `syncEpisodeEventLocation` skips the episode, so the warning stays until the event's place is the plan's again. It is not cleared by any automatic path.
+- **Accepted episode:** after P2b `generate-venue` can no longer create the inconsistency there (it is refused by the Place lock) when the episode was accepted before the request; an acceptance during generation is closed only by scope B (section 0A). Where it exists for another reason, the Locations save refuses (409 `EPISODE_ACCEPTED`) and `syncEpisodeEventLocation` skips the episode, so the warning stays until the event's place is the plan's again. It is not cleared by any automatic path.
 - **Filmed-only episode:** S1 treats it as protected (scenes untouched) and warns. Note that an ordinary event edit still moves such an episode's unlocked beats today; that is the S2 item in section 0.
 - **Visibility:** `setup_status` is not in the non-admin safe fields, so only ADMIN readers see it. **M**
 
@@ -778,6 +806,12 @@ All of group P runs on isolated tables, once with the index absent and once prod
 
 9. **Scene-number conflict handling:** "APPROVED: Add an application-level live-scene-number conflict check to the existing S1 sync algorithm. Requirements: Execute the conflict check after obtaining the episode lock, inside the sync transaction. Detect another live scene in the same episode already holding the desired scene number, including an untied legacy scene. Exclude the scene being updated. Treat a conflict as a per-beat failure, preserving existing scene rows and continuing other unaffected beats. Record the warning through the existing scene-sync warning mechanism. Preserve the unique index as the final database guard wherever it exists. Test on isolated databases both with and without the index. Test concurrent synchronization and relevant scene writers. Document that the read check does not guarantee global uniqueness against writers that bypass the episode lock. Do not introduce a new service, migration, index-management operation or separate warning system." → section 4 (steps 4a, 6a), section 4A, tests 90–103. Reviewed by Evoni the same day: "Keep the approved live-scene-number conflict check and two-pass synchronization plan. … The documentation must clearly distinguish application-level conflict prevention from a database-enforced uniqueness guarantee. Do not implement S1 code yet." → the subsection "Application-level prevention versus a database guarantee" in section 4A and the coverage table in section 15.
 
+10. **Accepted and filmed scene protection:** "APPROVED: Automatic scene synchronization must not rewrite saved scenes when an episode is accepted OR has raw footage. The protection applies to all automatic synchronization entry points, including reads, exports, Resume setup, beat saves and image-completion hooks. Preserve backgrounds, Scene Sets, angles, canvas data and manually approved imagery. Keep this in the consolidated S1 scope. Do not implement a partial workaround in A, B or C. Record the current behavior as an unresolved production-integrity risk until S1 is implemented and verified." → section 6; tests 10 to 19 and 57 (unchanged).
+11. **P2b and concurrency:** "Clarify that P2b provides ADMIN authorization and early Place-lock checks, but does not complete concurrency protection. Document the required A/B/C integration and the S1 freeze dependency. State clearly that #3926 alone is not an independently safe deployment unit." → section 0A; Status; dependency order rows 4, 4a and 4b. Tests 82 and 88 are unchanged: they assert the early refusal. The tests that race the real acceptance belong to A and B and are not S1 tests.
+12. **Recovery of a removed Scene Set on an accepted episode:** "An ADMIN recovery of a removed Scene Set changes only the expressly selected plan reference and necessary episode–set link. The saved scene background must remain unchanged by default. Any deliberate background replacement belongs to the existing S1 Restore Beat Background workflow, with preview and explicit ADMIN confirmation. Do not create another image-replacement system." → section 5 (Restore) is the only deliberate replacement path; the recovery itself is a separate design, not part of S1.
+13. **Locked-beat recovery:** "APPROVED IN DESIGN ONLY: A locked beat may be repaired without first unlocking it, but only through an explicitly confirmed, narrowly scoped ADMIN recovery action. … Do not implement before S1's freeze protection is available. Do not allow a generic confirm:true flag to bypass ordinary accepted-episode restrictions." → section 0A (the S1 freeze dependency).
+14. **Deleted event Place:** "Prepare a separate read-only recovery design for accepted episodes whose event's Place was deleted. … No automatic venue replacement and no generic Place-lock bypass. Do not implement it yet." → a separate design; recorded here because it also waits on S1's freeze.
+
 ### Open
 
 None at this revision.
@@ -855,6 +889,8 @@ None of these can be established from the repository. Each is to be checked on t
 | Open decision "Index-absent behaviour" | Settled: the application-level check (section 16, item 9) |
 | The sync restores tied scenes' numbers one row at a time (today's code; unstated in earlier drafts) | Two-pass renumbering in one savepoint, so the index is never transiently violated |
 | "#3921 (PR A) must be merged first" (earlier revisions of the dependency order and Status) | #3921 has merged; the remaining prerequisites are #3922, #3923 and P2b |
+| "the remaining prerequisites are #3922, #3923 and P2b" (previous revision of Status) | #3922 and #3923 have merged; the remaining prerequisite is P2b (#3926) integrated with scopes A and B (section 0A) |
+| "P2b … adds the Place-lock refusal to `generate-venue`" read as closing the accepted-episode bypass; "after P2b `generate-venue` can no longer create the inconsistency there" | P2b's refusal is an early check. An acceptance during generation is closed only by scope B; #3926 alone is not an independently safe deployment unit |
 | "All five [bypassing writers] are ADMIN-only after #3921, #3920 and #3923" | Stated per writer: `apply-scene-plan` since #3921 and legacy `parse-scenes` since #3920 (both merged); scene create, scene duplicate and footage upload with #3923 (not merged when this was written) |
 | 97 acceptance tests | 103, with a coverage table for the six reviewed areas |
 
