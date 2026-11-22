@@ -61,16 +61,24 @@ const EMPTIES = [['null', null], ["''", ''], ["'null'", 'null'], ["'undefined'",
    * brief names it), or null (no episode). A linked episode has its event
    * location, a beat at the event's set and that beat's scene.
    */
-  async function world({ linked = 'stamp', evaluation = 'pending' } = {}) {
-    const w = { ev: uuid(), setA: uuid(), setB: uuid(), ep: null, otherEp: uuid() };
+  async function world({ linked = 'stamp', evaluation = 'pending', filmed = false } = {}) {
+    const w = { ev: uuid(), setA: uuid(), setB: uuid(), ep: null, otherEp: uuid(), number: null };
     for (const [id, name] of [[w.setA, 'Hall'], [w.setB, 'Garden']]) {
       await run(`INSERT INTO scene_sets (id, name, scene_type, show_id, base_still_url, generation_status, created_at, updated_at)
                  VALUES (:id, :name, 'EVENT_LOCATION', :show, :url, 'complete', NOW(), NOW())`, { id, name, show, url: `https://x/${id}.jpg` });
     }
-    const episode = async (id, title) => run(`INSERT INTO episodes (id, show_id, title, episode_number, status, evaluation_status, created_at, updated_at)
-               VALUES (:id, :show, :title, :n, 'draft', :evaluation, NOW(), NOW())`, { id, show, title, n: Math.floor(Math.random() * 1000000) + 700, evaluation });
+    const episode = async (id, title) => {
+      const n = Math.floor(Math.random() * 1000000) + 700;
+      await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, evaluation_status, created_at, updated_at)
+               VALUES (:id, :show, :title, :n, 'draft', :evaluation, NOW(), NOW())`, { id, show, title, n, evaluation });
+      return n;
+    };
     await episode(w.otherEp, `Other ${TITLE}`);
-    if (linked) { w.ep = uuid(); await episode(w.ep, TITLE); }
+    if (linked) { w.ep = uuid(); w.number = await episode(w.ep, TITLE); }
+    // Filmed: a raw clip is on the episode (the freeze's own sign).
+    if (linked && filmed) {
+      await run(`INSERT INTO episode_raw_clips (episode_id, show_id, performer, s3_key_raw) VALUES (:ep, :show, 'lala', :key)`, { ep: w.ep, show, key: `raw/${w.ep}.mp4` });
+    }
     await run(`INSERT INTO world_events (id, show_id, name, event_type, status, prestige, scene_set_id, used_in_episode_id, description, created_at, updated_at)
                VALUES (:ev, :show, 'Gala', 'invite', :status, 5, :setA, :link, 'as seeded', NOW() - INTERVAL '1 hour', NOW() - INTERVAL '1 hour')`,
     { ev: w.ev, show, setA: w.setA, status: linked === 'stamp' ? 'used' : 'ready', link: linked === 'stamp' ? w.ep : null });
@@ -103,6 +111,14 @@ const EMPTIES = [['null', null], ["''", ''], ["'null'", 'null'], ["'undefined'",
   const writesIn = (records) => records.filter((r) => r.kind === 'write' || r.kind === 'insert'
     || (r.kind === 'other' && /^\s*(INSERT|UPDATE|DELETE)\b/i.test(r.sql || '')));
 
+  /** Nothing of an episode in an answer: no id, no title, no number, no episode object. */
+  function expectNoEpisodeIn(body, w) {
+    const text = JSON.stringify(body);
+    for (const secret of [w.ep, w.otherEp, TITLE].filter(Boolean)) expect(text).not.toContain(secret);
+    expect(text).not.toMatch(/"episode"\s*:|"episode_number"\s*:|"episode_id"\s*:/);
+    if (w.number != null) expect(text).not.toContain(`Episode ${w.number}`);
+  }
+
   /** A save refused 403: the exact body, no statement that writes, every row as it was, nothing of the episode in the answer. */
   async function expectRefused(who, w, body, fields) {
     const before = await snapshot(w);
@@ -111,8 +127,7 @@ const EMPTIES = [['null', null], ["''", ''], ["'null'", 'null'], ["'undefined'",
     try { res = await put(who, w.ev, body); } finally { trace.uninstall(); }
     expect(res.status).toBe(403);
     expect(res.body).toEqual(refusal(fields));
-    const text = JSON.stringify(res.body);
-    for (const secret of [w.ep, w.otherEp, TITLE].filter(Boolean)) expect(text).not.toContain(secret);
+    expectNoEpisodeIn(res.body, w);
     expect(writesIn(trace.records)).toEqual([]);
     expect(await snapshot(w)).toEqual(before);
   }
@@ -131,6 +146,7 @@ const EMPTIES = [['null', null], ["''", ''], ["'null'", 'null'], ["'undefined'",
   afterEach(() => jest.restoreAllMocks());
   afterAll(async () => {
     const q = (sql) => sequelize.query(sql, { replacements: { show } }).catch(() => {});
+    await q('DELETE FROM episode_raw_clips WHERE show_id = :show');
     await q('DELETE FROM scenes WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show)');
     await q('DELETE FROM scene_plans WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show)');
     await q('DELETE FROM scene_set_episodes WHERE episode_id IN (SELECT id FROM episodes WHERE show_id = :show)');
@@ -199,14 +215,18 @@ const EMPTIES = [['null', null], ["''", ''], ["'null'", 'null'], ["'undefined'",
       const stored = await eventRow(w.ev);
       for (const [, shape] of SHAPES) {
         const res = await put('editor', w.ev, {
-          // The link is re-sent plain: the terms lock (not this rule) reads a
-          // wrapped link as a change on a started event, as it did before.
-          name: 'Renamed', scene_set_id: shape(stored.scene_set_id), used_in_episode_id: stored.used_in_episode_id,
+          name: 'Renamed', scene_set_id: shape(stored.scene_set_id),
+          used_in_episode_id: stored.used_in_episode_id ? shape(stored.used_in_episode_id) : null,
         });
         expect(res.status).toBe(200);
+        expectNoEpisodeIn({ ...res.body, event: undefined }, w);
       }
-      // The same id in capitals is the same place.
+      // The same id in capitals is the same place: saved, and the episode's
+      // plan, set links and scenes do not move.
+      const before = await snapshot(w);
       expect((await put('editor', w.ev, { description: 'Echoed in capitals', scene_set_id: stored.scene_set_id.toUpperCase() })).status).toBe(200);
+      const after = await snapshot(w);
+      for (const part of ['briefs', 'plans', 'links', 'scenes', 'episodes']) expect(after[part]).toEqual(before[part]);
       expect(await eventRow(w.ev)).toMatchObject({ name: 'Renamed', description: 'Echoed in capitals', scene_set_id: w.setA, used_in_episode_id: stored.used_in_episode_id });
     });
   });
@@ -293,12 +313,77 @@ const EMPTIES = [['null', null], ["''", ''], ["'null'", 'null'], ["'undefined'",
       expect((await eventRow(w.ev)).used_in_episode_id).toBe(w.ep);
     });
 
-    it('a stale save is still answered as stale (409), with the event only', async () => {
+    it('a stale save that carries such a change gets the 403, not the stale answer (which carries the event row and its link)', async () => {
       const w = await world();
-      const res = await put('editor', w.ev, { scene_set_id: w.setB, expected_updated_at: '2001-01-01T00:00:00.000Z' });
-      expect(res.status).toBe(409);
-      expect(res.body.code).not.toBe('AUTH_GROUP_REQUIRED');
-      expect((await eventRow(w.ev)).scene_set_id).toBe(w.setA);
+      const stale = { expected_updated_at: '2001-01-01T00:00:00.000Z' };
+      await expectRefused('editor', w, { scene_set_id: w.setB, ...stale }, ['scene_set_id']);
+      await expectRefused('editor', w, { used_in_episode_id: { id: w.otherEp }, ...stale }, ['used_in_episode_id']);
+      // A stale save of the event's own fields is answered as stale, as before.
+      const own = await put('editor', w.ev, { name: 'Renamed', ...stale });
+      expect(own.status).toBe(409);
+      expect(own.body.code).not.toBe('AUTH_GROUP_REQUIRED');
+      expect((await eventRow(w.ev)).name).toBe('Gala');
+    });
+  });
+
+  // Evoni, 2026-11-22: "A non-admin request must not receive a 409 body that
+  // discloses a linked episode merely because it echoes a wrapped stored
+  // link." The terms lock compared the link as it was sent, so the stored
+  // link sent back as { id } or { value } read as a change and was answered
+  // with the lock's 409, whose body names the episode.
+  describe.each([
+    ['a started event (terms locked)', {}],
+    ['an event whose episode is accepted', { evaluation: 'accepted' }],
+    ['an event whose episode is filmed', { filmed: true }],
+    ['an event whose episode is accepted and filmed', { evaluation: 'accepted', filmed: true }],
+  ])('the stored link sent back, on %s', (_name, options) => {
+    const ECHOES = [...SHAPES, ['in capitals', (v) => v.toUpperCase()], ['{ id } in capitals', (v) => ({ id: v.toUpperCase() })]];
+
+    it.each(ECHOES)('not an admin, the link alone as %s: 200, nothing of the episode in the answer beyond the event\'s own row, nothing moved', async (_shape, shape) => {
+      const w = await world(options);
+      const before = await snapshot(w);
+      const res = await put('editor', w.ev, { used_in_episode_id: shape(w.ep) });
+      expect(res.status).toBe(200);
+      expect(res.body.code).toBeUndefined();
+      expectNoEpisodeIn({ ...res.body, event: undefined }, w);
+      const after = await snapshot(w);
+      for (const part of ['briefs', 'plans', 'links', 'scenes', 'episodes']) expect(after[part]).toEqual(before[part]);
+      expect(await eventRow(w.ev)).toMatchObject({ name: 'Gala', scene_set_id: w.setA, used_in_episode_id: w.ep });
+    });
+
+    it.each(ECHOES)('not an admin, the link as %s with the place sent back and a field of the event: 200, the field saved', async (_shape, shape) => {
+      const w = await world(options);
+      const res = await put('viewer', w.ev, { used_in_episode_id: shape(w.ep), scene_set_id: shape(w.setA), name: 'Renamed', description: 'Edited' });
+      expect(res.status).toBe(200);
+      expect(await eventRow(w.ev)).toMatchObject({ name: 'Renamed', description: 'Edited', scene_set_id: w.setA, used_in_episode_id: w.ep });
+    });
+
+    it.each(ECHOES)('not an admin, the link as %s with a changed place: 403 for the place, nothing saved', async (_shape, shape) => {
+      const w = await world(options);
+      await expectRefused('editor', w, { used_in_episode_id: shape(w.ep), scene_set_id: w.setB, name: 'Renamed' }, ['scene_set_id']);
+    });
+
+    it.each(SHAPES)('not an admin, a real change of the link as %s: 403, alone or with other fields', async (_shape, shape) => {
+      const w = await world(options);
+      await expectRefused('editor', w, { used_in_episode_id: shape(w.otherEp) }, ['used_in_episode_id']);
+      await expectRefused('editor', w, { used_in_episode_id: shape(w.otherEp), name: 'Renamed', description: 'Also sent' }, ['used_in_episode_id']);
+      await expectRefused('viewer', w, { used_in_episode_id: shape(uuid()) }, ['used_in_episode_id']);
+    });
+
+    it.each(EMPTIES)('not an admin, the link cleared as %s: 403', async (_empty, empty) => {
+      const w = await world(options);
+      await expectRefused('editor', w, { used_in_episode_id: empty }, ['used_in_episode_id']);
+    });
+
+    it.each(ECHOES)('an admin, the link as %s: unchanged too (200); a real change is still the lock\'s 409', async (_shape, shape) => {
+      const w = await world(options);
+      const echo = await put('admin', w.ev, { used_in_episode_id: shape(w.ep), name: 'Renamed by admin' });
+      expect(echo.status).toBe(200);
+      expect(await eventRow(w.ev)).toMatchObject({ name: 'Renamed by admin', used_in_episode_id: w.ep });
+      const cleared = await put('admin', w.ev, { used_in_episode_id: null });
+      expect(cleared.status).toBe(409);
+      expect(cleared.body.code).not.toBe('AUTH_GROUP_REQUIRED');
+      expect((await eventRow(w.ev)).used_in_episode_id).toBe(w.ep);
     });
   });
 

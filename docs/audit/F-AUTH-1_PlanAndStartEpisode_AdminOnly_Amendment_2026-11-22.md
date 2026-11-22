@@ -77,6 +77,12 @@ Evoni, in the session of 2026-11-22, on the route matrix put to her ("P1" is the
 
 And, of every change in this group:
 
+And, on the first form of this change, the same day:
+
+> "A non-admin request must not receive a 409 body that discloses a linked episode merely because it echoes a wrapped stored link. Preserve legitimate event-only editing." "For denied episode-affecting operations, ensure the response does not disclose private episode identifiers or titles. Keep the broader event-field authorization audit separate."
+
+> "Please replace the test-only header bypass with the originally planned separation: Real HTTP route tests confirming non-admin 403. Service-level tests confirming internal non-admin offer-decision refusals. No bypass header required. Preserve all substantive test assertions."
+
 > "No duplicate authorization infrastructure." "Use server-side enforcement, not UI hiding alone." "Preserve existing ADMIN behavior." "Verify unauthorized mixed-field requests make no partial changes." "Preserve legitimate event-only editing."
 
 Earlier the same day, of the general event save: "protect episode-linking and episode/scene-changing operations rather than indiscriminately blocking every event edit. Enforce this server-side for direct requests, including nested inputs, aliases and indirect service effects."
@@ -106,7 +112,7 @@ src/routes/worldEvents/looks.js:2
 
 `src/routes/worldEvents/update.js`, inside `lockAndCheck`, which both of the handler's write transactions call (the save, and the retry it makes when a column is missing):
 
-- **Where.** After the event row is read under its lock, the 404 and the stale-save check; before the terms lock, the Place lock and the reference checks.
+- **Where.** After the event row is read under its lock and the 404; before the stale-save answer (whose body carries the event row, its episode link included), the terms lock, the Place lock and the reference checks.
 - **What is asked** (`adminOnlyEventChanges`), on the values the handler has already normalized (`unwrapScalar`, `normalizeNullLike`) against the locked row, compared as lower-cased text with none as empty:
   - the link changes when `used_in_episode_id` is sent and differs from the stored value;
   - the place changes when `scene_set_id` is sent and differs from the stored value;
@@ -115,6 +121,8 @@ src/routes/worldEvents/looks.js:2
 - **The rule.** An ADMIN is needed when the link changes, or when the place changes and the event has an episode now or would have one after the save. A value sent unchanged is not a change.
 - **The refusal.** For a caller who is not in the admin group (`userInGroup(req.user, 'ADMIN')`): `EventPutRefusal(403)`, which rolls the transaction back. Nothing in the request is saved, whatever else it carried. The body is `{ success: false, code: 'AUTH_GROUP_REQUIRED', error, message, fields }`, where both sentences are "Only an admin can link an event to an episode or change the place of an event that has an episode." and `fields` names the fields among the two. It has no episode id, title or terms.
 - **One check moved behind the group.** `assertRelinkUnlessStored` runs before the event's lock, locks episodes and can answer with bodies that name an episode. It runs for an admin only; anyone else changing the link is refused under the event's lock, as above.
+- **The stored link sent back is not a change, in any shape** (Evoni, later the same day, §2). The terms lock compared the link as it was sent (`changedLockedFields(compared, updates, …)`, `src/utils/eventTermsLock.js`), so the stored link sent back as `{ id }` or `{ value }` read as a change on a started event and was answered with the lock's 409, whose body names the episode (`termsLockedBody`: its id, title and number). The handler now gives the terms lock the link as the route reads it: unwrapped, null-normalized, and the stored value itself when it is the same id in another letter case. A real change of the link is still the lock's 409 for an admin, and the 403 above for anyone else. For an admin this changes one answer: the stored link sent back wrapped on a started event was 409 and is now 200, which is what the lock's own comment says ("A locked field sent with its stored value is not a change, so full-form saves still work").
+- **The same place in another letter case is the same place.** The Place lock and the step that moves a draft episode's Event location (`followSceneSet`) compared `scene_set_id` as text, case and all; both now use the comparison of the rule above, so the stored set sent back in capitals is not a change, is not answered as locked, and moves nothing in the episode.
 - **Not changed.** The checks that run before the lock (types, value lists, the scene set's existence, show and version) are as they were. None names an episode. Every other field of the allowlist is any signed-in account's, as before.
 
 ## The title overlay
@@ -128,8 +136,8 @@ src/routes/worldEvents/looks.js:2
 ## Tests
 
 - New: `tests/integration/p1PlanAdmin.integration.test.js` (the twenty routes: signed out 401; an editor and a viewer 403 with `authorize`'s body, no statement that writes recorded by `tests/helpers/lockTrace.js`, every row of the episode, brief, plan, scenes, set links, events and sets as it was, no AI call, no upload read; an admin not stopped by the check; the title overlay's clearing).
-- New: `tests/integration/eventEditAdminFields.integration.test.js` (the event save's rule: each case, with the value plain, as `{ id }` and as `{ value }`, and "none" in each way the route reads it; a mixed save saving nothing; an event linked only through the episode's brief; event-only edits still saved; the 403 ahead of the 409s that name an episode; an admin as before; the missing-column retry).
-- Changed, assertions kept: `tests/integration/startEpisodeOfferDecision.integration.test.js`. Its cases about someone who is not an admin reach the handler through a test-only pass of `authorize` (a header honoured by this file's mock alone); new cases assert the plain 403 over HTTP and the service's own refusal.
+- New: `tests/integration/eventEditAdminFields.integration.test.js` (the event save's rule: each case, with the value plain, as `{ id }` and as `{ value }`, and "none" in each way the route reads it; a mixed save saving nothing; an event linked only through the episode's brief; event-only edits still saved; the 403 ahead of the 409s and of the stale answer; the stored link sent back plain, wrapped and in capitals, on a started event and on one whose episode is accepted, filmed or both, alone, with the event's own fields, and with a changed place; no refusal carrying the episode's id, title or number; an admin as before, but for the wrapped echo above; the missing-column retry).
+- Changed, assertions kept: `tests/integration/startEpisodeOfferDecision.integration.test.js`. The two layers are tested apart and nothing passes around the middleware. Over HTTP, through the real routes: an admin's Start, and the plain 401 and 403 for anyone else. Its cases about someone who is not an admin ask the Start service itself (`generateEpisodeFromEvent`, with the arguments the routes pass and `offerActor.isAdmin: false`) and read the refusal through `offerDecisionBody`, the function the routes answer with. Not reached by a non-admin case any more: the two lines of each route that send that body (`res.status(error.status).json(offerDecisionBody(error))`); the admin cases still run them.
 - Changed, pins: `tests/unit/routes/world-cluster-tier-promotion.test.js` (four route patterns now include `authorize(['ADMIN'])`; the count of AI handlers is kept at 23).
 - Changed, the token or mock user only: the suites that drive these routes now ask as an admin (the PR lists them).
 
@@ -137,7 +145,7 @@ src/routes/worldEvents/looks.js:2
 
 - **Other writes.** Only the routes of §1 are changed. Among those left as they were: the four script writers (`generate-script`, `regenerate-beat`, `rewrite-line` of `src/routes/episodeBriefRoutes.js` and the event `generate-script`), the performance-clip and dressed-angle writes, the episode location, scene-set, Scene Studio and footage writes, and the episode update, delete and script-lock routes. The session of 2026-11-22 named separate changes for them.
 - **The event's other fields.** Its status, deal terms and `canon_consequences` stay any signed-in account's. A non-admin cannot change an episode row through them, but can change what a later admin action reads. Evoni: "Add event status, deal terms and canon_consequences to a separate follow-up permission review."
-- **An existing answer that names an episode.** The terms lock of the event save answers a change to a locked field on a started event with 409 and a body that names the episode (`termsLockedBody`). It is as it was, for every field but the two of this amendment, and for an admin.
+- **An existing answer that names an episode.** The terms lock of the event save answers a real change to a locked deal or requirements field on a started event with 409 and a body that names the episode (`termsLockedBody`: id, title, number), for any signed-in account. That is as it was, and belongs to the separate review of the event's other fields. So does the stale-save answer to a save of the event's own fields, which carries the event row.
 - **Rate and spending limits.** No limiter or budget is added or changed. `feed-moments/retry` still has no rate limiter.
 - **The write guard.** `src/middleware/adminWriteGuard.js` and `ADMIN_WRITE_GUARD` are not changed.
 - **Reads.** No `GET` is changed.
