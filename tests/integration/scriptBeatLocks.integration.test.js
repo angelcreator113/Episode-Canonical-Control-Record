@@ -51,8 +51,11 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
   });
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
+  // GET /episodes/:id sends the script, its locked beats and its revision to an
+  // ADMIN only (Evoni, 2026-11-22); the writes below are still this editor's.
+  const asAdmin = (r) => auth(r).set('Authorization', `Bearer ${TokenService.generateTokenPair({ id: 'test-admin-locks', email: 'admin@locks.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken}`);
   // Each script write carries the revision the page read (A1c R1).
-  const rev = async () => (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
+  const rev = async () => (await asAdmin(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
   const locks = async (body) => auth(request(app).put(`/api/v1/episodes/${ep}/script-locks`)).send({ script_revision: await rev(), ...body });
   const save = async (body) => auth(request(app).put(`/api/v1/episodes/${ep}`)).send({ script_revision: await rev(), ...body });
   const stored = async () => (await run(`SELECT script_content, script_locked_beats FROM episodes WHERE id = :ep`, { ep }))[0][0];
@@ -61,8 +64,15 @@ const ORIGINAL = script(beat(1, 'Opening Ritual', 'Prime: "Hey besties"'), beat(
     const res = await locks({ locked_beats: [2] });
     expect(res.status).toBe(200);
     expect(res.body.data.script_locked_beats).toEqual([2]);
-    const got = await auth(request(app).get(`/api/v1/episodes/${ep}`));
+    const got = await asAdmin(request(app).get(`/api/v1/episodes/${ep}`));
     expect(got.body.data.script_locked_beats).toEqual([2]);
+    // The editor who approved it reads the count, not the beats.
+    const own = await auth(request(app).get(`/api/v1/episodes/${ep}`));
+    expect(own.status).toBe(200);
+    expect(own.body.data.script_approved_beat_count).toBe(1);
+    expect(own.body.data).not.toHaveProperty('script_locked_beats');
+    expect(own.body.data).not.toHaveProperty('script_content');
+    expect(own.body).not.toHaveProperty('script_revision');
   });
 
   test('a lock that is not a list of beat numbers is refused', async () => {

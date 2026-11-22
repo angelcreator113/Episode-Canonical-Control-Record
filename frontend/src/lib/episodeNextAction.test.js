@@ -122,6 +122,15 @@ describe('primaryAction: the next action for an episode', () => {
     expect(a.why).toMatch(/production checks left\.$/);
   });
 
+  // An episode sent without its script (not an admin; 2026-11-22).
+  test('without the script text, has_script decides whether there is a script', () => {
+    const { script_content: _text, ...bare } = EP;
+    expect(act({ episode: { ...bare, has_script: false } })).toMatchObject({ why: 'This episode has no script yet.' });
+    expect(act({ episode: bare })).toMatchObject({ why: 'This episode has no script yet.' });
+    expect(act({ episode: { ...bare, has_script: true }, summary: checklistSummary(all(true)) })).toEqual(act({ summary: checklistSummary(all(true)) }));
+    expect(act({ episode: { ...bare, has_script: true } }).why).not.toBe('This episode has no script yet.');
+  });
+
   test('every check done: Open Results', () => {
     expect(act({ summary: checklistSummary(all(true)) })).toEqual({
       key: 'results', label: 'Open Results', href: '/episodes/ep-1?tab=results', why: 'Every production check is done.',

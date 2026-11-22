@@ -25,6 +25,34 @@ const { lockEpisodes } = require('../utils/episodeLocks');
 const { isDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
 const { snapshotFrozen, isFreezeError, sameValue, startRecordError } = require('../utils/snapshotFreeze');
 /* eslint-enable no-unused-vars */
+const { userInGroup } = require('../middleware/auth');
+const { EPISODE_READER_QUERY_FIELDS, episodeForReader } = require('../services/episodeReadFields');
+
+// What the list selects for an ADMIN (unchanged). Anyone else is read the
+// safe fields and sent only those (services/episodeReadFields; Evoni,
+// 2026-11-22).
+const ADMIN_LIST_ATTRIBUTES = [
+  'id',
+  'episode_number',
+  'season_number',
+  'title',
+  'description',
+  'air_date',
+  'status',
+  'categories',
+  'show_id',
+  'evaluation_json',
+  'evaluation_status',
+  'script_content',
+  // The board's Script step needs the approved beats (2026-10-19).
+  'script_locked_beats',
+  // The board's card shows the saved thumbnail (2026-10-22).
+  'thumbnail_url',
+  // The slot label ("S2 · E1") the board and lists show (2026-10-25).
+  'season_context',
+  'created_at',
+  'updated_at',
+];
 
 /**
  * Episode Controller
@@ -70,6 +98,10 @@ module.exports = {
         }
       }
 
+      // An ADMIN reads what the list always read; anyone else the safe fields.
+      const admin = userInGroup(req.user, 'ADMIN');
+      const attributes = admin ? ADMIN_LIST_ATTRIBUTES : [...EPISODE_READER_QUERY_FIELDS];
+
       let count, rows;
       try {
         ({ count, rows } = await Episode.findAndCountAll({
@@ -77,28 +109,7 @@ module.exports = {
           limit: parseInt(limit),
           offset,
           order,
-          attributes: [
-            'id',
-            'episode_number',
-            'season_number',
-            'title',
-            'description',
-            'air_date',
-            'status',
-            'categories',
-            'show_id',
-            'evaluation_json',
-            'evaluation_status',
-            'script_content',
-            // The board's Script step needs the approved beats (2026-10-19).
-            'script_locked_beats',
-            // The board's card shows the saved thumbnail (2026-10-22).
-            'thumbnail_url',
-            // The slot label ("S2 · E1") the board and lists show (2026-10-25).
-            'season_context',
-            'created_at',
-            'updated_at',
-          ],
+          attributes,
           include: [
             {
               model: Show,
@@ -115,19 +126,14 @@ module.exports = {
           limit: parseInt(limit),
           offset,
           order,
-          attributes: [
-            'id', 'episode_number', 'season_number', 'title', 'description',
-            'air_date', 'status', 'categories', 'show_id',
-            'evaluation_json', 'evaluation_status', 'script_content', 'script_locked_beats', 'thumbnail_url', 'season_context',
-            'created_at', 'updated_at',
-          ],
+          attributes,
         }));
       }
 
       // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
 
       res.json({
-        data: rows,
+        data: admin ? rows : rows.map((row) => episodeForReader(req.user, row)),
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -161,7 +167,10 @@ module.exports = {
         ],
       });
 
-      if (!episode) {
+      // A deleted episode is not found, for an admin too: no page reads one
+      // through this route (the episode page already treated it as not
+      // found, pages/EpisodeDetail fetchEpisode).
+      if (!episode || episode.deleted_at) {
         return res.status(404).json({
           error: 'Episode not found',
           id,
@@ -169,6 +178,13 @@ module.exports = {
       }
 
       // Viewing is not audited (Evoni, 2026-11-11: no page-view entries).
+
+      // Anyone who is not an admin gets the safe fields, and no script
+      // revision: it is the script's fingerprint, and only a script write
+      // uses it (services/episodeReadFields; Evoni, 2026-11-22).
+      if (!userInGroup(req.user, 'ADMIN')) {
+        return res.json({ data: episodeForReader(req.user, episode) });
+      }
 
       // The script's revision (A1c R1): the page sends it back with its next
       // script write, so it never overwrites a newer script.

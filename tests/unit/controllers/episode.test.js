@@ -43,7 +43,9 @@ describe('Episode Controller - Real Tests', () => {
       body: {},
       params: {},
       headers: {},
-      user: { id: 'user-123', 'cognito:groups': ['admin'] },
+      // An admin, as auth.js builds one: the group test reads `groups`
+      // (userInGroup), not the raw 'cognito:groups' claim.
+      user: { id: 'user-123', 'cognito:groups': ['admin'], groups: ['ADMIN'] },
       ip: '127.0.0.1',
       get: jest.fn().mockReturnValue('Mozilla/5.0'),
     };
@@ -91,6 +93,35 @@ describe('Episode Controller - Real Tests', () => {
       mockReq.query = { page: 1, limit: 20 };
       await episodeController.listEpisodes(mockReq, mockRes);
       expect(models.Episode.findAndCountAll.mock.calls[0][0].attributes).toContain('thumbnail_url');
+    });
+
+    // Not an admin (Evoni, 2026-11-22): the safe fields and the script facts.
+    test('a reader who is not an admin gets the safe fields, not the rows as read', async () => {
+      const row = {
+        id: 1, title: 'Ep 1', status: 'draft', teaser: 'One night.', description: 'internal synopsis',
+        script_content: 'Lala: a private line.\nMe: another.', script_locked_beats: [1, 2], evaluation_json: { tier_final: 'gold' },
+      };
+      models.Episode.findAndCountAll = jest.fn().mockResolvedValue({ count: 1, rows: [row] });
+      for (const user of [{ id: 'u', groups: ['USER', 'EDITOR'] }, { id: 'c', 'cognito:groups': ['admin'] }]) {
+        mockRes.json.mockClear();
+        mockReq.user = user;
+        await episodeController.listEpisodes(mockReq, mockRes);
+        const { attributes } = models.Episode.findAndCountAll.mock.calls.at(-1)[0];
+        expect(attributes).toContain('teaser');
+        expect(attributes).not.toContain('description');
+        expect(attributes).not.toContain('evaluation_json');
+        expect(mockRes.json.mock.calls[0][0].data).toEqual([{
+          id: 1, title: 'Ep 1', status: 'draft', teaser: 'One night.',
+          has_script: true, script_approved_beat_count: 2, script_line_count: 2,
+        }]);
+      }
+    });
+
+    test('an admin is still read the list\'s own columns, script and synopsis included', async () => {
+      models.Episode.findAndCountAll = jest.fn().mockResolvedValue({ count: 0, rows: [] });
+      await episodeController.listEpisodes(mockReq, mockRes);
+      const { attributes } = models.Episode.findAndCountAll.mock.calls[0][0];
+      for (const name of ['description', 'evaluation_json', 'evaluation_status', 'script_content', 'script_locked_beats']) expect(attributes).toContain(name);
     });
 
     test('should filter by processing status', async () => {
@@ -180,6 +211,34 @@ describe('Episode Controller - Real Tests', () => {
 
       await episodeController.getEpisode(mockReq, mockRes);
       expect(mockRes.status).toHaveBeenCalledWith(404);
+    });
+
+    // Not an admin (Evoni, 2026-11-22): the safe fields, and no script revision.
+    test('a reader who is not an admin gets the safe fields and no script_revision', async () => {
+      const mockEpisode = { id: 1, title: 'Test', description: 'internal synopsis', script_content: 'Lala: a private line.', script_locked_beats: [3], total_income: '10.00' };
+      models.Episode.findByPk = jest.fn().mockResolvedValue(mockEpisode);
+      mockReq.params = { id: '1' };
+      mockReq.user = { id: 'u', groups: ['EDITOR'] };
+
+      await episodeController.getEpisode(mockReq, mockRes);
+
+      expect(mockRes.json).toHaveBeenCalledWith({
+        data: { id: 1, title: 'Test', has_script: true, script_approved_beat_count: 1, script_line_count: 1 },
+      });
+      // The revision is not read for them.
+      expect(models.Episode.unscoped).not.toHaveBeenCalled();
+    });
+
+    test('a deleted episode is not found, for an admin too', async () => {
+      models.Episode.findByPk = jest.fn().mockResolvedValue({ id: 1, title: 'Gone', deleted_at: new Date('2026-11-10T09:00:00Z'), script_content: 'x' });
+      mockReq.params = { id: '1' };
+      for (const user of [mockReq.user, { id: 'u', groups: ['USER'] }]) {
+        mockRes.status.mockClear(); mockRes.json.mockClear();
+        mockReq.user = user;
+        await episodeController.getEpisode(mockReq, mockRes);
+        expect(mockRes.status).toHaveBeenCalledWith(404);
+        expect(mockRes.json).toHaveBeenCalledWith({ error: 'Episode not found', id: '1' });
+      }
     });
 
     test('should return episode successfully', async () => {

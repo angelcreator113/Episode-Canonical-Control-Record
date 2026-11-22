@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 vi.mock('../../services/episodeService', () => ({ default: { updateEpisode: vi.fn(), deleteEpisode: vi.fn() } }));
@@ -159,6 +159,25 @@ describe('ShowEpisodesBoard — Now producing and the pipeline (Evoni\'s mock, 2
     expect(screen.getByRole('link', { name: /Edit Thumbnail/ }).getAttribute('href')).toBe('/template-studio/youtube?episode=ep-1');
     expect(screen.getByRole('link', { name: 'Generate Script' }).getAttribute('href')).toBe('/episodes/ep-1?tab=scripts');
     expect(screen.getByRole('link', { name: 'Open episode' }).getAttribute('href')).toBe('/episodes/ep-1');
+  });
+
+  // An episode sent without its script (not an admin; 2026-11-22).
+  test('Now producing: "Open script" for a script the page was told of but not sent', async () => {
+    const { description: _synopsis, ...safe } = DRAFT;
+    renderIt([{ ...safe, has_script: true, script_approved_beat_count: 2, script_line_count: 40 }]);
+    await screen.findByTestId('seb-hero');
+    expect(screen.getByRole('link', { name: 'Open script' }).getAttribute('href')).toBe('/episodes/ep-1?tab=scripts');
+    expect(screen.queryByRole('link', { name: 'Generate Script' })).toBeNull();
+  });
+
+  test('Now producing: "Generate Script" when has_script is false, and "Open script" for an admin\'s episode with its text', async () => {
+    renderIt([{ ...DRAFT, has_script: false }]);
+    await screen.findByTestId('seb-hero');
+    expect(screen.getByRole('link', { name: 'Generate Script' })).toBeTruthy();
+    cleanup();
+    renderIt([{ ...DRAFT, script_content: 'INT. STUDIO' }]);
+    await screen.findByTestId('seb-hero');
+    expect(screen.getByRole('link', { name: 'Open script' })).toBeTruthy();
   });
 
   test('a Season 2 episode reads "S2 · E1", not its show-wide number (2026-10-25)', async () => {

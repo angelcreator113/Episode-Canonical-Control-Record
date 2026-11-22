@@ -17,6 +17,7 @@
  */
 import { thumbnailStudioHref } from './thumbnailStudioHref';
 import { cleanMarks } from './fullEpisodeTake';
+import { hasScript, approvedBeatCountFact } from './episodeScriptFacts';
 
 export const SCENE_COUNT = 14;
 
@@ -44,6 +45,16 @@ export function approvedBeats(episode = {}) {
     try { locked = JSON.parse(locked); } catch (err) { console.error('[productionSteps] script_locked_beats unreadable:', err); locked = []; }
   }
   return new Set((Array.isArray(locked) ? locked : []).map(Number).filter((n) => n >= 1 && n <= SCENE_COUNT));
+}
+
+/**
+ * How many beats are approved: counted from the locked beats when the
+ * episode carries them, else the count the server sends in their place
+ * (script_approved_beat_count, lib/episodeScriptFacts).
+ */
+export function approvedBeatCount(episode = {}) {
+  if (episode?.script_locked_beats != null) return approvedBeats(episode).size;
+  return Math.min(approvedBeatCountFact(episode) ?? 0, SCENE_COUNT);
 }
 
 /** The scenes (beat numbers) with at least one clip linked. */
@@ -79,8 +90,8 @@ export function productionSteps({ episode = {}, checks = null, sections = null, 
   const status = String(episode.status || 'draft').toLowerCase();
   const linked = linkedScenes(clips).size;
   const id = episode.id;
-  const written = Boolean(String(episode.script_content || '').trim());
-  const approved = approvedBeats(episode).size;
+  const written = Boolean(String(episode.script_content || '').trim()) || hasScript(episode);
+  const approved = approvedBeatCount(episode);
   const scriptDone = (written && approved >= SCENE_COUNT) || PAST_DRAFT.includes(status);
   const steps = [
     { key: 'brief', label: 'Event & Brief', done: sectionDone(sections, checks, 'brief') && sectionDone(sections, checks, 'world'), open: { tab: 'overview' } },

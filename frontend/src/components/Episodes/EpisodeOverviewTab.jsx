@@ -15,6 +15,7 @@ import { NextStepBanner, OverviewTiles, StoryBriefCard, FromEventCard } from './
 import { episodePlanning } from '../../utils/episodePlanning';
 import { fromEventItems, nextStep, coinsAfterPlan } from '../../lib/episodeOverview';
 import { isFreezeRefusal } from '../../lib/snapshotFreeze';
+import { hasScript as episodeHasScript } from '../../lib/episodeScriptFacts';
 import './EpisodeOverviewSections.css';
 
 // EpisodeBrief enums — kept module-level so the chip rows don't re-create
@@ -576,7 +577,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     ? episodePlanning({ episode, event: source.event, sourceProfile: source.sourceProfile, sceneSet: source.sceneSet, venueLocation: source.venueLocation, outfit })
     : null;
   const fromEvent = fromEventItems(plan);
-  const hasScriptText = !!(typeof episode.script_content === 'string' && episode.script_content.trim());
+  const hasScriptText = episodeHasScript(episode);
   const hasScript = hasScriptText || !!scriptInfo?.exists;
   // What is still being read, per area ('loading', 'failed' or null). Each
   // looks only at the read it needs.

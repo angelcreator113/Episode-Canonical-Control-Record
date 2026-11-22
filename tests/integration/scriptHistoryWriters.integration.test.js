@@ -48,6 +48,9 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
   });
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
+  // GET /episodes/:id sends the script, its locked beats and its revision to an
+  // ADMIN only (Evoni, 2026-11-22); the writes below are still this editor's.
+  const asAdmin = (r) => auth(r).set('Authorization', `Bearer ${TokenService.generateTokenPair({ id: 'test-admin-hist', email: 'admin@hist.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken}`);
   const episode = async (script) => {
     const ep = uuid();
     eps.push(ep);
@@ -62,7 +65,7 @@ const beat = (n, name, body) => `## BEAT: ${n} · ${name}\n${body}`;
     return id;
   };
   // The script revision the page reads with the episode (A1c R1).
-  const revisionOf = async (ep) => (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
+  const revisionOf = async (ep) => (await asAdmin(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
   const versions = (ep) => run(`SELECT source, script_content FROM episode_script_versions WHERE episode_id = :ep ORDER BY created_at DESC`, { ep }).then(([rows]) => rows);
   const OLD = beat(1, 'Opening Ritual', 'Lala: "the script before"');
 

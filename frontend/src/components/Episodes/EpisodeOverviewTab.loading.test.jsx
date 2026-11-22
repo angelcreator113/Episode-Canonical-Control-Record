@@ -355,6 +355,22 @@ describe('EpisodeOverviewTab: loading is not shown as "none"', () => {
     expect(screen.getByTestId('overview-next-step-meta').textContent).toBe('Production checklist: 4 of 6 done');
   });
 
+  // An episode sent without its script (not an admin; 2026-11-22): the
+  // server's has_script settles the next step as the text did.
+  test('has_script without the text: the next step is production, with no script read needed', async () => {
+    hold(URLS.script());
+    const { description: _synopsis, ...safe } = EPISODE;
+    renderTab({ episode: { ...safe, has_script: true }, checks: { done: 4, total: 6 }, checksStatus: 'ready' });
+    await waitFor(() => expect(nextStepEl().textContent).toContain('Work through production'));
+    expect(goButton().textContent).toContain('Open Checklist');
+  });
+
+  test('has_script false without the text: the script check decides, as for an episode with no text', async () => {
+    renderTab({ episode: { ...EPISODE, has_script: false }, checks: { done: 4, total: 6 }, checksStatus: 'ready' });
+    await waitFor(() => expect(goButton()).toBeTruthy());
+    expect(nextStepEl().textContent).not.toContain('Work through production');
+  });
+
   // ── The checklist line ───────────────────────────────────────────────
   test('the checklist could not be checked: said, with the Checklist tab to check again; never a count and never "complete"', async () => {
     const onOpenTab = vi.fn();

@@ -69,6 +69,20 @@ describe('the Script step', () => {
     expect(step({})).toMatchObject({ done: false, detail: null });
     expect(step({ status: 'scripted' }).done).toBe(true);
   });
+  // An episode sent without its script (not an admin; 2026-11-22): the
+  // server's has_script and script_approved_beat_count stand in for it.
+  test('without the script text, the step reads the server\'s facts', () => {
+    expect(step({ has_script: true, script_approved_beat_count: 3 })).toMatchObject({ done: false, detail: '3 of 14 beats approved' });
+    expect(step({ has_script: true, script_approved_beat_count: 0 })).toMatchObject({ done: false, detail: '0 of 14 beats approved' });
+    expect(step({ has_script: true, script_approved_beat_count: 14 })).toMatchObject({ done: true, detail: null });
+    expect(step({ has_script: false, script_approved_beat_count: 0 })).toMatchObject({ done: false, detail: null });
+    // Approved beats without a script are not a finished script, as with the text.
+    expect(step({ has_script: false, script_approved_beat_count: 14 })).toMatchObject({ done: false, detail: null });
+    expect(step({ script_content: '', script_locked_beats: ALL })).toMatchObject({ done: false, detail: null });
+  });
+  test('the text and the locked beats win over the facts when the episode carries them', () => {
+    expect(step({ script_content: 'x', script_locked_beats: [1, 2, 3], has_script: false, script_approved_beat_count: 14 })).toMatchObject({ done: false, detail: '3 of 14 beats approved' });
+  });
   // Script tab audit 6 (2026-10-24): a done step says no "n of 14".
   test('past Draft with beats still open: done, and no count beside the tick', () => {
     expect(step({ status: 'scripted', script_content: 'x', script_locked_beats: [1, 2, 3] })).toMatchObject({ done: true, detail: null });

@@ -28,9 +28,12 @@ const SCRIPT_NO_TAG = '## BEAT: OPENING\nLala: Tonight is the gala.\n';
 (shouldSkip ? describe.skip : describe)('the episode event comes from its link (Task #3608)', () => {
   const shows = [];
   let auth;
+  let admin;
   beforeAll(() => {
     const token = TokenService.generateTokenPair({ id: 'test-user-event-link', email: 'test@event-link.dev', name: 'Event Link', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
     auth = { Authorization: `Bearer ${token}` };
+    // GET /episodes/:id sends the script revision to an ADMIN only (Evoni, 2026-11-22).
+    admin = { Authorization: `Bearer ${TokenService.generateTokenPair({ id: 'test-admin-event-link', email: 'admin@event-link.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken}` };
   });
 
   async function seed({ linked = true, script = '' } = {}) {
@@ -121,7 +124,7 @@ const SCRIPT_NO_TAG = '## BEAT: OPENING\nLala: Tonight is the gala.\n';
     expect(injected.body.script_tagged).toBe(false);
 
     // The Script tab's save: it sends back the revision it read (A1c R1).
-    const page = await request(app).get(`/api/v1/episodes/${ep}`).set(auth);
+    const page = await request(app).get(`/api/v1/episodes/${ep}`).set(admin);
     expect(page.status).toBe(200);
     const saved = await request(app).put(`/api/v1/episodes/${ep}`).set(auth)
       .send({ script_content: SCRIPT_NO_TAG, script_revision: page.body.script_revision });

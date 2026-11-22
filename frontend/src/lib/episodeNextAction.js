@@ -5,6 +5,7 @@
  * Mode's Overview.
  */
 import { nextStep } from './episodeOverview';
+import { hasScript } from './episodeScriptFacts';
 import { CHECKLIST_SECTIONS, computeSectionState, checklistFixTarget } from '../components/Episodes/EpisodeProductionChecklist';
 
 /** The checklist's sections that report a state (a section may still set unavailableReason). */
@@ -44,8 +45,7 @@ export function primaryAction({ episode, showId, summary = null, producing = tru
   const base = `/episodes/${episode.id}`;
   const open = { key: 'open', label: 'Open Episode', href: `${base}?tab=overview`, why: null };
   if (!producing) return open;
-  const hasScript = Boolean(typeof episode.script_content === 'string' && episode.script_content.trim());
-  if (!hasScript) {
+  if (!hasScript(episode)) {
     const step = nextStep({ hasScript: false });
     return { key: step.key, label: step.action, href: `${base}?tab=${step.tab}`, why: 'This episode has no script yet.' };
   }

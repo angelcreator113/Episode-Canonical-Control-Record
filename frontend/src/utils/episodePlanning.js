@@ -21,6 +21,7 @@
 import { describeEventOrganizer } from './eventOrganizer';
 import { resolveEventVenueAndDate } from './eventReadiness';
 import { closetBeat } from '../lib/scriptMoments';
+import { hasScript as episodeHasScript } from '../lib/episodeScriptFacts';
 
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
 
@@ -104,7 +105,7 @@ export function episodePlanning({ episode, event, sourceProfile = null, sceneSet
     },
   ];
 
-  const hasScript = !!text(episode?.script_content);
+  const hasScript = !!text(episode?.script_content) || episodeHasScript(episode);
   return {
     items,
     done: items.filter((i) => i.done).length,

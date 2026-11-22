@@ -54,8 +54,11 @@ const V3 = beat(1, 'Opening Ritual', 'Lala: "Third draft"');
   });
 
   const auth = (r) => r.set('Authorization', `Bearer ${token}`);
+  // GET /episodes/:id sends the script, its locked beats and its revision to an
+  // ADMIN only (Evoni, 2026-11-22); the writes below are still this editor's.
+  const asAdmin = (r) => auth(r).set('Authorization', `Bearer ${TokenService.generateTokenPair({ id: 'test-admin-versions', email: 'admin@versions.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken}`);
   // Each script write carries the revision the page read (A1c R1).
-  const rev = async () => (await auth(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
+  const rev = async () => (await asAdmin(request(app).get(`/api/v1/episodes/${ep}`))).body.script_revision;
   const list = async () => (await auth(request(app).get(`/api/v1/episodes/${ep}/script-versions`))).body.data;
 
   test('a save keeps the script it replaces; saving the same text keeps nothing', async () => {
