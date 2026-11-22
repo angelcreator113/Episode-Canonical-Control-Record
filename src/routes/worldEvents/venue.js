@@ -14,7 +14,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { isBudgetError } = require('../../services/imageCostService');
 const { startedEpisodeFor } = require('../../services/episodeTaskCopyService');
@@ -81,7 +81,18 @@ router.post('/world/:showId/events/:eventId/venue-brief', requireAuth, async (re
 // none. overrides: the "Your override" lines confirmed on the brief (S2, S5).
 // The response's outcome says what happened: generated, already_available or
 // failed.
-router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, aiRateLimiter, async (req, res) => {
+//
+// An ADMIN's (Evoni, 2026-11-22; P2b): it is paid, it stores images, and its
+// new-venue branch moves the event to a new scene set. authorize sits before
+// the rate limiter, so nothing below runs for anyone else.
+//
+// The Place lock (utils/placeLock, L13) holds here too: making a new venue
+// changes the event's Place, so on an event whose episode is accepted it is
+// refused, `force` or not, for an admin as for anyone, before anything is
+// generated, stored, created or changed. Answering "already available", and
+// generating the missing base of the set the event already has, change no
+// Place and are as before.
+router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const force = req.body?.force === true;
@@ -124,6 +135,14 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, aiRate
         data: { kind: 'base', scene_set_id: attached.id, venue_image_url: attached.base_still_url, venue_name: attached.name },
         message: `Venue image generated for "${attached.name}"`,
       });
+    }
+
+    // From here a new venue is made and the event is moved to it: a change
+    // of the event's Place. The same lock, and the same answer, as the event
+    // edit's and the scene-set link's.
+    const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../../utils/placeLock');
+    if (await isPlaceLocked(models.sequelize, event.id)) {
+      return res.status(409).json({ success: false, code: PLACE_LOCKED_CODE, error: PLACE_LOCKED_MESSAGE });
     }
 
     if (typeof event.canon_consequences === 'string') {

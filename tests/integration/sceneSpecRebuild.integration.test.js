@@ -59,7 +59,7 @@ describe('validateSpecCandidate', () => {
   beforeAll(async () => {
     process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || 'test-key';
     token = TokenService.generateTokenPair({
-      id: 'test-user-spec-rebuild', email: 'user@specrebuild.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-spec-rebuild', email: 'user@specrebuild.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO scene_sets (id, name, scene_type, generation_status, base_still_url, scene_spec, visual_language, created_at, updated_at)
       VALUES (:id, 'Rebuild set', 'HOME_BASE', 'complete', :base, :spec::jsonb, :vl::jsonb, NOW(), NOW())`,

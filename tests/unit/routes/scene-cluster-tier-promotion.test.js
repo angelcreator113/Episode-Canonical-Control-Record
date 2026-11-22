@@ -172,12 +172,15 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
       '/:id/angles/:angleId/generate-depth',
     ];
 
+    // P2b (Evoni, 2026-11-22): the scene-set production writes and their
+    // paid routes are an ADMIN's too, so these nine carry the same chain as
+    // the four of P2a below: authorize before the rate limiter.
     SCENE_SET_AI_POSTS.forEach((p) => {
-      test(`sceneSetRoutes.js — POST ${p} wrapped requireAuth + aiRateLimiter`, () => {
+      test(`sceneSetRoutes.js — POST ${p} wrapped requireAuth + authorize ADMIN + aiRateLimiter (P2b)`, () => {
         // Allow validateUUIDParam('id') between path and requireAuth
         const escaped = p.replace(/[/]/g, '\\/').replace(/:/g, ':');
         const re = new RegExp(
-          `router\\.post\\(['"]${escaped}['"],\\s*validateUUIDParam\\('id'\\),\\s*requireAuth,\\s*aiRateLimiter,`,
+          `router\\.post\\(['"]${escaped}['"],\\s*validateUUIDParam\\('id'\\),\\s*requireAuth,\\s*authorize\\(\\['ADMIN'\\]\\),\\s*aiRateLimiter,`,
         );
         expect(readSrc('sceneSetRoutes.js')).toMatch(re);
       });
@@ -209,12 +212,14 @@ describe('Step 3 CP4 — Scene cluster pure Tier 1 sweep + AI POST reference mod
     // generate-depth): 20 keep the bare chain, and the ADMIN chain is on 5
     // (those four and /model-comparison). The 24 rate-limited routes of the
     // count above are all still rate limited.
-    test('sceneSetRoutes.js — exactly 20 requireAuth + aiRateLimiter and 5 requireAuth + authorize ADMIN + aiRateLimiter chains', () => {
+    // P2b (2026-11-22) puts it on the other 20 as well: no bare chain is
+    // left, and the ADMIN chain is on all 25 (the 24 and /model-comparison).
+    test('sceneSetRoutes.js — exactly 0 requireAuth + aiRateLimiter and 25 requireAuth + authorize ADMIN + aiRateLimiter chains', () => {
       const src = readSrc('sceneSetRoutes.js');
       const matches = src.match(/requireAuth,\s*aiRateLimiter,/g) || [];
-      expect(matches.length).toBe(20);
+      expect(matches.length).toBe(0);
       const admin = src.match(/requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/g) || [];
-      expect(admin.length).toBe(5);
+      expect(admin.length).toBe(25);
     });
   });
 

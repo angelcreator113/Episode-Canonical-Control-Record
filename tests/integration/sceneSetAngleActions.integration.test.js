@@ -41,7 +41,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   beforeAll(async () => {
     process.env.IMAGE_CALLS_PER_OPERATION = '3';
     token = TokenService.generateTokenPair({
-      id: 'test-user-angle-actions', email: 'user@angleactions.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-angle-actions', email: 'user@angleactions.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO scene_sets (id, name, scene_type, generation_status, base_still_url, created_at, updated_at)
       VALUES (:id, 'Angle actions set', 'HOME_BASE', 'complete', 'https://img.example/base.png', NOW(), NOW())`, { id: setId });

@@ -321,7 +321,7 @@ router.get('/', requireAuth, async (req, res) => {
 
 // ─── Static routes MUST be before /:id to avoid Express matching them as UUIDs ──
 
-router.post('/ai-describe', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/ai-describe', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { name, scene_type, user_notes } = req.body;
     if (!name) return res.status(400).json({ error: 'name is required' });
@@ -800,7 +800,7 @@ router.put('/:id/version', validateUUIDParam('id'), requireAuth, authorize(['ADM
 // or flagged" (baseDescriptionService). Body { action }:
 //   use_suggested — the new base's analysis description replaces this one;
 //   keep          — this description stays, and the flag is cleared.
-router.post('/:id/description-review', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/description-review', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -833,7 +833,7 @@ router.post('/:id/description-review', validateUUIDParam('id'), requireAuth, asy
 
 // ─── POST /:id/refine-description  — AI refine while preserving visual anchors ─
 
-router.post('/:id/refine-description', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/refine-description', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
@@ -882,7 +882,7 @@ Return ONLY the refined description paragraph.`,
 
 // ─── POST /:id/learn-location  — teach show brain about this location ────────
 
-router.post('/:id/learn-location', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/learn-location', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     // A parent must be an existing World Location: any value was written
     // after the knowledge entry was made, and a bad one was a 500.
@@ -1079,7 +1079,7 @@ async function deleteStoredPhoto(url) {
   }
 }
 
-router.post('/:id/venue-photo', validateUUIDParam('id'), requireAuth, uploadVenuePhoto, async (req, res) => {
+router.post('/:id/venue-photo', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), uploadVenuePhoto, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1119,7 +1119,7 @@ router.post('/:id/venue-photo', validateUUIDParam('id'), requireAuth, uploadVenu
   }
 });
 
-router.delete('/:id/venue-photo', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.delete('/:id/venue-photo', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1138,7 +1138,7 @@ router.delete('/:id/venue-photo', validateUUIDParam('id'), requireAuth, async (r
 // ─── POST /:id/upload-base  — upload a custom base image ─────────────────────
 
 // Rate-limited: an upload runs the paid base analysis and style lock.
-router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, aiRateLimiter, uploadSceneSetImages, async (req, res) => {
+router.post('/:id/upload-base', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, uploadSceneSetImages, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1284,7 +1284,7 @@ Return ONLY JSON.` },
 
 // ─── POST /:id/analyze-image — on-demand Vision analysis for existing scene sets ──
 
-router.post('/:id/analyze-image', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/analyze-image', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
@@ -1387,7 +1387,7 @@ Return ONLY the JSON object, no other text.` },
 
 // ─── POST /:id/generate-base  — generate the base scene ─────────────────────
 
-router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1533,7 +1533,7 @@ const areaSuggestion = (area) => ({
   angle_kind: 'area',
 });
 
-router.post('/:id/suggest-angles', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/suggest-angles', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id, {
       include: [{ model: SceneAngle, as: 'angles' }],
@@ -1648,7 +1648,7 @@ Return raw JSON only, no markdown or explanation.`;
 
 // ─── POST /:id/ai-camera-direction  — AI generates camera direction for an angle
 
-router.post('/:id/ai-camera-direction', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/ai-camera-direction', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1697,7 +1697,7 @@ async function zoneAngleError(setId, kind, zoneAngleId) {
   return null;
 }
 
-router.post('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/angles', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1752,7 +1752,7 @@ router.post('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, res
 
 // ─── POST /:id/angles/:angleId/generate  — generate a specific angle ────────
 
-router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAuth, aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
+router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1807,7 +1807,7 @@ router.post('/:id/angles/:angleId/generate', validateUUIDParam('id'), requireAut
 
 // ─── POST /:id/angles/:angleId/generate-video  — on-demand video for an angle ─
 
-router.post('/:id/angles/:angleId/generate-video', validateUUIDParam('id'), requireAuth, aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
+router.post('/:id/angles/:angleId/generate-video', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1857,7 +1857,7 @@ router.post('/:id/angles/:angleId/generate-video', validateUUIDParam('id'), requ
 
 // ─── DELETE /:id/angles/:angleId  — soft-delete a single angle ──────────────
 
-router.delete('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, validateUUIDParam('angleId'), async (req, res) => {
+router.delete('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), validateUUIDParam('angleId'), async (req, res) => {
   try {
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: req.params.id },
@@ -1876,7 +1876,7 @@ router.delete('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, vali
 
 // ─── POST /:id/angles/:angleId/upload  — upload image for an angle ───────────
 
-router.post('/:id/angles/:angleId/upload', validateUUIDParam('id'), requireAuth, validateUUIDParam('angleId'), uploadSceneSetImages, async (req, res) => {
+router.post('/:id/angles/:angleId/upload', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), validateUUIDParam('angleId'), uploadSceneSetImages, async (req, res) => {
   try {
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: req.params.id },
@@ -1922,7 +1922,7 @@ router.post('/:id/angles/:angleId/upload', validateUUIDParam('id'), requireAuth,
 
 // Registered before PATCH /:id/angles/:angleId, which would otherwise take
 // "reorder" as an angle id (every reorder failed).
-router.patch('/:id/angles/reorder', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.patch('/:id/angles/reorder', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -1954,7 +1954,7 @@ router.patch('/:id/angles/reorder', validateUUIDParam('id'), requireAuth, async 
 
 // ─── PATCH /:id/angles/:angleId  — rename / update angle fields ──────────────
 
-router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, validateUUIDParam('angleId'), async (req, res) => {
+router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), validateUUIDParam('angleId'), async (req, res) => {
   try {
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: req.params.id },
@@ -2032,7 +2032,7 @@ router.patch('/:id/angles/:angleId', validateUUIDParam('id'), requireAuth, valid
 
 // ─── DELETE /:id/angles  — delete all angles for a scene set ─────────────────
 
-router.delete('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.delete('/:id/angles', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2052,7 +2052,7 @@ router.delete('/:id/angles', validateUUIDParam('id'), requireAuth, async (req, r
 
 // ─── POST /:id/angles/:angleId/review  — submit manual quality review ───────
 
-router.post('/:id/angles/:angleId/review', validateUUIDParam('id'), requireAuth, validateUUIDParam('angleId'), async (req, res) => {
+router.post('/:id/angles/:angleId/review', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), validateUUIDParam('angleId'), async (req, res) => {
   try {
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: req.params.id },
@@ -2081,7 +2081,7 @@ router.post('/:id/angles/:angleId/review', validateUUIDParam('id'), requireAuth,
 
 // ─── POST /:id/angles/:angleId/analyze  — run auto quality analysis ─────────
 
-router.post('/:id/angles/:angleId/analyze', validateUUIDParam('id'), requireAuth, aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
+router.post('/:id/angles/:angleId/analyze', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
   try {
     const angle = await SceneAngle.findOne({
       where: { id: req.params.angleId, scene_set_id: req.params.id },
@@ -2107,7 +2107,7 @@ router.post('/:id/angles/:angleId/analyze', validateUUIDParam('id'), requireAuth
 
 // ─── POST /:id/angles/:angleId/regenerate  — regenerate with refined prompt ──
 
-router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireAuth, aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
+router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
   let claimed = null;
   try {
     const set = await SceneSet.findByPk(req.params.id);
@@ -2162,7 +2162,7 @@ router.post('/:id/angles/:angleId/regenerate', validateUUIDParam('id'), requireA
 // ─── POST /:id/angles/:angleId/post-process  — run post-processing pipeline ─
 
 // Rate-limited: it uploads to Cloudinary, a paid service (fourth audit).
-router.post('/:id/angles/:angleId/post-process', validateUUIDParam('id'), requireAuth, aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
+router.post('/:id/angles/:angleId/post-process', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2191,7 +2191,7 @@ router.post('/:id/angles/:angleId/post-process', validateUUIDParam('id'), requir
 
 // ─── POST /:id/angles/:angleId/auto-refine  — queue auto-refinement ─────────
 
-router.post('/:id/angles/:angleId/auto-refine', validateUUIDParam('id'), requireAuth, aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
+router.post('/:id/angles/:angleId/auto-refine', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, validateUUIDParam('angleId'), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2483,7 +2483,7 @@ router.get('/:id/preview-prompt', validateUUIDParam('id'), requireAuth, async (r
 
 // ─── POST /:id/cascade-regenerate  — save + regen base + all angles ──────────
 
-router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/cascade-regenerate', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2595,7 +2595,7 @@ router.get('/jobs/:jobId', requireAuth, validateUUIDParam('jobId'), async (req, 
 
 // ─── PATCH /:id/cover-angle  — set persistent cover image ───────────────────
 
-router.patch('/:id/cover-angle', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.patch('/:id/cover-angle', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2627,7 +2627,7 @@ router.patch('/:id/cover-angle', validateUUIDParam('id'), requireAuth, async (re
 // versions at that location are then made from it, and the base is not
 // replaced until it is un-approved (answer 3).
 
-router.post('/:id/approve-base', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/approve-base', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2640,7 +2640,7 @@ router.post('/:id/approve-base', validateUUIDParam('id'), requireAuth, async (re
   }
 });
 
-router.delete('/:id/approve-base', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.delete('/:id/approve-base', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2698,7 +2698,7 @@ router.post('/:id/look-variants/:kind/:value/estimate', validateUUIDParam('id'),
   }
 });
 
-router.post('/:id/look-variants/:kind/:value/generate', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/look-variants/:kind/:value/generate', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { startVariant } = require('../services/locationLookVariantService');
     const { result, run } = await startVariant(SceneSet.sequelize, { setId: req.params.id, kind: req.params.kind, value: req.params.value });
@@ -2710,7 +2710,7 @@ router.post('/:id/look-variants/:kind/:value/generate', validateUUIDParam('id'),
   }
 });
 
-router.post('/:id/look-variants/:kind/:value/upload', validateUUIDParam('id'), requireAuth, variantUploadOr400, async (req, res) => {
+router.post('/:id/look-variants/:kind/:value/upload', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), variantUploadOr400, async (req, res) => {
   try {
     const file = [...(req.files?.images || []), ...(req.files?.image || [])][0];
     if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });
@@ -2730,7 +2730,7 @@ router.post('/:id/look-variants/:kind/:value/upload', validateUUIDParam('id'), r
   }
 });
 
-router.delete('/:id/look-variants/:kind/:value', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.delete('/:id/look-variants/:kind/:value', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { removeVariant } = require('../services/locationLookVariantService');
     res.json({ success: true, data: await removeVariant(SceneSet.sequelize, { setId: req.params.id, kind: req.params.kind, value: req.params.value }) });
@@ -2739,7 +2739,7 @@ router.delete('/:id/look-variants/:kind/:value', validateUUIDParam('id'), requir
   }
 });
 
-router.post('/:id/promote-to-base', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/promote-to-base', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2902,7 +2902,7 @@ router.get('/:id/spec', validateUUIDParam('id'), requireAuth, async (req, res) =
 });
 
 // POST /api/v1/scene-sets/:id/spec/generate - Build spec from base image via AI
-router.post('/:id/spec/generate', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/spec/generate', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2933,7 +2933,7 @@ router.post('/:id/spec/generate', validateUUIDParam('id'), requireAuth, aiRateLi
 });
 
 // PUT /api/v1/scene-sets/:id/spec - Replace entire scene spec
-router.put('/:id/spec', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.put('/:id/spec', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2958,7 +2958,7 @@ router.put('/:id/spec', validateUUIDParam('id'), requireAuth, async (req, res) =
 });
 
 // PATCH /api/v1/scene-sets/:id/spec - Merge edits into existing spec
-router.patch('/:id/spec', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.patch('/:id/spec', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2980,7 +2980,7 @@ router.patch('/:id/spec', validateUUIDParam('id'), requireAuth, async (req, res)
 
 // POST /api/v1/scene-sets/:id/spec/validate-angle - Validate a generated angle against spec
 // A paid Claude Vision call: rate-limited (fourth audit).
-router.post('/:id/spec/validate-angle', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/spec/validate-angle', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -3059,7 +3059,7 @@ function contractAngleRows(contracts, existingLabels, { only = null } = {}) {
 
 // POST /api/v1/scene-sets/:id/spec/create-angles - Create angles from spec camera contracts
 // Body: { labels?: string[] } to create (retry) only those contracts.
-router.post('/:id/spec/create-angles', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/spec/create-angles', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -3149,7 +3149,7 @@ router.post('/:id/objects/:objectId/duplicate', validateUUIDParam('id'), require
 // SUGGEST ANGLES FROM IMAGE — fast, only regenerates angles (no description/prompt)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/:id/suggest-angles-from-image', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/suggest-angles-from-image', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
@@ -3225,7 +3225,7 @@ ${existingLabels.length > 0 ? `ALREADY HAVE these angles — do NOT suggest dupl
 // STYLE LOCK — extract and save color palette/materials from base image
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/:id/lock-style', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/lock-style', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
@@ -3273,7 +3273,7 @@ Return ONLY JSON.` },
 // BATCH GENERATE ALL ANGLES
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
@@ -3360,7 +3360,7 @@ router.post('/:id/generate-all-angles', validateUUIDParam('id'), requireAuth, ai
 // TIME-OF-DAY VARIANTS — generate morning/afternoon/evening/night
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/:id/time-variants', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/time-variants', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
@@ -3397,7 +3397,7 @@ router.post('/:id/time-variants', validateUUIDParam('id'), requireAuth, async (r
 
 // ─── POST /:id/mood-variants  — generate mood/lighting variants ──────────────
 
-router.post('/:id/mood-variants', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/mood-variants', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
@@ -3483,7 +3483,7 @@ router.get('/templates/list', requireAuth, async (req, res) => {
   res.json({ success: true, templates });
 });
 
-router.post('/:id/apply-template', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/apply-template', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { template_id } = req.body;
     const set = await SceneSet.findByPk(req.params.id);
@@ -3593,7 +3593,7 @@ router.get('/:id/wardrobe-match', validateUUIDParam('id'), requireAuth, authoriz
 // SEASON VARIANTS — generate spring/summer/fall/winter versions
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.post('/:id/season-variants', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/season-variants', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ error: 'Scene set not found' });
@@ -3629,7 +3629,7 @@ router.post('/:id/season-variants', validateUUIDParam('id'), requireAuth, async 
 // FAVORITE / REJECT ANGLE — star or reject a generated angle
 // ═══════════════════════════════════════════════════════════════════════════════
 
-router.patch('/:id/angles/:angleId/favorite', validateUUIDParam('id'), requireAuth, validateUUIDParam('angleId'), async (req, res) => {
+router.patch('/:id/angles/:angleId/favorite', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), validateUUIDParam('angleId'), async (req, res) => {
   try {
     const angle = await SceneAngle.findOne({ where: { id: req.params.angleId, scene_set_id: req.params.id } });
     if (!angle) return res.status(404).json({ error: 'Angle not found' });
@@ -3646,7 +3646,7 @@ router.patch('/:id/angles/:angleId/favorite', validateUUIDParam('id'), requireAu
   }
 });
 
-router.patch('/:id/angles/:angleId/reject', validateUUIDParam('id'), requireAuth, validateUUIDParam('angleId'), async (req, res) => {
+router.patch('/:id/angles/:angleId/reject', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), validateUUIDParam('angleId'), async (req, res) => {
   try {
     const angle = await SceneAngle.findOne({ where: { id: req.params.angleId, scene_set_id: req.params.id } });
     if (!angle) return res.status(404).json({ error: 'Angle not found' });

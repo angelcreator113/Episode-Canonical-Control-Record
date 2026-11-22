@@ -50,7 +50,7 @@ const picture = (width, height) => sharp({ create: { width, height, channels: 3,
   beforeAll(async () => {
     await sequelize.query(`ALTER TABLE scene_angles ADD COLUMN IF NOT EXISTS quality_review jsonb`);
     token = TokenService.generateTokenPair({
-      id: 'test-user-gen4', email: 'user@gen4.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-gen4', email: 'user@gen4.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     saved.FAL_KEY = process.env.FAL_KEY;
     process.env.FAL_KEY = 'test-fal';

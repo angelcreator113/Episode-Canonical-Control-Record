@@ -409,7 +409,7 @@ const table = (kind) => (kind === 'set' ? 'scene_sets' : 'scene_angles');
     test('the existing Upload route completes an uncertain angle; the attempt keeps its evidence', async () => {
       const app = require('../../src/app');
       const TokenService = require('../../src/services/tokenService');
-      const token = TokenService.generateTokenPair({ id: 'test-user-flows', email: 'u@flows.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken;
+      const token = TokenService.generateTokenPair({ id: 'test-user-flows', email: 'u@flows.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
       const set = await makeSet();
       const angle = await makeAngle(set, { generation_status: 'pending' });
       const u = await makeUncertain('angle', angle, set.id);
@@ -476,7 +476,7 @@ const table = (kind) => (kind === 'set' ? 'scene_sets' : 'scene_angles');
       await run("UPDATE scene_angles SET generation_status = 'uncertain' WHERE id = :id", { id: angle.id });
       const app = require('../../src/app');
       const auth = `Bearer ${require('../../src/services/tokenService').generateTokenPair({
-        id: 'test-user-flows', email: 'u@flows.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken}`;
+        id: 'test-user-flows', email: 'u@flows.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken}`;
       const gen = await request(app).post(`/api/v1/scene-sets/${set.id}/angles/${angle.id}/generate`).set('Authorization', auth).send({});
       expect([gen.status, gen.body.error]).toEqual([500, expect.stringMatching(GUARD)]);
       const refine = await request(app).post(`/api/v1/scene-sets/${set.id}/angles/${angle.id}/regenerate`).set('Authorization', auth).send({ categories: ['SOFT_FOCUS'] });
@@ -526,7 +526,7 @@ const table = (kind) => (kind === 'set' ? 'scene_sets' : 'scene_angles');
   describe('rollback compatibility: the current application with PR B attempts in flight', () => {
     const app = () => require('../../src/app');
     const bearer = () => `Bearer ${require('../../src/services/tokenService').generateTokenPair({
-      id: 'test-user-flows', email: 'u@flows.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER' }).accessToken}`;
+      id: 'test-user-flows', email: 'u@flows.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN' }).accessToken}`;
 
     test('fresh in flight: Generate is 409, Generate All skips it, claimRow reports busy, no fal request', async () => {
       const set = await makeSet({ base_still_url: 'https://bucket.example/base.jpg' });

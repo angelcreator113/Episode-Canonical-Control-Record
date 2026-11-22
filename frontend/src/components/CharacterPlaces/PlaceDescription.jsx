@@ -17,6 +17,7 @@
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import api from '../../services/api';
+import { sceneAdminOnlyMessage } from '../../utils/authGroups';
 
 export default function PlaceDescription({ characterId, setId, setName, role, onNote }) {
   const [busy, setBusy] = useState(null);
@@ -32,7 +33,7 @@ export default function PlaceDescription({ characterId, setId, setName, role, on
       setDraft(data ? { ...data, text: data.description } : null);
     } catch (err) {
       console.error('[PlaceDescription] writing failed:', err);
-      setError(err.response?.data?.error || 'Could not write the description');
+      setError(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not write the description');
     } finally { setBusy(null); }
   };
 
@@ -45,7 +46,7 @@ export default function PlaceDescription({ characterId, setId, setName, role, on
       setDraft(null);
     } catch (err) {
       console.error('[PlaceDescription] saving failed:', err);
-      setError(err.response?.data?.error || 'Could not save the description');
+      setError(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not save the description');
     } finally { setBusy(null); }
   };
 

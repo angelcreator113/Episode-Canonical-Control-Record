@@ -34,7 +34,7 @@ const shouldSkip =
       ADD COLUMN IF NOT EXISTS variation_count integer DEFAULT 1,
       ADD COLUMN IF NOT EXISTS cover_angle_id uuid`);
     token = TokenService.generateTokenPair({
-      id: 'test-user-spec-edits', email: 'user@spec-edits.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-spec-edits', email: 'user@spec-edits.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
   afterAll(async () => {

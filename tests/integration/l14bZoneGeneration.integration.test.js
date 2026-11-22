@@ -101,7 +101,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       ADD COLUMN IF NOT EXISTS cover_angle_id uuid`);
     for (const m of [baseModelMigration, approvedMigration, kindMigration, zoneMigration]) await m.up(qi, Sequelize);
     token = TokenService.generateTokenPair({
-      id: 'test-user-l14b', email: 'user@l14b.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-l14b', email: 'user@l14b.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 
