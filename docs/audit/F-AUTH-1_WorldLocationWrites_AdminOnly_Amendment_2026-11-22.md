@@ -11,9 +11,9 @@ v1.0. This is an additive amendment, written as a new file because the register 
 
 **Author:** Claude, with Evoni (JustAWomanInHerPrime), Prime Studios.
 
-**Status:** amendment, on Evoni's authorization of 2026-11-22 as §2 records it. Merging this file with the change it describes is her approval of the text.
+**Status:** amendment, on Evoni's authorization of 2026-11-22, quoted in §2. Merging this file with the change it describes is her approval of the text.
 
-**Standings used:** RULED (§2, as relayed: see the note there); MEASURED (the repository reads and the local test runs in §1, §3 and §4, each with its command or file); INFERRED (marked where used).
+**Standings used:** RULED (§2, in Evoni's words); MEASURED (the repository reads and the local test runs in §1, §3 and §4, each with its command or file); INFERRED (marked where used).
 
 ---
 
@@ -67,14 +67,22 @@ $ git show origin/main:src/routes/tierFeatures.js | grep -n "router.*world-locat
 
 The general write guard (`src/middleware/adminWriteGuard.js`) does nothing unless `ADMIN_WRITE_GUARD` is set. What it is set to on any server is not established, so it is not relied on.
 
-# §2. The decision (RULED, as relayed)
+# §2. The decision (RULED)
 
-Evoni authorized this scope on 2026-11-22. **Her own words are not in the session that wrote this file**: it was given the scope by the session she was speaking to, and records it as that brief states it, not as a quotation:
+Evoni, 2026-11-22, "Decision 1 — World Location security correction AUTHORIZED", in her words:
 
-- Both delete routes carry `authorize(['ADMIN'])` directly after `requireAuth`.
-- Every World Location create, update and seed route is inventoried. A route that changes shared production locations and asked for a sign-in only becomes an ADMIN's, unless it has internal-initialization semantics or a non-admin flow depends on it: such a route is left as it is and listed for her to decide (§5).
-- Both deletes use one function, in one transaction, and refuse with a 409 and nothing changed while anything live refers to the location: the Place lock first, then the approved base, then every other use. No override of any kind.
-- No migration, table, endpoint, permission system, soft delete, or new audit system. The existing `requireAuth`, `authorize(['ADMIN'])`, `isPlaceLocked`, `asRetryable` and activity log are reused.
+- "Authorize a focused implementation PR to fix the verified World Location authorization and deletion-integrity gaps."
+- "Add the existing ADMIN authorization middleware to BOTH: DELETE /api/v1/world/locations/:id [and] DELETE /api/v1/tier/world-locations/:locationId".
+- "Inventory the World Location create, update and seed endpoints. Add ADMIN authorization to routes that mutate shared production locations and are currently available to ordinary authenticated users. If a seed endpoint has internal initialization semantics, preserve its legitimate operation while ensuring ordinary signed-in accounts cannot invoke it. Report any ambiguous case before modifying it."
+- "Reuse existing dependency and Place-lock mechanisms to refuse deletion where the location has: A Place-locked event reference. Approved-base data. Child locations. Any other active reference that would be nulled, orphaned or damaged by hard deletion. Do not add an orphan override under this PR."
+- "Make the dependency check and deletion atomic and concurrency-safe using existing transaction and locking conventions. Verify the relevant foreign-key behavior and lock ordering first. Do not hold unnecessary locks across external work."
+- "Preserve the existing successful deletion behavior for an unreferenced location deleted by ADMIN."
+- "World Foundation: show useful 403/409 errors. Narrative Control Center: require confirmation and handle errors. Reuse existing error-message helpers."
+- "Use existing audit logging if an established applicable deletion audit path exists. Do not introduce a new tracking or history system."
+- "Keep the existing hard-delete model for eligible locations. Do not add a soft-delete system or migration."
+- "Open one focused PR with full seven-check CI. Do not merge or deploy it without separate authorization."
+
+How this file reads two of those. Routes with internal-initialization semantics, or that a flow outside these pages depends on, are left as they are and listed for her to decide (§5). The two tier routes `POST` and `PUT /api/v1/tier/world-locations` were gated without asking first, and are flagged in §3 for her to confirm or reverse.
 
 No ownership rule is created. No public contract is created.
 
@@ -186,6 +194,6 @@ Already an ADMIN's, and unchanged: `POST /api/v1/shows/:id/character-places/fill
 ---
 
 **Type:** amendment.
-**Rules:** the eight routes of §3 are an ADMIN's, and a World Location that anything live uses is not deleted, on Evoni's authorization as relayed in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** nothing.
+**Rules:** the eight routes of §3 are an ADMIN's, and a World Location that anything live uses is not deleted, on Evoni's authorization quoted in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** nothing.
 **Host/AWS/DB/Cognito contact (this session):** the tests ran against a local PostgreSQL test database in the session's own container. No deployed host, AWS service, production or development database, or Cognito pool was contacted for this change, and no paid provider was called.
 **Production standing:** as the newest Fix Plan revision states it (`F-Deploy-1_Fix_Plan_v1.56.md`, footer): "Production's freeze is lifted (`F-Deploy-1_Fix_Plan_v1.53.md` §1)". What an agent session may do in production is set by `CLAUDE.md` and `F-Tools-5_AgentProductionAccess_Ruling_2026-10-31.md`.
