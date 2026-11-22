@@ -285,6 +285,43 @@ describe('src/routes/propertyRoutes.js: the four writes carry the admin check, t
       });
     });
 
+    // Evoni, 2026-11-22: a child of a canonical property may be managed through
+    // that property's room workflow whatever its own type, and is not reclassified.
+    test('PATCH /properties/:id/rooms/:roomId edits a child of the property that is a venue, and it stays a venue and that property\'s child', async () => {
+      const child = crypto.randomUUID();
+      await insert(child, 'Venue child', 'venue', { parent: ids.property, city: 'Echo Park', metadata: { venue: 'kept until replaced' } });
+      const before = await location(child);
+      const others = async () => (await everything()).locations.filter((row) => row.id !== child);
+      const othersBefore = await others();
+      const res = await send('admin', 'patch', `/api/v1/properties/${ids.property}/rooms/${child}`, {
+        name: `Venue child renamed ${tag}`, description: 'venue words', metadata: { only: 'this' },
+      });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        data: { id: child, name: `Venue child renamed ${tag}`, location_type: 'venue', parent_location_id: ids.property, metadata: { only: 'this' } },
+      });
+      const row = await location(child);
+      expect(row).toMatchObject({ name: `Venue child renamed ${tag}`, description: 'venue words', metadata: { only: 'this' } });
+      // Not reclassified and not moved: every column but the three sent, and updated_at, is as it was.
+      const { name: _n, description: _d, metadata: _m, updated_at: _u, ...kept } = row;
+      const { name: _bn, description: _bd, metadata: _bm, updated_at: _bu, ...keptBefore } = before;
+      expect(kept).toEqual(keptBefore);
+      expect([row.location_type, row.parent_location_id]).toEqual(['venue', ids.property]);
+      expect(await others()).toEqual(othersBefore);
+    });
+
+    test('that venue child sent location_type and parent_location_id: neither is taken, the row keeps both', async () => {
+      const child = crypto.randomUUID();
+      await insert(child, 'Venue child', 'venue', { parent: ids.property, city: 'Echo Park' });
+      const res = await send('admin', 'patch', `/api/v1/properties/${ids.property}/rooms/${child}`, {
+        name: `Venue child kept ${tag}`, location_type: 'interior', parent_location_id: ids.other,
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({ id: child, location_type: 'venue', parent_location_id: ids.property });
+      expect(await location(child)).toMatchObject({ name: `Venue child kept ${tag}`, location_type: 'venue', parent_location_id: ids.property });
+    });
+
     test('GET /properties and GET /properties/:id still answer an editor', async () => {
       const list = await send('editor', 'get', '/api/v1/properties');
       expect(list.status).toBe(200);
@@ -312,6 +349,27 @@ describe('src/routes/propertyRoutes.js: the four writes carry the admin check, t
       const before = await everything();
       const res = await send('admin', 'post', `/api/v1/properties/${ids[key]}/rooms`, { name: `Stray room ${tag}`, room_type: 'closet' });
       expect([res.status, res.body]).toEqual([400, NOT_A_PROPERTY]);
+      expect(await everything()).toEqual(before);
+    });
+
+    // Evoni, 2026-11-22: a home made as an 'interior' (as "Fill in Lala's home"
+    // makes one) is not reclassified as a property. The writes answer it as
+    // GET /:id does, and neither it nor its room is changed.
+    test('a home that is an \'interior\', with \'interior\' rooms: the two property writes answer exactly as GET /:id does, and the house and its room are as they were', async () => {
+      const before = await everything();
+      const house = await location(ids.house);
+      const houseRoom = await location(ids.houseRoom);
+      expect([house.location_type, houseRoom.location_type, houseRoom.parent_location_id]).toEqual(['interior', 'interior', ids.house]);
+      const get = await send('admin', 'get', `/api/v1/properties/${ids.house}`);
+      expect([get.status, get.body]).toEqual([400, NOT_A_PROPERTY]);
+      const patch = await send('admin', 'patch', `/api/v1/properties/${ids.house}`, { name: `Renamed ${tag}`, property_type: 'mansion', metadata: { hacked: true } });
+      expect([patch.status, patch.body]).toEqual([get.status, get.body]);
+      const post = await send('admin', 'post', `/api/v1/properties/${ids.house}/rooms`, { name: `Stray room ${tag}`, room_type: 'closet' });
+      expect([post.status, post.body]).toEqual([get.status, get.body]);
+      const room = await send('admin', 'patch', `/api/v1/properties/${ids.house}/rooms/${ids.houseRoom}`, { name: `Renamed ${tag}`, metadata: { hacked: true } });
+      expect([room.status, room.body]).toEqual([404, NO_ROOM]);
+      expect(await location(ids.house)).toEqual(house);
+      expect(await location(ids.houseRoom)).toEqual(houseRoom);
       expect(await everything()).toEqual(before);
     });
 

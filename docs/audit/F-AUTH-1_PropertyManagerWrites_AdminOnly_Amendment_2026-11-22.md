@@ -13,7 +13,7 @@ v1.0. This is an additive amendment, written as a new file because the register 
 
 **Status:** amendment, on Evoni's word in the session of 2026-11-22. Merging this file with the change it describes is her approval of the text.
 
-**Standings used:** RULED (her words in §2); MEASURED (the repository reads in §1, §3 and §4, each with its command or file); INFERRED (marked where used).
+**Standings used:** RULED (her words in §2 and §4); MEASURED (the repository reads in §1, §3 and §4, each with its command or file); INFERRED (marked where used).
 
 ---
 
@@ -106,17 +106,36 @@ One function in the file, `propertyForWrite`, serves `PATCH /:id` and `POST /:id
 - A create-property or add-room that the server refuses with 403 `AUTH_GROUP_REQUIRED` now shows "Only an admin can add or change properties and rooms." through the existing `adminOnlyMessage` (`frontend/src/utils/authGroups.js`). At the basis it showed the request library's "Request failed with status code 403" (`frontend/src/pages/PropertyManager.jsx:63`, `:73`).
 - The page is otherwise unchanged. `/property-manager` is not wrapped in `<AdminOnly>` (`frontend/src/App.jsx:507`); someone who is not an admin still opens it, sees the list, and sees both forms with their buttons enabled. Routing and controls are not changed here.
 
-# §4. What is left for Evoni (the ambiguity; nothing was invented)
+# §4. The classification questions, and Evoni's ruling on them (RULED)
 
-1. **A home that "Fill in Lala's home" makes is not a property.** When no location is at her address, `fillLalaHome` inserts the house as `location_type` `'interior'` under the city row, and its rooms as `'interior'` children of the house (`src/services/characterPlacesService.js:322-325`, `:336-338`). The seed's "Lala's Home" is a `'property'` (`src/services/lalaHomeLocation.js:24`). So "Lala's home" is a property or not depending on which ran first. A house that is an `'interior'` was never in the Property Manager's list and `GET /:id` already answered it 400; the four writes now refuse it too (`PATCH /:id` and `POST /:id/rooms` 400, the room edit 404). Whether that house should be a property is hers to say; no rule was added to treat it as one.
+Four things about how a property and a room are told apart were found while reading (MEASURED, below). Evoni, in the session of 2026-11-22:
+
+> "Keep #3928's existing location_type = 'property' validation. Do not reclassify or duplicate Lala's home based on whether it was seeded as property or created as interior. Do not automatically reclassify a venue child as a room. Preserve the existing rule that a child of a canonical property may be managed through that property's room workflow, provided the child belongs to that property. Verify that existing legitimate ADMIN edits of such children still work. Record any classification cleanup as separate future work; do not expand #3928."
+
+So, in this change:
+
+- A property is a row whose `location_type` is `'property'`, and nothing else. No row is reclassified, and none is made or duplicated.
+- A home made as an `'interior'` stays one. The two property writes answer it with the 400 `GET /:id` gives, the room edit through it is the 404, and neither the house nor its rooms are changed.
+- A child of a property is managed through that property's room edit whatever its own `location_type`, provided its `parent_location_id` is that property. Its type and parent are not changed by the edit. An admin's edit of such a child (a venue whose parent is a property) is tested and works (§5).
+
+## What was found (MEASURED)
+
+1. **A home that "Fill in Lala's home" makes is not a property.** When no location is at her address, `fillLalaHome` inserts the house as `location_type` `'interior'` under the city row, and its rooms as `'interior'` children of the house (`src/services/characterPlacesService.js:322-325`, `:336-338`). The seed's "Lala's Home" is a `'property'` (`src/services/lalaHomeLocation.js:24`). So "Lala's home" is a property or not depending on which ran first. A house that is an `'interior'` was never in the Property Manager's list and `GET /:id` already answered it 400.
 2. **A room has no type of its own.** The room edit accepts any child of a property. A location of another kind whose parent was set to a property (World Foundation's location edit accepts `parent_location_id`, `src/routes/worldStudio.js:3286`) is a "room" to this route.
 3. **The type can be changed elsewhere.** `PUT /api/v1/world/locations/:id` accepts `location_type` (`src/routes/worldStudio.js:3286`), and `POST /api/v1/world/locations` accepts any (`:3247-3257`). A row is a property for as long as its type says so.
-4. **Property fields live in two places.** The Property Manager's routes keep `property_type`, `style_guide` and `floor_plan` in `metadata`; World Foundation's keep them in the columns of those names (`src/routes/worldStudio.js:3286`). Not changed.
+4. **Property fields live in two places.** The Property Manager's routes keep `property_type`, `style_guide` and `floor_plan` in `metadata`; World Foundation's keep them in the columns of those names (`src/routes/worldStudio.js:3286`).
+
+## Recorded for separate future work (not in this change)
+
+- Lala's home being a `'property'` or an `'interior'` depending on which code created it.
+- Any child of a property being manageable as a room regardless of its type.
+- `location_type` being mutable through the World Foundation routes.
+- Property fields kept in `metadata` here and in columns in World Foundation.
 
 # §5. Tests
 
-- `tests/integration/propertyManagerAdmin.integration.test.js` (45 cases; 38 on a migrated test database through the real app, 7 source pins). Each of the four writes signed out (401) and as a viewer, an editor and an account in no group (403 `AUTH_GROUP_REQUIRED`), with every `world_locations` and `scene_sets` row of the database, every column, the same afterwards. An admin: makes a property; edits one (metadata merged, the three fields mapped into it, type and city untouched); adds a room (parent, universe and city from the property, and its scene set); edits the room (metadata replaced whole, type and parent untouched). Refused for an admin, nothing written: a venue, a city, a room and an `'interior'` home as `:id` on `PATCH /:id` and `POST /:id/rooms`; the room edit through a city, an `'interior'` home, a room or a venue as `:id`, and on a property with another property's room, a venue, a district, another property or the property itself as `:roomId`; unknown ids and ids that are not UUIDs on all three. The reads still answer an editor. After every case: no call to the Anthropic or Replicate clients, to `axios`, to the S3 client, or to `fetch`.
-- **Control.** With `src/routes/propertyRoutes.js` as on `origin/main` and the test file unchanged, 23 of the 45 fail (the 5 pins of the admin chain, the 4 non-admin cases, 8 non-property ids, 2 room edits through a parent that is not a property, 4 ids that are not UUIDs); with the branch's file, 45 pass.
+- `tests/integration/propertyManagerAdmin.integration.test.js` (48 cases; 41 on a migrated test database through the real app, 7 source pins). Each of the four writes signed out (401) and as a viewer, an editor and an account in no group (403 `AUTH_GROUP_REQUIRED`), with every `world_locations` and `scene_sets` row of the database, every column, the same afterwards. An admin: makes a property; edits one (metadata merged, the three fields mapped into it, type and city untouched); adds a room (parent, universe and city from the property, and its scene set); edits the room (metadata replaced whole, type and parent untouched); edits a child of the property that is a venue (updated, still a venue and still that property's child, also when the body sends another type and parent). Refused for an admin, nothing written: a venue, a city, a room and an `'interior'` home as `:id` on `PATCH /:id` and `POST /:id/rooms`; the room edit through a city, an `'interior'` home, a room or a venue as `:id`, and on a property with another property's room, a venue, a district, another property or the property itself as `:roomId`; unknown ids and ids that are not UUIDs on all three; and an `'interior'` home with `'interior'` rooms answered by the two property writes exactly as `GET /:id` answers it, the house and its room unchanged. The reads still answer an editor. After every case: no call to the Anthropic or Replicate clients, to `axios`, to the S3 client, or to `fetch`.
+- **Control.** With `src/routes/propertyRoutes.js` as on `origin/main` and the test file unchanged, 24 of the 48 fail (the 5 pins of the admin chain, the 4 non-admin cases, 8 non-property ids, the `'interior'` home case, 2 room edits through a parent that is not a property, 4 ids that are not UUIDs); with the branch's file, 48 pass. The two venue-child cases pass on both: that rule is the existing one.
 - `tests/unit/routes/cp10-property.test.js`: the import pin is now `{ requireAuth, authorize }`; the four writes are pinned with `requireAuth` then `authorize(['ADMIN'])`; the five others are pinned as `requireAuth` then the handler (tightened, so an added check would fail them); one new count: nine routes, nine with `requireAuth` first, four with the admin chain, four `authorize(` in the file.
 - `tests/unit/routes/droppedWrites.sites.test.js`: the one case that drives `POST /:id/rooms` now asks as an admin and its stubbed parent is a property. Its assertions are unchanged.
 - `tests/integration/locationDreamCity.integration.test.js`: its three property-route calls now carry an admin token; the editor token stays on its `/world/locations` calls. Its assertions are unchanged.
