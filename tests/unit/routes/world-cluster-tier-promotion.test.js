@@ -342,6 +342,35 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
       expect(postCount + putCount + deleteCount).toBe(37);
     });
 
+    // World Location writes are an ADMIN's since 2026-11-22 (Evoni): authorize(['ADMIN'])
+    // sits directly after requireAuth, so the 37 above still count them.
+    test.each([
+      ['post', '/world/locations'],
+      ['put', '/world/locations/:id'],
+      ['delete', '/world/locations/:id'],
+      ['post', '/world/locations/studio-types'],
+      ['post', '/world/locations/seed-infrastructure'],
+    ])('%s %s is an ADMIN\'s (requireAuth + authorize, then the handler)', (method, route) => {
+      expect(src).toContain(`router.${method}('${route}', requireAuth, authorize(['ADMIN']), async (req, res) => {`);
+    });
+
+    test('exactly 6 mutation handlers carry authorize([\'ADMIN\']): the five location writes and the ecosystem preview', () => {
+      const adminWrites = src.match(/^router\.(post|put|delete|patch)\('[^']+', requireAuth, authorize\(\['ADMIN'\]\),/gm) || [];
+      expect(adminWrites).toHaveLength(6);
+    });
+
+    test('GET /world/locations/studio-types stays a sign-in (it reads and proposes; it writes nothing)', () => {
+      expect(src).toContain('router.get(\'/world/locations/studio-types\', requireAuth, async (req, res) => {');
+    });
+
+    test('DELETE /world/locations/:id deletes through the one shared function, with no override and no model destroy', () => {
+      const start = src.indexOf('router.delete(\'/world/locations/:id\'');
+      const handler = src.slice(start, src.indexOf('\n});', start));
+      expect(handler).toContain('deleteWorldLocation(sequelize, req.params.id, { userId: req.user?.id })');
+      expect(handler).toContain('console.error(');
+      expect(handler).not.toMatch(/\.destroy\(|DELETE FROM|req\.(query|body)|err\.message/);
+    });
+
     test('Tier 3 + Tier 4 + Tier 1 cover all 56 worldStudio handlers', () => {
       const handlerPattern = /^router\.(get|post|put|delete|patch)\(/gm;
       const matches = src.match(handlerPattern) || [];

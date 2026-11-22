@@ -37,7 +37,7 @@ const db = require('../models');
 
 const anthropic = createAnthropicClient();
 
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { selectRules, recordRuleUse } = require('../services/brainRules');
 
@@ -413,7 +413,9 @@ router.get('/world-locations', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/world-locations', requireAuth, async (req, res) => {
+// ADMIN (Evoni, 2026-11-22): the create, update and delete below write the
+// shared world_locations rows the production pages use.
+router.post('/world-locations', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     if (req.body.name && !req.body.slug) {
       req.body.slug = req.body.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -425,7 +427,7 @@ router.post('/world-locations', requireAuth, async (req, res) => {
   }
 });
 
-router.put('/world-locations/:locationId', requireAuth, async (req, res) => {
+router.put('/world-locations/:locationId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const location = await db.WorldLocation.findByPk(req.params.locationId);
     if (!location) return res.status(404).json({ error: 'Location not found' });
@@ -436,12 +438,18 @@ router.put('/world-locations/:locationId', requireAuth, async (req, res) => {
   }
 });
 
-router.delete('/world-locations/:locationId', requireAuth, async (req, res) => {
+// The same delete as DELETE /api/v1/world/locations/:id (services/
+// approvedBaseService deleteWorldLocation): 404 when there is no such
+// location, 409 when anything live uses it; no override.
+router.delete('/world-locations/:locationId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
-    await db.WorldLocation.destroy({ where: { id: req.params.locationId } });
+    const { deleteWorldLocation } = require('../services/approvedBaseService');
+    const outcome = await deleteWorldLocation(db.sequelize, req.params.locationId, { userId: req.user?.id });
+    if (outcome.status !== 200) return res.status(outcome.status).json(outcome.body);
     return res.json({ success: true });
   } catch (err) {
-    return res.status(500).json({ error: err?.message });
+    console.error('[TierFeatures] DELETE /world-locations/:locationId failed:', err);
+    return res.status(500).json({ error: 'The location could not be deleted' });
   }
 });
 

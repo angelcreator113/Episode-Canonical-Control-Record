@@ -26,6 +26,7 @@ import { tabFromSearch } from '../utils/worldRedirects';
 import { saveCity } from '../lib/pulseCities';
 import useActiveShow from '../hooks/useActiveShow';
 import StudioPhotos from '../components/World/StudioPhotos';
+import { locationAdminOnlyMessage, locationDeleteMessage } from '../utils/locationWrites';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -114,7 +115,7 @@ export default function WorldFoundation({ embedded = false }) {
   // A studio's photos belong to the active show (StudioPhotos, 2026-10-18).
   const { showId } = useActiveShow();
 
-  const flash = useCallback((msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); }, []);
+  const flash = useCallback((msg, type = 'success', ms = 3000) => { setToast({ msg, type }); setTimeout(() => setToast(null), ms); }, []);
 
   const loadLocations = useCallback(async () => {
     setLocLoading(true);
@@ -147,7 +148,10 @@ export default function WorldFoundation({ embedded = false }) {
       else await createLocationApi(payload);
       flash(editId ? 'Updated' : 'Created');
       setForm(emptyForm); setEditId(null); setShowForm(false); loadLocations();
-    } catch { flash('Save failed', 'error'); }
+    } catch (err) {
+      console.error('[WorldFoundation] location save failed:', err);
+      flash(locationAdminOnlyMessage(err) || 'Save failed', 'error');
+    }
   }, [editId, form, flash, loadLocations]);
 
   // A city's words (the one DREAM city list): saved onto the latest list, which the writers read.
@@ -160,12 +164,20 @@ export default function WorldFoundation({ embedded = false }) {
   const deleteLocation = useCallback(async (id) => {
     if (!confirm('Delete this location?')) return;
     try { await deleteLocationApi(id); flash('Deleted'); loadLocations(); }
-    catch { flash('Delete failed', 'error'); }
+    catch (err) {
+      // The server's own sentence: an admin's write (403), or what still uses
+      // the location (409). It is long, so it stays up longer.
+      console.error('[WorldFoundation] location delete failed:', err);
+      flash(locationDeleteMessage(err, 'Delete failed'), 'error', 9000);
+    }
   }, [flash, loadLocations]);
 
   const seedInfra = useCallback(async () => {
     try { const r = await seedInfrastructureApi(); flash(`Seeded ${r.data?.created || 0} locations`); loadLocations(); }
-    catch { flash('Seed failed', 'error'); }
+    catch (err) {
+      console.error('[WorldFoundation] seed failed:', err);
+      flash(locationAdminOnlyMessage(err) || 'Seed failed', 'error');
+    }
   }, [flash, loadLocations]);
 
   // The explorer's "+ Add": a new location already in the chosen city.
@@ -504,7 +516,7 @@ export default function WorldFoundation({ embedded = false }) {
 
       {editItem && <EditItemModal item={editItem.item} title={`Edit ${editItem.key}`} onSave={(updated) => { if (editItem.index === -1) addItem(editItem.key, updated); else updateItem(editItem.key, editItem.index, updated); setEditItem(null); }} onCancel={() => setEditItem(null)} />}
     </div>
-    {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, padding: '10px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999, background: toast.type === 'error' ? '#fee' : '#e8f5e9', color: toast.type === 'error' ? '#c44' : '#2e7d32', border: `1px solid ${toast.type === 'error' ? '#fcc' : '#c8e6c9'}` }}>{toast.msg}</div>}
+    {toast && <div role={toast.type === 'error' ? 'alert' : 'status'} data-testid="world-foundation-toast" style={{ position: 'fixed', bottom: 24, right: 24, maxWidth: 'calc(100vw - 48px)', boxSizing: 'border-box', overflowWrap: 'anywhere', padding: '10px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999, background: toast.type === 'error' ? '#fee' : '#e8f5e9', color: toast.type === 'error' ? '#c44' : '#2e7d32', border: `1px solid ${toast.type === 'error' ? '#fcc' : '#c8e6c9'}` }}>{toast.msg}</div>}
     </PageEditContext.Provider>
   );
 }
