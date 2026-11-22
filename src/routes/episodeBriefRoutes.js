@@ -8,6 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
+const { authorize } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const models = require('../models');
 const { EpisodeBrief, ScenePlan, Episode, SceneSet } = models;
@@ -410,7 +411,7 @@ router.get('/:episodeId/performance-clips', requireAuth, async (req, res) => {
   }
 });
 
-router.put('/:episodeId/performance-clips', requireAuth, async (req, res) => {
+router.put('/:episodeId/performance-clips', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { attachClip } = require('../services/performanceClipsService');
     const { anyDocumentPresentation, refuseDocumentPresentation } = require('../utils/documentPresentationAssets');
@@ -424,7 +425,7 @@ router.put('/:episodeId/performance-clips', requireAuth, async (req, res) => {
   }
 });
 
-router.delete('/:episodeId/performance-clips/:clipId', requireAuth, async (req, res) => {
+router.delete('/:episodeId/performance-clips/:clipId', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { removeClip } = require('../services/performanceClipsService');
     const removed = await removeClip(models.sequelize, req.params.episodeId, req.params.clipId);
@@ -581,7 +582,7 @@ router.post('/:episodeId/dressed-angles/:angleId/brief', ...dressedIds, requireA
   }
 });
 
-router.post('/:episodeId/dressed-angles/:angleId/generate', ...dressedIds, requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/:episodeId/dressed-angles/:angleId/generate', ...dressedIds, requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { startDressedAngle } = require('../services/dressedAngleService');
     const { result, run } = await startDressedAngle(models.sequelize, {
@@ -598,7 +599,7 @@ router.post('/:episodeId/dressed-angles/:angleId/generate', ...dressedIds, requi
   }
 });
 
-router.post('/:episodeId/dressed-angles/:angleId/upload', ...dressedIds, requireAuth, dressedUpload, async (req, res) => {
+router.post('/:episodeId/dressed-angles/:angleId/upload', ...dressedIds, requireAuth, authorize(['ADMIN']), dressedUpload, async (req, res) => {
   try {
     const file = [...(req.files?.images || []), ...(req.files?.image || [])][0];
     if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });

@@ -37,6 +37,7 @@ export default function Toolbar({
   isDirty,
   saveStatus,
   onSave,
+  viewOnly = false,
   onExport,
   title,
   rawTitle,
@@ -215,8 +216,8 @@ export default function Toolbar({
               console.error('No onSave handler provided to Toolbar');
             }
           }}
-          disabled={saveStatus === 'saving'}
-          title={saveStatus === 'error' ? 'Save failed — click to retry' : 'Save (Ctrl+S)'}
+          disabled={viewOnly || saveStatus === 'saving'}
+          title={viewOnly ? 'View-only — Admin editing required' : saveStatus === 'error' ? 'Save failed — click to retry' : 'Save (Ctrl+S)'}
         >
           {saveStatus === 'saving' ? (
             <><Save size={14} className="scene-studio-spin-icon" /> Saving...</>

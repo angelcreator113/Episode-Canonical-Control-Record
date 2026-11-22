@@ -1,5 +1,5 @@
-import { useEffect, useCallback, useRef, useState, useMemo, Fragment } from 'react';
-import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp, Layers, Settings, Merge } from 'lucide-react';
+import { useEffect, useCallback, useRef, useState, useMemo, useContext, Fragment } from 'react';
+import { Plus, Image as ImageIcon, Upload, Sparkles, Pentagon, Type, Eraser, ImagePlus, Undo2, Scissors, ChevronUp, Layers, Settings, Merge, Eye } from 'lucide-react';
 import StudioCanvas from './Canvas/StudioCanvas';
 import MaskLayer from './Canvas/MaskLayer';
 import EraseBrushCanvas from './EraseBrushCanvas';
@@ -8,8 +8,11 @@ import CreationPanel from './panels/CreationPanel';
 import InspectorPanel from './panels/InspectorPanel';
 import SmartSuggestions from './panels/SmartSuggestions';
 import useSceneStudioState from './useSceneStudioState';
-import sceneService from '../../services/sceneService';
+import sceneServiceApi from '../../services/sceneService';
 import assetService from '../../services/assetService';
+import AuthContext from '../../contexts/AuthContext';
+import { isAdmin, adminOnlyMessage, SCENE_ADMIN_ONLY_MESSAGE, VIEW_ONLY_NOTICE } from '../../utils/authGroups';
+import { viewOnlyState, viewOnlyService } from './viewOnly';
 import './SceneStudio.css';
 
 /**
@@ -181,7 +184,12 @@ const QUICK_ADD_OPTIONS = [
 ];
 
 export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, onBack }) {
-  const state = useSceneStudioState();
+  const editableState = useSceneStudioState();
+  // Changing a shared scene or set is an admin's (the server answers 403 to
+  // anyone else). Everyone signed in may open it: for them the page is
+  // view-only, with no edit applied and no write or paid request sent.
+  const canEdit = isAdmin(useContext(AuthContext)?.user);
+  const state = canEdit ? editableState : viewOnlyState(editableState);
   const canvasContainerRef = useRef(null);
   const stageRef = useRef(null);
   const [platform, setPlatform] = useState('youtube');
@@ -194,6 +202,22 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   const [error, setError] = useState(null);
   const [saveErrorMsg, setSaveErrorMsg] = useState(null);
   const [bannerErrorKind, setBannerErrorKind] = useState('save');
+  // Says so on the page when the server (or, for a viewer, the page itself)
+  // kept a change for an admin. True when it was that kind of refusal.
+  const showPermissionRefusal = useCallback((err) => {
+    const sentence = adminOnlyMessage(err, SCENE_ADMIN_ONLY_MESSAGE);
+    if (!sentence) return false;
+    setBannerErrorKind('permission');
+    setSaveErrorMsg(sentence);
+    return true;
+  }, []);
+  const sceneService = useMemo(
+    () => (canEdit ? sceneServiceApi : viewOnlyService(sceneServiceApi, () => {
+      setBannerErrorKind('permission');
+      setSaveErrorMsg(SCENE_ADMIN_ONLY_MESSAGE);
+    })),
+    [canEdit],
+  );
   const saveTimerRef = useRef(null);
   const saveRef = useRef(null);
   const pendingSaveRef = useRef(false);
@@ -429,6 +453,11 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       isDirty: state.isDirty
     });
     
+    if (!canEdit) {
+      setBannerErrorKind('permission');
+      setSaveErrorMsg(SCENE_ADMIN_ONLY_MESSAGE);
+      return;
+    }
     if (isSavingRef.current) {
       console.log('Already saving, queueing...');
       pendingSaveRef.current = true;
@@ -592,6 +621,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         setBannerErrorKind('save');
         setSaveStatus('error');
         setSaveErrorMsg(msg);
+        showPermissionRefusal(err);
         if (!isClientValidationError) {
           // Auto-retry after 10s for server/network failures only.
           saveTimerRef.current = setTimeout(() => {
@@ -611,7 +641,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         }
       }
     }
-  }, [state, platform, mood, timeOfDay]);
+  }, [state, platform, mood, timeOfDay, canEdit, sceneService, showPermissionRefusal]);
 
   // Keep a stable ref to the latest save function so auto-save never goes stale
   useEffect(() => { saveRef.current = save; }, [save]);
@@ -678,6 +708,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     e.target.value = '';
+    if (!canEdit) return;
 
     for (const file of files) {
       if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) continue;
@@ -774,6 +805,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
     } catch (err) {
       console.error('Failed to save title:', err);
+      showPermissionRefusal(err);
     }
   }, [sceneId, sceneSetId, state]);
 
@@ -971,6 +1003,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
     } catch (err) {
       console.error('Depth generation error:', err);
+      showPermissionRefusal(err);
       const msg = err.response?.data?.error || err.message || 'Depth generation failed';
       setDepthError(msg);
     } finally {
@@ -1017,6 +1050,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
     } catch (err) {
       console.error('Background regeneration error:', err);
+      showPermissionRefusal(err);
     } finally {
       setIsRegeneratingBg(false);
     }
@@ -1127,6 +1161,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       state.setSceneData((prev) => prev ? { ...prev, production_status: 'storyboarded' } : prev);
     } catch (err) {
       console.error('Use in Timeline error:', err);
+      showPermissionRefusal(err);
     }
   }, [state, save]);
 
@@ -1238,6 +1273,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         setInpaintError(serverMsg || 'Too many requests. Please wait and try again.');
       } else {
         console.error('Inpaint error:', err);
+        showPermissionRefusal(err);
         setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
       }
     } finally {
@@ -1339,6 +1375,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         setInpaintError(serverMsg || 'Too many requests. Please wait and try again.');
       } else {
         console.error('Inpaint error:', err);
+        showPermissionRefusal(err);
         setInpaintError(getNetworkAwareApiError(err, 'Inpainting failed', 'Inpaint'));
       }
       // Re-throw so callers (like auto-apply in save) know the inpaint failed
@@ -1476,6 +1513,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         setInpaintError(err?.response?.data?.error || 'Too many requests. Wait a few seconds and try again.');
       } else {
         console.error('Segment error:', err);
+        showPermissionRefusal(err);
         setInpaintError(err?.response?.data?.error || 'Smart select failed. Try brush or lasso instead.');
       }
       return null;
@@ -1687,6 +1725,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       }
     } catch (err) {
       console.error('Merge and blend error:', err);
+      showPermissionRefusal(err);
       setInpaintError(err?.response?.data?.error || err.message || 'Merge failed');
     } finally {
       setIsMerging(false);
@@ -1800,6 +1839,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     return () => observer.disconnect();
   }, [isLoading, handleFitToScreen]);
 
+  // On the editing panels of a viewer: out of the tab order and unclickable
+  // (inert), greyed by the stylesheet, and announced as disabled.
+  const viewOnlyProps = canEdit ? {} : { inert: '', 'aria-disabled': 'true', 'data-view-only': 'true' };
+
   if (isLoading) {
     return (
       <div className="scene-studio-loading-screen">
@@ -1819,9 +1862,10 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
   }
 
   return (
-    <div className="scene-studio">
+    <div className={`scene-studio${canEdit ? '' : ' scene-studio--view-only'}`}>
       {/* Toolbar */}
       <Toolbar
+        viewOnly={!canEdit}
         activeTool={state.activeTool}
         onSetTool={state.setActiveTool}
         zoom={state.canvasSettings.zoom}
@@ -1838,20 +1882,28 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         onExport={handleExport}
         title={formatTitle(rawTitle) || studioTitle}
         rawTitle={rawTitle}
-        onTitleChange={handleTitleChange}
+        onTitleChange={canEdit ? handleTitleChange : undefined}
         platform={platform}
         onPlatformChange={(p) => { setPlatform(p); state.updateCanvasSettings({ platform: p }); }}
         gridVisible={state.canvasSettings.gridVisible}
         onToggleGrid={() => state.updateCanvasSettings({ gridVisible: !state.canvasSettings.gridVisible })}
         onBack={onBack}
-        onUseInTimeline={state.contextType === 'scene' ? handleUseInTimeline : undefined}
+        onUseInTimeline={canEdit && state.contextType === 'scene' ? handleUseInTimeline : undefined}
         productionStatus={state.sceneData?.production_status}
       />
 
+      {/* View-only notice: anyone signed in may open a shared scene; an admin edits it */}
+      {!canEdit && (
+        <div className="scene-studio-view-only-notice" role="status" data-testid="scene-studio-view-only">
+          <Eye size={14} aria-hidden="true" />
+          <span>{VIEW_ONLY_NOTICE}</span>
+        </div>
+      )}
+
       {/* Save error banner */}
       {saveErrorMsg && (
-        <div className="scene-studio-save-error-banner">
-          {bannerErrorKind === 'remove-bg' ? 'Background removal failed' : 'Save failed'}: {saveErrorMsg}
+        <div className="scene-studio-save-error-banner" role="alert">
+          {bannerErrorKind === 'permission' ? 'Not saved' : bannerErrorKind === 'remove-bg' ? 'Background removal failed' : 'Save failed'}: {saveErrorMsg}
           <button
             className="scene-studio-icon-btn"
             onClick={() => {
@@ -1873,7 +1925,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
         {/* Left Panel */}
         {isCreationPanelOpen && (
-          <div className={`scene-studio-left-panel ${mobilePanel === 'left' ? 'mobile-open' : ''}`}>
+          <div className={`scene-studio-left-panel ${mobilePanel === 'left' ? 'mobile-open' : ''}`} {...viewOnlyProps}>
             <CreationPanel
               showId={showId}
               episodeId={episodeId}
@@ -1911,6 +1963,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               hasBackground={!!backgroundUrl}
               onSuggestionClick={handleSuggestionClick}
               contextType={state.contextType}
+              canEdit={canEdit}
             />
           </div>
         )}
@@ -2019,7 +2072,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         </div>
 
         {/* Right Panel */}
-        <div className={`scene-studio-right-panel ${mobilePanel === 'right' ? 'mobile-open' : ''}`}>
+        <div className={`scene-studio-right-panel ${mobilePanel === 'right' ? 'mobile-open' : ''}`} {...viewOnlyProps}>
           <InspectorPanel
             objects={angleFilteredObjects}
             selectedIds={state.selectedIds}
@@ -2068,7 +2121,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
       {state.activeTool !== 'erase' && (
         <div className="scene-studio-action-bar">
           {/* Add menu */}
-          <div className="scene-studio-action-bar-group">
+          <div className="scene-studio-action-bar-group" {...viewOnlyProps}>
             <div className="scene-studio-action-bar-add" onMouseDown={(e) => e.stopPropagation()}>
               <button
                 type="button"

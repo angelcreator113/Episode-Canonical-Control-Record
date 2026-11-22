@@ -103,6 +103,7 @@ router.post(
   '/:id/assets',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(episodeController.addEpisodeAsset)
 );
 
@@ -111,6 +112,7 @@ router.delete(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   // It also clears the asset's own episode link; not for a document presentation (V2-2a).
   require('../utils/documentPresentationAssets').protectDocumentPresentations((req) => req.params.assetId),
   asyncHandler(episodeController.removeEpisodeAsset)
@@ -121,6 +123,7 @@ router.patch(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(episodeController.updateEpisodeAsset)
 );
 
@@ -900,6 +903,7 @@ router.put(
   '/:episodeId/scenes/reorder',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.reorderScenes)
 );
 
@@ -920,6 +924,7 @@ router.post(
   '/:episodeId/scenes',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.createScene)
 );
 
@@ -927,6 +932,7 @@ router.post(
 router.post(
   '/scenes/:scene_id/calculate-duration',
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.calculateDuration)
 );
 
@@ -941,6 +947,7 @@ router.get(
 router.post(
   '/scenes/:scene_id/assets',
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.addAssetToScene)
 );
 
@@ -955,6 +962,7 @@ router.get(
 router.put(
   '/scenes/:scene_id/assets/:scene_asset_id',
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.updateSceneAsset)
 );
 
@@ -962,6 +970,7 @@ router.put(
 router.delete(
   '/scenes/:scene_id/assets/:scene_asset_id',
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(sceneController.removeAssetFromScene)
 );
 
@@ -1014,6 +1023,7 @@ router.post(
   '/:id/library-scenes',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(episodeController.addSceneToEpisode)
 );
 
@@ -1022,6 +1032,7 @@ router.put(
   '/:id/library-scenes/:sceneId',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(episodeController.updateEpisodeScene)
 );
 
@@ -1030,6 +1041,7 @@ router.delete(
   '/:id/library-scenes/:sceneId',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(episodeController.removeSceneFromEpisode)
 );
 
@@ -1051,6 +1063,7 @@ router.post(
   '/:id/library-assets',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(require('../controllers/episodeAssetsController').addAssetToEpisode)
 );
 
@@ -1059,6 +1072,7 @@ router.patch(
   '/:id/library-assets/:assetId',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(require('../controllers/episodeAssetsController').updateEpisodeAsset)
 );
 
@@ -1067,6 +1081,7 @@ router.delete(
   '/:id/library-assets/:assetId',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(require('../controllers/episodeAssetsController').removeAssetFromEpisode)
 );
 
@@ -1088,6 +1103,7 @@ router.post(
   '/:id/timeline/placements',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(require('../controllers/timelinePlacementsController').createPlacement)
 );
 
@@ -1096,6 +1112,7 @@ router.patch(
   '/:id/timeline/placements/:placementId',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(require('../controllers/timelinePlacementsController').updatePlacement)
 );
 
@@ -1104,6 +1121,7 @@ router.delete(
   '/:id/timeline/placements/:placementId',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(require('../controllers/timelinePlacementsController').deletePlacement)
 );
 
@@ -1120,6 +1138,7 @@ router.put(
   '/:id/sequence-items/reorder',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(episodeController.reorderSequenceItems)
 );
 
@@ -1128,6 +1147,7 @@ router.post(
   '/:id/sequence-items/note',
   validateUUIDParam('id'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(episodeController.addNoteToEpisode)
 );
 
@@ -1156,6 +1176,7 @@ router.post(
   '/:episodeId/library-assets',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(episodeAssetsController.addAssetToEpisode)
 );
 
@@ -1165,6 +1186,7 @@ router.patch(
   validateUUIDParam('episodeId'),
   validateUUIDParam('assetId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(episodeAssetsController.updateEpisodeAsset)
 );
 
@@ -1174,6 +1196,7 @@ router.delete(
   validateUUIDParam('episodeId'),
   validateUUIDParam('assetId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(episodeAssetsController.removeAssetFromEpisode)
 );
 
@@ -1194,6 +1217,7 @@ router.post(
   '/:episodeId/timeline/placements',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(timelinePlacementsController.createPlacement)
 );
 
@@ -1202,6 +1226,7 @@ router.patch(
   '/:episodeId/timeline/placements/:placementId',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(timelinePlacementsController.updatePlacement)
 );
 
@@ -1210,6 +1235,7 @@ router.delete(
   '/:episodeId/timeline/placements/:placementId',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(timelinePlacementsController.deletePlacement)
 );
 
@@ -1636,6 +1662,7 @@ router.put(
   '/:episodeId/locations',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(async (req, res) => {
     const { sequelize } = require('../models');
     const { saveEpisodeLocations, EpisodeLocationsError } = require('../services/episodeLocationsService');
@@ -1673,6 +1700,7 @@ router.post(
   '/:episodeId/move-removed-sets',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(async (req, res) => {
     const { sequelize } = require('../models');
     const { moveRemovedSetsForEpisode, SceneSetUsesError } = require('../services/sceneSetUsesService');
@@ -1692,6 +1720,7 @@ router.post(
   '/:episodeId/scene-sets',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(async (req, res) => {
     const { models } = require('../models');
     const { Episode, SceneSetEpisode } = models;
@@ -1749,6 +1778,7 @@ router.delete(
   '/:episodeId/scene-sets/:setId',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(async (req, res) => {
     const { models } = require('../models');
     const { SceneSetEpisode } = models;
@@ -1900,6 +1930,7 @@ router.patch(
   '/:episodeId/scene-sets/reorder',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(async (req, res) => {
     const { models } = require('../models');
     const { SceneSetEpisode } = models;
@@ -1925,6 +1956,7 @@ router.post(
   '/:episodeId/scenes/from-angle',
   validateUUIDParam('episodeId'),
   requireAuth,
+  authorize(['ADMIN']),
   asyncHandler(async (req, res) => {
     const { models } = require('../models');
     const { Episode, Scene, SceneSet, SceneAngle } = models;

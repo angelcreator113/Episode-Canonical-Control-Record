@@ -7,6 +7,7 @@ const multer  = require('multer');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { requireAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
+const { userInGroup } = require('../middleware/auth');
 const { aiRateLimiter } = require('../middleware/aiRateLimiter');
 const { validateUUIDParam, validateUUID } = require('../middleware/requestValidation');
 const { uploadOrRefuse: sharedUploadOrRefuse } = require('../middleware/uploadOrRefuse');
@@ -471,6 +472,8 @@ router.get('/model-comparison/:group', validateUUIDParam('group'), requireAuth, 
 
 // ─── POST /  — create a new scene set ─────────────────────────────────────────
 
+const SET_EPISODE_LINK_ADMIN_MESSAGE = 'Only an admin can link a scene set to an episode.';
+
 router.post('/', requireAuth, async (req, res) => {
   try {
     const {
@@ -490,6 +493,21 @@ router.post('/', requireAuth, async (req, res) => {
       world_location_id,
       base_model,
     } = req.body;
+
+    // Linking a set to an episode is an ADMIN's (Evoni, 2026-11-22). The set
+    // itself may still be made by any signed-in account, so the link is
+    // refused here, whole and before anything is read or made, and never
+    // dropped in silence. Absent, null and [] ask for no link.
+    const asksForEpisodes = episode_ids != null && !(Array.isArray(episode_ids) && episode_ids.length === 0);
+    if (asksForEpisodes && !userInGroup(req.user, 'ADMIN')) {
+      return res.status(403).json({
+        success: false,
+        code: 'AUTH_GROUP_REQUIRED',
+        error: SET_EPISODE_LINK_ADMIN_MESSAGE,
+        message: SET_EPISODE_LINK_ADMIN_MESSAGE,
+        fields: ['episode_ids'],
+      });
+    }
 
     if (!name || !scene_type) {
       return res.status(400).json({ success: false, error: 'name and scene_type are required' });
@@ -984,7 +1002,7 @@ router.get('/:id/uses', validateUUIDParam('id'), requireAuth, async (req, res) =
   }
 });
 
-router.delete('/:id', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.delete('/:id', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2802,7 +2820,7 @@ router.post('/:id/promote-to-base', validateUUIDParam('id'), requireAuth, async 
 
 // ─── POST /:id/episodes  — link episodes to a scene set ────────────────────
 
-router.post('/:id/episodes', validateUUIDParam('id'), requireAuth, async (req, res) => {
+router.post('/:id/episodes', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
@@ -2847,7 +2865,7 @@ router.post('/:id/episodes', validateUUIDParam('id'), requireAuth, async (req, r
 
 // ─── DELETE /:id/episodes/:episodeId  — unlink an episode ───────────────────
 
-router.delete('/:id/episodes/:episodeId', validateUUIDParam('id'), requireAuth, validateUUIDParam('episodeId'), async (req, res) => {
+router.delete('/:id/episodes/:episodeId', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), validateUUIDParam('episodeId'), async (req, res) => {
   try {
     const destroyed = await SceneSetEpisode.destroy({
       where: {
@@ -3097,35 +3115,35 @@ const { asyncHandler } = require('../middleware/errorHandler');
 router.get('/:id/canvas', validateUUIDParam('id'), requireAuth, asyncHandler(sceneStudioController.getSceneSetCanvas));
 
 // PUT /api/v1/scene-sets/:id/canvas - Bulk save canvas for scene set
-router.put('/:id/canvas', validateUUIDParam('id'), requireAuth, asyncHandler(sceneStudioController.saveSceneSetCanvas));
+router.put('/:id/canvas', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), asyncHandler(sceneStudioController.saveSceneSetCanvas));
 
 // POST /api/v1/scene-sets/:id/generate-object - AI object generation (DALL-E 3) for scene sets
-router.post('/:id/generate-object', validateUUIDParam('id'), requireAuth, aiRateLimiter, asyncHandler(sceneStudioController.generateSceneSetObject));
+router.post('/:id/generate-object', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, asyncHandler(sceneStudioController.generateSceneSetObject));
 
 // POST /api/v1/scene-sets/:id/transform-object - AI image transform (img2img) for scene sets
 // (Scene Studio's Transform on a set; show side check, 2026-10-20, F2)
-router.post('/:id/transform-object', validateUUIDParam('id'), requireAuth, aiRateLimiter, asyncHandler(sceneStudioController.transformSceneSetObject));
+router.post('/:id/transform-object', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, asyncHandler(sceneStudioController.transformSceneSetObject));
 
 // POST /api/v1/scene-sets/:id/regenerate-background - AI background variation for scene sets
-router.post('/:id/regenerate-background', validateUUIDParam('id'), requireAuth, aiRateLimiter, asyncHandler(sceneStudioController.regenerateSceneSetBackground));
+router.post('/:id/regenerate-background', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, asyncHandler(sceneStudioController.regenerateSceneSetBackground));
 
 // POST /api/v1/scene-sets/:id/angles/:angleId/generate-depth - Depth map estimation for angle
-router.post('/:id/angles/:angleId/generate-depth', validateUUIDParam('id'), requireAuth, aiRateLimiter, validateUUIDParam('angleId'), asyncHandler(sceneStudioController.generateAngleDepth));
+router.post('/:id/angles/:angleId/generate-depth', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), aiRateLimiter, validateUUIDParam('angleId'), asyncHandler(sceneStudioController.generateAngleDepth));
 
 // GET /api/v1/scene-sets/:id/angles/:angleId/depth-map - Proxy depth map image (avoids S3 CORS)
 router.get('/:id/angles/:angleId/depth-map', validateUUIDParam('id'), requireAuth, validateUUIDParam('angleId'), asyncHandler(sceneStudioController.proxyAngleDepthMap));
 
 // POST /api/v1/scene-sets/:id/objects - Add object to scene set canvas
-router.post('/:id/objects', validateUUIDParam('id'), requireAuth, asyncHandler(sceneStudioController.addSceneSetObject));
+router.post('/:id/objects', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), asyncHandler(sceneStudioController.addSceneSetObject));
 
 // PATCH /api/v1/scene-sets/:id/objects/:objectId - Update object on scene set
-router.patch('/:id/objects/:objectId', validateUUIDParam('id'), requireAuth, validateUUIDParam('objectId'), asyncHandler(sceneStudioController.updateObject));
+router.patch('/:id/objects/:objectId', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), validateUUIDParam('objectId'), asyncHandler(sceneStudioController.updateObject));
 
 // DELETE /api/v1/scene-sets/:id/objects/:objectId - Remove object from scene set
-router.delete('/:id/objects/:objectId', validateUUIDParam('id'), requireAuth, validateUUIDParam('objectId'), asyncHandler(sceneStudioController.deleteObject));
+router.delete('/:id/objects/:objectId', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), validateUUIDParam('objectId'), asyncHandler(sceneStudioController.deleteObject));
 
 // POST /api/v1/scene-sets/:id/objects/:objectId/duplicate - Duplicate object
-router.post('/:id/objects/:objectId/duplicate', validateUUIDParam('id'), requireAuth, validateUUIDParam('objectId'), asyncHandler(sceneStudioController.duplicateObject));
+router.post('/:id/objects/:objectId/duplicate', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), validateUUIDParam('objectId'), asyncHandler(sceneStudioController.duplicateObject));
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SUGGEST ANGLES FROM IMAGE — fast, only regenerates angles (no description/prompt)
