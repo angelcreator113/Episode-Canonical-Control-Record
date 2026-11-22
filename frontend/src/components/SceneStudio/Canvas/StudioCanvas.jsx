@@ -211,6 +211,9 @@ const StudioCanvas = forwardRef(function StudioCanvas(props, forwardedRef) {
     brushSize,
     maskMode,
     onMaskChange,
+    // View-only (someone who is not an admin): objects can be selected to
+    // look at, not dragged, resized, rotated or retyped.
+    readOnly = false,
   } = props;
 
   const stageRef = useRef(null);
@@ -637,7 +640,8 @@ const StudioCanvas = forwardRef(function StudioCanvas(props, forwardedRef) {
               onDragEnd={handleObjectDragEnd}
               onTransformEnd={onTransformEnd}
               onUpdateObject={onUpdateObject}
-              autoEdit={obj.type === 'text' && editingTextId === obj.id}
+              readOnly={readOnly}
+              autoEdit={!readOnly && obj.type === 'text' && editingTextId === obj.id}
               onClearAutoEdit={onClearEditingText}
             />
           );
@@ -645,8 +649,9 @@ const StudioCanvas = forwardRef(function StudioCanvas(props, forwardedRef) {
 
         <Transformer
           ref={transformerRef}
-          rotateEnabled
-          enabledAnchors={[
+          rotateEnabled={!readOnly}
+          resizeEnabled={!readOnly}
+          enabledAnchors={readOnly ? [] : [
             'top-left',
             'top-right',
             'bottom-left',

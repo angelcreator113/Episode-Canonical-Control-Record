@@ -21,6 +21,8 @@ const EDIT_ACTIONS = [
 // erase, select-object …) edit the scene or start a paid call.
 const VIEW_TOOLS = new Set(['select', 'hand']);
 
+const VIEWPORT_KEYS = new Set(['zoom', 'panX', 'panY', 'gridVisible', 'snapEnabled']);
+
 const noop = () => {};
 
 /** The Studio's state for a viewer: reads and the viewport work, edits do nothing, nothing is ever dirty. */
@@ -30,6 +32,13 @@ export function viewOnlyState(state) {
     if (typeof out[name] === 'function') out[name] = noop;
   }
   out.setActiveTool = (tool) => { if (VIEW_TOOLS.has(tool)) state.setActiveTool(tool); };
+  // Viewport settings (zoom, pan, grid) may change; anything that is part
+  // of the saved scene (platform, mood, scene states …) may not.
+  out.updateCanvasSettings = (changes) => {
+    const view = {};
+    for (const key of Object.keys(changes || {})) if (VIEWPORT_KEYS.has(key)) view[key] = changes[key];
+    if (Object.keys(view).length) state.updateCanvasSettings(view);
+  };
   return out;
 }
 

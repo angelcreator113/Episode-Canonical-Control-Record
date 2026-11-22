@@ -15,6 +15,14 @@ import { isAdmin, adminOnlyMessage, SCENE_ADMIN_ONLY_MESSAGE, VIEW_ONLY_NOTICE }
 import { viewOnlyState, viewOnlyService } from './viewOnly';
 import './SceneStudio.css';
 
+// The editing panels for someone who may look but not edit: a disabled
+// fieldset, so every input and button in it is truly disabled (and out of
+// the tab order) while the panel can still be read and scrolled.
+function ViewOnlyGroup({ disabled, children }) {
+  if (!disabled) return children;
+  return <fieldset disabled className="scene-studio-view-only-fieldset" aria-disabled="true">{children}</fieldset>;
+}
+
 /**
  * SceneStudio — Main orchestrator component for the Canva-like scene editor.
  *
@@ -1839,9 +1847,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
     return () => observer.disconnect();
   }, [isLoading, handleFitToScreen]);
 
-  // On the editing panels of a viewer: out of the tab order and unclickable
-  // (inert), greyed by the stylesheet, and announced as disabled.
-  const viewOnlyProps = canEdit ? {} : { inert: '', 'aria-disabled': 'true', 'data-view-only': 'true' };
+  // Marks a viewer's panels for the stylesheet and for tests.
+  const viewOnlyProps = canEdit ? {} : { 'data-view-only': 'true' };
 
   if (isLoading) {
     return (
@@ -1884,7 +1891,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         rawTitle={rawTitle}
         onTitleChange={canEdit ? handleTitleChange : undefined}
         platform={platform}
-        onPlatformChange={(p) => { setPlatform(p); state.updateCanvasSettings({ platform: p }); }}
+        onPlatformChange={(p) => { if (!canEdit) return; setPlatform(p); state.updateCanvasSettings({ platform: p }); }}
         gridVisible={state.canvasSettings.gridVisible}
         onToggleGrid={() => state.updateCanvasSettings({ gridVisible: !state.canvasSettings.gridVisible })}
         onBack={onBack}
@@ -1926,6 +1933,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
         {/* Left Panel */}
         {isCreationPanelOpen && (
           <div className={`scene-studio-left-panel ${mobilePanel === 'left' ? 'mobile-open' : ''}`} {...viewOnlyProps}>
+            <ViewOnlyGroup disabled={!canEdit}>
             <CreationPanel
               showId={showId}
               episodeId={episodeId}
@@ -1965,6 +1973,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
               contextType={state.contextType}
               canEdit={canEdit}
             />
+            </ViewOnlyGroup>
           </div>
         )}
 
@@ -2011,6 +2020,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             maskMode={maskMode}
             onMaskChange={setHasMask}
             onBackgroundLayoutChange={handleBackgroundLayoutChange}
+            readOnly={!canEdit}
           />
 
           {/* Advanced erase tool overlay */}
@@ -2045,6 +2055,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           {/* Empty canvas guidance overlay — hide when background is already set */}
           {state.objects.length === 0 && !hasInteracted && !backgroundUrl && (
             <div className="scene-studio-canvas-overlay">
+              {canEdit ? (
               <div className="scene-studio-canvas-overlay-inner">
                 <p className="scene-studio-overlay-title">Start building your scene</p>
                 <div className="scene-studio-overlay-ctas">
@@ -2059,11 +2070,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
                   </button>
                 </div>
               </div>
+              ) : (
+              <div className="scene-studio-canvas-overlay-inner" data-testid="scene-studio-empty-view-only">
+                <p className="scene-studio-overlay-title">{state.contextType === 'sceneSet' ? 'This scene set has no background yet.' : 'This scene has no background yet.'}</p>
+                <p className="scene-studio-overlay-note">{VIEW_ONLY_NOTICE}</p>
+              </div>
+              )}
             </div>
           )}
 
           {/* First-object hint tooltip */}
-          {showFirstHint && (
+          {canEdit && showFirstHint && (
             <div className="scene-studio-first-hint">
               Drag to move &bull; Handles to resize &bull; Delete to remove
             </div>
@@ -2073,6 +2090,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
 
         {/* Right Panel */}
         <div className={`scene-studio-right-panel ${mobilePanel === 'right' ? 'mobile-open' : ''}`} {...viewOnlyProps}>
+          <ViewOnlyGroup disabled={!canEdit}>
           <InspectorPanel
             objects={angleFilteredObjects}
             selectedIds={state.selectedIds}
@@ -2114,14 +2132,17 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             onRegenerateVariation={handleRegenerateBackground}
             isRegenerating={isRegeneratingBg}
           />
+          </ViewOnlyGroup>
         </div>
       </div>
 
       {/* ── Bottom Action Bar ── */}
       {state.activeTool !== 'erase' && (
         <div className="scene-studio-action-bar">
+          {/* Add, edit and undo: for someone who can edit. A viewer gets the panel toggles only. */}
+          {canEdit && (<>
           {/* Add menu */}
-          <div className="scene-studio-action-bar-group" {...viewOnlyProps}>
+          <div className="scene-studio-action-bar-group">
             <div className="scene-studio-action-bar-add" onMouseDown={(e) => e.stopPropagation()}>
               <button
                 type="button"
@@ -2232,6 +2253,8 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             </button>
           </div>
 
+          </>)}
+
           {/* Mobile panel toggles — visible on small screens via CSS */}
           <div className="scene-studio-action-bar-group scene-studio-mobile-toggles">
             <button
@@ -2260,6 +2283,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
           className="scene-studio-context-menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
+          {canEdit && (<>
           <button className="scene-studio-context-item" onClick={() => { state.copySelected(); setContextMenu(null); }}>
             Copy <span className="scene-studio-context-shortcut">Ctrl+C</span>
           </button>
@@ -2278,6 +2302,7 @@ export default function SceneStudio({ sceneId, sceneSetId, showId, episodeId, on
             </>
           )}
           <div className="scene-studio-context-divider" />
+          </>)}
           <button className="scene-studio-context-item" onClick={() => { state.selectObject(null); state.deselectAll(); setContextMenu(null); }}>
             Deselect All <span className="scene-studio-context-shortcut">Esc</span>
           </button>

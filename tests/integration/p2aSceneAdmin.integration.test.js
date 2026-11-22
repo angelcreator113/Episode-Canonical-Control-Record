@@ -79,6 +79,14 @@ const LINK_SENTENCE = 'Only an admin can link a scene set to an episode.';
   const TAG = show.slice(0, 8);
   const tokens = {};
   let ip = 0;
+  // sceneController.deleteScene, when it does delete a scene, drops and
+  // re-creates a unique index on scenes (episode_id, scene_number) that no
+  // migration makes. This suite must never run that: it asks an admin about
+  // rows that do not exist, and it checks at the end that the index is as it
+  // found it, so it cannot change what a later suite sees.
+  const sceneNumberIndex = async () => (await rows(
+    "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'scenes' AND indexname = 'idx_scenes_episode_scene_number'"))[0]?.indexdef || null;
+  let indexAtStart;
   const from = (r) => r.set('X-Forwarded-For', `10.92.${Math.floor(ip / 250)}.${(ip % 250) + 1}`);
   const as = (who) => (r) => (who ? from(r).set('Authorization', `Bearer ${tokens[who]}`) : from(r));
 
@@ -200,6 +208,7 @@ const LINK_SENTENCE = 'Only an admin can link a scene set to an episode.';
   ].reduce((n, fn) => n + fn.mock.calls.length, 0);
 
   beforeAll(async () => {
+    indexAtStart = await sceneNumberIndex();
     const token = (id, groups, role) => TokenService.generateTokenPair({ id, email: `${id}@p2a.dev`, name: id, groups, role }).accessToken;
     tokens.editor = token('p2a-editor', ['USER', 'EDITOR'], 'USER');
     tokens.viewer = token('p2a-viewer', ['viewer'], 'USER');
@@ -280,9 +289,13 @@ const LINK_SENTENCE = 'Only an admin can link a scene set to an episode.';
       const [, method, urlPath] = route;
       const ghost = [episode, scene, set, angle, asset, sceneObject, setObject, libraryScene]
         .reduce((p, id) => p.split(id).join(uuid()), urlPath);
-      const res = await as('admin')(request(app)[method](ghost)).send({});
+      const trace = lockTrace.install(sequelize);
+      let res;
+      try { res = await as('admin')(request(app)[method](ghost)).send({}); } finally { trace.uninstall(); }
       expect([401, 403]).not.toContain(res.status);
       expect(res.body?.code).not.toBe('AUTH_GROUP_REQUIRED');
+      // Asked about nothing, it changes no schema either.
+      expect(trace.records.filter((r) => /\b(DROP|CREATE|ALTER)\s+(UNIQUE\s+)?(INDEX|TABLE)\b/i.test(r.sql || ''))).toEqual([]);
     });
   });
 
@@ -459,6 +472,13 @@ const LINK_SENTENCE = 'Only an admin can link a scene set to an episode.';
       const editor = await as('editor')(request(app).post(`${BRIEF}/dressed-angles/${angle}/brief`)).send({});
       expect([401, 403]).not.toContain(editor.status);
       expect(editor.status).toBe(admin.status);
+    });
+  });
+
+  describe('the database is left as it was found', () => {
+    it('the seeded scene was never deleted, and the scenes index on (episode_id, scene_number) is as it was at the start', async () => {
+      expect(await rows('SELECT id FROM scenes WHERE id = :scene AND deleted_at IS NULL', { scene })).toHaveLength(1);
+      expect(await sceneNumberIndex()).toBe(indexAtStart);
     });
   });
 });

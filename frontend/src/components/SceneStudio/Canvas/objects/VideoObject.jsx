@@ -5,7 +5,7 @@ import { Image as KonvaImage } from 'react-konva';
  * VideoObject — Renders a video asset on the Konva canvas.
  * Uses a hidden HTML5 <video> element and draws frames to Konva Image.
  */
-export default function VideoObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd }) {
+export default function VideoObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd, readOnly = false }) {
   const videoRef = useRef(null);
   const [videoElement, setVideoElement] = useState(null);
   const animFrameRef = useRef(null);
@@ -80,7 +80,7 @@ export default function VideoObject({ obj, isSelected, onSelect, onTransformEnd,
       opacity={obj.opacity != null ? obj.opacity : 1}
       offsetX={obj.flipX ? (obj.width || 320) : 0}
       offsetY={obj.flipY ? (obj.height || 180) : 0}
-      draggable={!obj.isLocked}
+      draggable={!obj.isLocked && !readOnly}
       listening={!obj.isLocked}
       onClick={onSelect}
       onTap={onSelect}

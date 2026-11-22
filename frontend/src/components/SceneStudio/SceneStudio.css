@@ -4446,8 +4446,37 @@
   color: var(--lala-gold, #B8962E);
 }
 
-.scene-studio--view-only [data-view-only='true'] {
-  opacity: 0.55;
-  pointer-events: none;
-  user-select: none;
+/* A viewer's panels stay readable and scrollable; the disabled fieldset
+   inside disables every control. It must not change the panel's layout. */
+.scene-studio-view-only-fieldset {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.scene-studio--view-only [data-view-only='true'] :disabled,
+.scene-studio--view-only .scene-studio-tool-btn-labeled:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* A viewer's bottom bar holds only the panel toggles, which a wide screen
+   does not show: without this it is an empty strip. */
+@media (min-width: 768px) {
+  .scene-studio--view-only .scene-studio-action-bar {
+    display: none;
+  }
+}
+
+.scene-studio-overlay-note {
+  margin: 6px 0 0;
+  font-family: 'DM Mono', monospace;
+  font-size: var(--text-xs);
+  color: var(--lala-gold, #B8962E);
 }

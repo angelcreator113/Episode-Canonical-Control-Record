@@ -17,6 +17,9 @@ const PLATFORM_PRESETS = {
   cinema: { width: 2560, height: 1440, label: 'Cinema 16:9' },
 };
 
+// What someone who may look but not edit can hold: pointing and panning.
+const VIEW_TOOLS = ['select', 'hand'];
+
 const TOOLS = [
   { key: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V' },
   { key: 'hand', icon: Hand, label: 'Pan', shortcut: 'H' },
@@ -121,7 +124,9 @@ export default function Toolbar({
                 key={tool.key}
                 className={`scene-studio-tool-btn-labeled ${activeTool === tool.key ? 'active' : ''}`}
                 onClick={() => onSetTool(tool.key)}
-                title={`${tool.label} (${tool.shortcut})`}
+                disabled={viewOnly && !VIEW_TOOLS.includes(tool.key)}
+                aria-disabled={viewOnly && !VIEW_TOOLS.includes(tool.key) ? 'true' : undefined}
+                title={viewOnly && !VIEW_TOOLS.includes(tool.key) ? 'View-only — Admin editing required' : `${tool.label} (${tool.shortcut})`}
               >
                 <Icon size={16} />
                 <span className="scene-studio-tool-label">{tool.label}</span>
@@ -187,6 +192,7 @@ export default function Toolbar({
           <select
             className="scene-studio-platform-select"
             value={platform || 'youtube'}
+            disabled={viewOnly}
             onChange={(e) => onPlatformChange(e.target.value)}
           >
             {Object.entries(PLATFORM_PRESETS).map(([key, preset]) => (
@@ -217,6 +223,7 @@ export default function Toolbar({
             }
           }}
           disabled={viewOnly || saveStatus === 'saving'}
+          aria-disabled={viewOnly ? 'true' : undefined}
           title={viewOnly ? 'View-only — Admin editing required' : saveStatus === 'error' ? 'Save failed — click to retry' : 'Save (Ctrl+S)'}
         >
           {saveStatus === 'saving' ? (

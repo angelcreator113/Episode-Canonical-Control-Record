@@ -4,7 +4,7 @@ import { Rect, Circle, Line, RegularPolygon } from 'react-konva';
 /**
  * ShapeObject — Renders a shape (rectangle, circle, or line) on the Konva canvas.
  */
-export default function ShapeObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd }) {
+export default function ShapeObject({ obj, isSelected, onSelect, onTransformEnd, onDragEnd, readOnly = false }) {
   if (!obj.isVisible && !isSelected) return null;
 
   const style = obj.styleData || {};
@@ -20,7 +20,7 @@ export default function ShapeObject({ obj, isSelected, onSelect, onTransformEnd,
     fill: style.fill || 'rgba(102, 126, 234, 0.3)',
     stroke: style.stroke || '#667eea',
     strokeWidth: style.strokeWidth || 2,
-    draggable: !obj.isLocked,
+    draggable: !obj.isLocked && !readOnly,
     listening: !obj.isLocked,
     onClick: onSelect,
     onTap: onSelect,
