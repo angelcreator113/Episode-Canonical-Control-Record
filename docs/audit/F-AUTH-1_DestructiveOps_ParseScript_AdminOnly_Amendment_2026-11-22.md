@@ -95,5 +95,5 @@ Evoni, in the session of 2026-11-22:
 
 **Type:** amendment.
 **Rules:** the six routes of §1 are an ADMIN's, on Evoni's words in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** nothing.
-**Host/AWS/DB/Cognito contact (this session):** one read-only Cognito call was attempted for an account inventory Evoni asked for and was refused (UnrecognizedClientException); no other AWS call; no host or database contact.
+**Host/AWS/DB/Cognito contact (this session):** one read-only Cognito call was attempted for an account inventory Evoni asked for and was refused (UnrecognizedClientException); no other AWS call; no production or development host or database contact. The only database read or written was the local test database in the session's own container (the integration test of §3, and the `to_regclass` reads of §4).
 **Production standing:** as the newest Fix Plan revision states it (`F-Deploy-1_Fix_Plan_v1.56.md`, footer): "Production's freeze is lifted (`F-Deploy-1_Fix_Plan_v1.53.md` §1)". What an agent session may do in production is set by `CLAUDE.md` and `F-Tools-5_AgentProductionAccess_Ruling_2026-10-31.md`.
