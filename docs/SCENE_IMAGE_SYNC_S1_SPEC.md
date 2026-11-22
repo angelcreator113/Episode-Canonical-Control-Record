@@ -6,10 +6,10 @@ Design specification. Approved in design by Evoni on 2026-11-22 with the conditi
 
 - **S1 code implementation is NOT authorized.** Nothing described here is implemented.
 - **Design:** approved by Evoni on 2026-11-22, with the conditions and rulings recorded in sections 2, 7, 10A, 16 and 18.
-- **Before implementation:** #3921 (PR A), #3922 (P1), #3923 (P2a) and P2b must be merged (section 0, "Dependency order"), the verification gaps in section 16 remain open, and Evoni must authorize implementation separately.
+- **Before implementation:** #3922 (P1), #3923 (P2a) and P2b must be merged (#3921, PR A, has merged) (section 0, "Dependency order"), the verification gaps in section 16 remain open, and Evoni must authorize implementation separately.
 - **Date of this revision:** 2026-11-22.
 
-**Code basis:** `origin/main` at `01a5037f93c899a2ddd1060adaa8ca0ecdea1d33` (#3919 and #3920 merged). Code is cited by function, route or component name; a line number, where given, is at that commit and is only a convenience.
+**Code basis:** `origin/main` at `01a5037f93c899a2ddd1060adaa8ca0ecdea1d33` (#3919 and #3920 merged). Code is cited by function, route or component name; a line number, where given, is at that commit and is only a convenience. #3921 merged after this basis (main then at `878a22d87a9b14d6a3535f5ec18528115510e220`); nothing cited here was re-read at that commit.
 **Standings:** **M** = measured (the named code was read at the basis commit, or a lock experiment was run on a local PostgreSQL 16 test database). **I** = inferred.
 **History:** this document consolidates a first design draft, three addenda to it (locking and outcomes; the filmed race; the remaining code checks) and an image-dependency review, all working papers of 2026-11-22 that are not kept in the repository. Where a later paper corrected an earlier one, only the final position is stated in the body; section 17 lists what changed. In section 15, "old N" is a test's number in the first draft and its later additions, and "addendum N" its number in the locking addendum.
 
@@ -30,11 +30,13 @@ Design specification. Approved in design by Evoni on 2026-11-22 with the conditi
 9. An owner-run script shows what is out of date (dry run, read-only) and can apply it after a typed confirmation.
 10. Admin behaviour elsewhere is unchanged.
 
+**One distinction to keep in mind throughout:** S1's scene-number conflict check is application-level prevention among the writers that take the episode's lock. It is not a database-enforced uniqueness guarantee; only the unique index gives that, and only where the index exists (section 4A).
+
 ### Dependency order
 
 | Order | Work | Why it comes before S1 |
 |---|---|---|
-| 1 | #3921 (PR A): destructive scene, beat and package operations ADMIN-only | Shares a pinned route test with the PRs below; `apply-scene-plan` hard-deletes scenes and must not be open to ordinary accounts when S1 starts protecting them |
+| 1 | #3921 (PR A): destructive scene, beat and package operations ADMIN-only. **Merged** (main at `878a22d8`) | Shared a pinned route test with the PRs below; made `apply-scene-plan`, which hard-deletes scenes and assigns scene numbers, ADMIN-only |
 | 2 | #3922 (P1): plan and Start Episode writes ADMIN-only; event-edit field rule | Gates event look generate and upload (two completion hooks) and every caller of the sync on the plan side; its rule on `scene_set_id` is what `generate-venue` must not bypass |
 | 3 | #3923 (P2a): scene, set-link and footage writes ADMIN-only | Gates set restyle, dressed-angle generate and upload, the scene update route used by Restore, `from-angle`, and every Scene Studio write S1 edits |
 | 4 | P2b (47 routes, subject to final verification) | Gates the seven base and angle completion routes and the destructive angle routes; makes `generate-venue` ADMIN-only; and adds the Place-lock refusal to `generate-venue` (ruled 2026-11-22) |
@@ -228,7 +230,7 @@ S1 adds an application-level conflict check to the existing sync (section 4, ste
 | `POST /episodes/:episodeId/scenes/from-angle` (`episodes.js`) | Highest number + 1 (`Scene.getNextSceneNumber`) | No | No | **Yes** (section 8) |
 | Legacy timeline save (`POST /episodes/:id/save`) | The client's `scene_number`, else position, for every sent scene | No | No | **Yes** (section 7) |
 | Scene delete (`sceneController.deleteScene`) | Renumbers every live scene 1..n; on main it drops and re-creates the index around it | No | **Yes** (two-pass, no index change) | Yes |
-| Scene reorder (`sceneController.reorderScenes`) | Renumbers the sent scenes 1..n in two passes | No | **Yes** | Yes |
+| Scene reorder (`sceneController.reorderScenes`) | Renumbers the sent scenes 1..n in two passes; on main the temporary numbers start at 1000 | No | **Yes;** #3925 also changes the temporary range so it cannot meet a number in use (approved; in progress when this was written) | Yes |
 | Scene create (`sceneController.createScene`) | Highest + 1 | No | No | **No (bypasses)** |
 | Scene duplicate (`sceneController.duplicateScene`) | Highest + 1 (`Scene.max`) | No | No | **No (bypasses)** |
 | `apply-scene-plan` (`routes/scriptParse.js`) | The parsed plan's numbers; with `clearExisting` it first hard-deletes the episode's scenes | No | No | **No (bypasses)** |
@@ -237,13 +239,30 @@ S1 adds an application-level conflict check to the existing sync (section 4, ste
 | Scene update (`sceneController.updateScene`) | Does not write `scene_number` (it is not in the handler's allowed list) | – | – | – |
 | Set move (`sceneSetUsesService.moveUses`) | Does not write `scene_number` | – | – | – |
 
-After S1 the bypassing writers are scene create, scene duplicate, `apply-scene-plan`, legacy `parse-scenes` and footage upload. Create and duplicate choose the highest number plus one, so they collide with a beat only when a beat's number is above every existing scene's. All five are ADMIN-only after #3921, #3920 and #3923. Making them take the episode lock is not part of S1.
+After S1 the bypassing writers are scene create, scene duplicate, `apply-scene-plan`, legacy `parse-scenes` and footage upload. Create and duplicate choose the highest number plus one, so they collide with a beat only when a beat's number is above every existing scene's. Who may call them: `apply-scene-plan` is ADMIN-only since #3921 (merged) and legacy `parse-scenes` since #3920 (merged); scene create, scene duplicate and footage upload become ADMIN-only with #3923 (P2a, not merged when this was written). Making them take the episode lock is not part of S1.
+
+### Application-level prevention versus a database guarantee
+
+These are two different things, and S1 provides only the first.
+
+| | Application-level prevention (S1's conflict check) | Database-enforced guarantee (the unique index) |
+|---|---|---|
+| What it is | A read of the episode's live scenes, taken by the sync under the episode's lock, and a refusal to write a number another scene holds | `idx_scenes_episode_scene_number`, a partial unique index on `scenes (episode_id, scene_number) WHERE deleted_at IS NULL` |
+| Whom it binds | Only writers that take the episode's lock and so take turns with the sync | Every writer, whatever it locks |
+| Where it exists | Wherever S1's code runs | In production, by two recorded reads (2026-11-04 and 2026-11-06). **No migration creates it,** so its presence on any other database, including the development server and every freshly migrated test database, is not assured |
+| What it promises | The sync will not itself create a duplicate number from a state it can see | No two live scenes of an episode share a number, ever |
+
+- **Writers that take the episode's lock** (so the check holds against them): the sync, Restore and reconciliation apply; after #3925, scene delete and scene reorder; after S1, the legacy timeline save and `from-angle`.
+- **Writers that do not** (so the check does not hold against them): scene create, scene duplicate, `apply-scene-plan`, legacy `parse-scenes`, footage upload.
+- **What a reader should conclude:** on a database that has the index, scene numbers are unique per episode, and S1 turns what would have been a failed sync into a per-beat `conflict` with a warning. On a database without it, S1 prevents the duplicates the sync itself would have made and reports the ones other writers make, at the next sync.
+- **What a reader should not conclude:** that S1 makes scene numbers unique, or that a passing S1 test suite on a freshly migrated database shows anything about uniqueness.
+- **What would make it a guarantee everywhere:** a migration that defines the index, so every database has it. That is a separate decision. It is not part of S1, which adds no migration and performs no index management.
 
 **Consequences for S1's tests (no migration, no index management):**
 
 - Every test that depends on a scene-number collision runs on **isolated** tables in **both** configurations: index absent (as freshly migrated) and production-shaped (index present), built the way `beatScenesProductionShape.integration.test.js` builds its table, in its own schema placed first on the connection's `search_path`.
 - **No S1 test creates, drops or alters anything on the shared `public.scenes` table**, and none relies on another test having deleted a scene.
-- Tests 47, 55, 59, 62, 71, 72, 76 and 90 to 97 state the expected result per configuration. For conflicts visible under the lock the two results are now identical.
+- Tests 47, 55, 59, 62, 71, 72, 76 and 90 to 103 state the expected result per configuration. For conflicts visible under the lock the two results are now identical.
 
 ---
 
@@ -720,7 +739,25 @@ All of group P runs on isolated tables, once with the index absent and once prod
 96. **A writer that bypasses the lock races the sync (the stated limitation).** The sync is gated with `lockTrace.gate()` after its conflict check and before beat N's insert; `createScene` (and separately scene duplicate) then commits a scene with number N. **Index present:** the insert is refused inside its savepoint; beat N is `conflict` (`scene_number_race`); the other beats commit; the warning names it. **Index absent:** the insert succeeds and two live scenes share N, and this sync reports beat N as created. The **next** sync of the episode reads both under the lock: beat N's own scene is at N, and another live scene that is staying put also holds N, so beat N is `conflict` (`scene_number_held`), nothing is written for it, the warning names the other scene, and the reconciliation dry run lists it. No scene row is lost in either configuration.
 97. **Writers that take the lock take turns with the sync.** For scene delete and scene reorder (after #3925), and the legacy timeline save and `from-angle` (after S1): the sync gated under its episode lock makes each wait; each gated under its lock makes the sync wait; in both orders both finish, PostgreSQL reports no deadlock, and no duplicate number exists in either configuration. Where #3925 is not yet merged, the delete and reorder halves are marked pending on it.
 
-**Every earlier number 1–66 appears above.** Tests 71–74 are rewritten and 81–97 are new (rulings of 2026-11-22). Tests 47, 55, 59, 62, 71, 72, 76 and 90–97 run in both index configurations, on isolated tables. **Total: 97.** Old 57 → 31; old 45 → 16; old 52/53 → 7; old 54 → 8.
+98. **A three-way exchange.** Tied scenes for beats 2, 3 and 4 holding numbers 3, 4 and 2 → every scene ends at its beat's number; no beat is `conflict`; with the index present no unique violation at any statement; with it absent no two live scenes share a number at any commit. *(review of 2026-11-22: exchanges)*
+99. **Manual backgrounds survive the sync's renumbering.** For a scene with the marker, and for a legacy scene with only the Studio path: the scene's number is changed by the two-pass renumbering in a swap and in a shift → `background_url` and the marker are byte-identical before and after; only `scene_number` (and set, angle, plan link where the beat changed) differs; the beat's outcome is `kept_manual`. Both index configurations. *(review: manual background preservation through renumbering)*
+100. **Manual backgrounds survive other writers' renumbering.** The same two scenes, renumbered by a scene delete and by a scene reorder (as on main, and as changed by #3925), then a sync that restores their beat numbers → `background_url` and the marker byte-identical throughout. Both index configurations; the #3925 halves are pending on it. *(review)*
+101. **A conflicting beat whose existing scene is manual.** A manual scene tied to beat N sits at another number, and an untied legacy scene holds N → beat N is `conflict` (`scene_number_held`); nothing is written to the manual scene (number, background and marker byte-identical); after the legacy scene is renumbered or removed, the next sync moves the manual scene to N and its background and marker are still byte-identical. Both index configurations. *(review)*
+102. **Each writer that bypasses the episode lock.** (a) Gated between the sync's check and its write, as in test 96: `apply-scene-plan` commits a scene holding beat N's number → index present, beat N is `conflict` (`scene_number_race`), others commit, warning; index absent, the duplicate exists and the next sync reports `conflict` (`scene_number_held`). (b) Not gated: a scene made by scene duplicate, by legacy `parse-scenes` and by footage upload, each holding a beat's number before the sync runs → `conflict` (`scene_number_held`) in both configurations, nothing written for that beat, warning names the holder. With test 96 (scene create, scene duplicate gated) this covers all five. *(review: concurrent scene writers that bypass episode locking)*
+103. **The conflict warning's whole life.** After a `scene_number_held` conflict: the warning names the beat and the holding scene's id and title; it survives `recordSetupStatus`, Resume setup and the season-slot writer; the episode is then accepted, and a sync returns `protected` and neither clears nor changes it; a sync that returns `success` for other beats does not clear it; it is removed only when a fresh read after a later sync shows beat N's scene at number N with no other live scene on N; a newer warning is not cleared by an older clear. Both index configurations. *(review: per-beat conflict warnings and recovery)*
+
+#### Coverage of the six reviewed areas (Evoni, 2026-11-22)
+
+| Area | Tests |
+|---|---|
+| Scene-number exchanges (swap, three-way, shift after a delete) | 92, 98; with a blocked neighbour 93; concurrently 95 |
+| Legacy untied scenes occupying required beat numbers | 59, 90, 93, 94, 101 |
+| Index-present and index-absent databases | 47, 55, 59, 62, 71, 72, 76 and 90–103, each run in both, on isolated tables |
+| Concurrent scene writers that bypass episode locking | 55, 96, 102 (all five writers); the writers that do take the lock, for contrast, 97 |
+| Manual background preservation through renumbering | 99, 100, 101; and without renumbering 20–25 |
+| Per-beat conflict warnings and recovery | 59, 60, 62, 63, 90, 94, 103 |
+
+**Every earlier number 1–66 appears above.** Tests 71–74 are rewritten and 81–103 are new (rulings and review of 2026-11-22). Tests 47, 55, 59, 62, 71, 72, 76 and 90–103 run in both index configurations, on isolated tables. **Total: 103.** Old 57 → 31; old 45 → 16; old 52/53 → 7; old 54 → 8.
 
 ---
 
@@ -739,7 +776,7 @@ All of group P runs on isolated tables, once with the index absent and once prod
 
 8. **Scene-number index:** "APPROVED: Add a focused note and acceptance-test clarification … documenting that the scene-number unique index exists in the recorded production schema but is absent from freshly migrated test databases. S1's per-beat uniqueness-conflict tests must include a production-shaped index configuration. Do not change S1 implementation code or add a migration. The S1 specification remains documentation only, and its implementation is not yet authorized." → section 4A; tests 47, 55, 59, 62, 71, 72, 76 and 90.
 
-9. **Scene-number conflict handling:** "APPROVED: Add an application-level live-scene-number conflict check to the existing S1 sync algorithm. Requirements: Execute the conflict check after obtaining the episode lock, inside the sync transaction. Detect another live scene in the same episode already holding the desired scene number, including an untied legacy scene. Exclude the scene being updated. Treat a conflict as a per-beat failure, preserving existing scene rows and continuing other unaffected beats. Record the warning through the existing scene-sync warning mechanism. Preserve the unique index as the final database guard wherever it exists. Test on isolated databases both with and without the index. Test concurrent synchronization and relevant scene writers. Document that the read check does not guarantee global uniqueness against writers that bypass the episode lock. Do not introduce a new service, migration, index-management operation or separate warning system." → section 4 (steps 4a, 6a), section 4A, tests 90–97.
+9. **Scene-number conflict handling:** "APPROVED: Add an application-level live-scene-number conflict check to the existing S1 sync algorithm. Requirements: Execute the conflict check after obtaining the episode lock, inside the sync transaction. Detect another live scene in the same episode already holding the desired scene number, including an untied legacy scene. Exclude the scene being updated. Treat a conflict as a per-beat failure, preserving existing scene rows and continuing other unaffected beats. Record the warning through the existing scene-sync warning mechanism. Preserve the unique index as the final database guard wherever it exists. Test on isolated databases both with and without the index. Test concurrent synchronization and relevant scene writers. Document that the read check does not guarantee global uniqueness against writers that bypass the episode lock. Do not introduce a new service, migration, index-management operation or separate warning system." → section 4 (steps 4a, 6a), section 4A, tests 90–103. Reviewed by Evoni the same day: "Keep the approved live-scene-number conflict check and two-pass synchronization plan. … The documentation must clearly distinguish application-level conflict prevention from a database-enforced uniqueness guarantee. Do not implement S1 code yet." → the subsection "Application-level prevention versus a database guarantee" in section 4A and the coverage table in section 15.
 
 ### Open
 
@@ -806,7 +843,7 @@ None of these can be established from the repository. Each is to be checked on t
 | `generate-venue` is "in no approved scope" / "Gate: None" (first draft of this document) | ADMIN in P2b (ruled 2026-11-22); P2b is 47 routes, subject to verification |
 | `generate-venue`'s new-venue branch: "S1 syncs the event's previous set" so scenes stop showing a look that no longer applies (first draft) | S1 keeps the stored scenes, detects the event-location inconsistency and warns; no image sync for that branch (ruled 2026-11-22) |
 | "15 request-side hook paths on 14 routes, plus Restore" (first draft) | 14 image-sync hook paths and 1 detection path, on 14 routes, plus Restore |
-| 79 acceptance tests (first draft) | 97 |
+| 79 acceptance tests (first draft) | 103 |
 | Open decisions 1–4 (first draft) | Settled (section 16, items 1–4) |
 | "`generate-venue` with `force: true` bypasses the Place lock on an accepted episode's event" listed as an open decision | Settled: P2b adds the Place-lock refusal; S1's test 82 asserts the refusal, and the accepted-episode warning path is covered by test 87 |
 | Test 82: `generate-venue` `force: true` on an accepted episode "→ protected; scenes byte-identical; the warning is present" | After P2b the route is refused there; nothing changes and no warning is created |
@@ -817,6 +854,9 @@ None of these can be established from the repository. Each is to be checked on t
 | "The `conflict` outcome can be exercised only against a table that has the index" | It is reached in both configurations; the index is the final guard, not the only one |
 | Open decision "Index-absent behaviour" | Settled: the application-level check (section 16, item 9) |
 | The sync restores tied scenes' numbers one row at a time (today's code; unstated in earlier drafts) | Two-pass renumbering in one savepoint, so the index is never transiently violated |
+| "#3921 (PR A) must be merged first" (earlier revisions of the dependency order and Status) | #3921 has merged; the remaining prerequisites are #3922, #3923 and P2b |
+| "All five [bypassing writers] are ADMIN-only after #3921, #3920 and #3923" | Stated per writer: `apply-scene-plan` since #3921 and legacy `parse-scenes` since #3920 (both merged); scene create, scene duplicate and footage upload with #3923 (not merged when this was written) |
+| 97 acceptance tests | 103, with a coverage table for the six reviewed areas |
 
 ---
 
