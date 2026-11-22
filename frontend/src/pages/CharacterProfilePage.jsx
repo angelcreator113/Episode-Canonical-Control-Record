@@ -658,12 +658,17 @@ export function TheirFacts({ character, onFeedSaved }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [suggesting, setSuggesting] = useState(false);
+  // The version of the facts this card read: a save names it, and is refused
+  // when the saved facts have changed since (Evoni, 2026-11-22).
+  const [version, setVersion] = useState(null);
+  // The form as it opened from the saved facts: only what differs from it is sent.
+  const [opened, setOpened] = useState(null);
   const id = character.id;
 
   useEffect(() => {
     let live = true;
     getFactsApi(id)
-      .then((res) => { if (live) setFacts(res.data?.facts || null); })
+      .then((res) => { if (live) { setFacts(res.data?.facts || null); setVersion(res.data?.facts_version || null); } })
       .catch((err) => {
         console.error('[CharacterProfilePage] facts load failed:', err);
         if (live) setFacts({ error: err.response?.data?.error || 'Could not load their facts.' });
@@ -673,8 +678,7 @@ export function TheirFacts({ character, onFeedSaved }) {
 
   const startEdit = (proposal = null, why = null) => {
     setNote(why ? { kind: 'ok', text: `Suggested from their profile: ${why} Save to keep it, or change it first.` } : null);
-    const p = proposal || {};
-    setForm({
+    const formOf = (p) => ({
       handle: facts.handle || '',
       followers: facts.followers?.count ?? '',
       followers_reason: '',
@@ -688,6 +692,8 @@ export function TheirFacts({ character, onFeedSaved }) {
       undecided: [...facts.undecided],
       reason: '',
     });
+    setOpened(formOf({}));
+    setForm(formOf(proposal || {}));
   };
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   // Suggest facts from their profile (Evoni, 2026-10-17): the missing ones,
@@ -709,19 +715,40 @@ export function TheirFacts({ character, onFeedSaved }) {
     ...f, undecided: f.undecided.includes(k) ? f.undecided.filter((x) => x !== k) : [...f.undecided, k],
   }));
 
+  // Brings the saved facts up to date after a refused save. The form is left
+  // as typed, and `opened` as it was, so the next save still sends only the
+  // facts she changed, never an untouched field's older value.
+  const loadLatest = async () => {
+    setBusy(true);
+    try {
+      const res = await getFactsApi(id);
+      setFacts(res.data?.facts || null);
+      setVersion(res.data?.facts_version || null);
+      setNote({ kind: 'ok', text: 'The latest facts are loaded. What you typed is kept: Save facts saves only the facts you changed.' });
+    } catch (err) {
+      console.error('[CharacterProfilePage] facts reload failed:', err);
+      setNote({ kind: 'error', text: err.response?.data?.error || 'Could not load the latest facts.', stale: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const save = async () => {
-    const body = {
-      income: { amount: form.income_amount === '' ? null : Number(form.income_amount), cadence: form.income_cadence, source: form.income_source },
-      occupation: form.occupation,
-      major_possessions: form.major_possessions.split(',').map((x) => x.trim()).filter(Boolean),
-      home_price_range: form.home_price_range || null,
-      undecided: form.undecided,
-      ...(form.reason.trim() ? { reason: form.reason.trim() } : {}),
-    };
+    const was = opened || form;
+    const differs = (...keys) => keys.some((k) => String(form[k] ?? '') !== String(was[k] ?? ''));
+    // Only the facts changed in this form are sent; the server keeps the rest.
+    const body = { expected_version: version, ...(form.reason.trim() ? { reason: form.reason.trim() } : {}) };
+    if (differs('income_amount', 'income_cadence', 'income_source')) {
+      body.income = { amount: form.income_amount === '' ? null : Number(form.income_amount), cadence: form.income_cadence, source: form.income_source };
+    }
+    if (differs('occupation')) body.occupation = form.occupation;
+    if (differs('major_possessions')) body.major_possessions = form.major_possessions.split(',').map((x) => x.trim()).filter(Boolean);
+    if (differs('home_price_range')) body.home_price_range = form.home_price_range || null;
+    if ([...form.undecided].sort().join() !== [...was.undecided].sort().join()) body.undecided = form.undecided;
     if (facts.feed_linked) {
-      if (form.handle !== (facts.handle || '')) body.handle = form.handle;
-      if ((form.account_status || null) !== (facts.account_status || null)) body.account_status = form.account_status || null;
-      if (form.followers !== '' && Number(form.followers) !== facts.followers?.count) {
+      if (differs('handle')) body.handle = form.handle;
+      if (differs('account_status')) body.account_status = form.account_status || null;
+      if (form.followers !== '' && differs('followers')) {
         body.followers = { count: Number(form.followers), reason: form.followers_reason };
       }
     }
@@ -730,14 +757,19 @@ export function TheirFacts({ character, onFeedSaved }) {
       const res = await putFactsApi(id, body);
       const next = res.data?.facts;
       setFacts(next);
+      setVersion(res.data?.facts_version || null);
       setForm(null);
+      setOpened(null);
       setNote({ kind: 'ok', text: 'Saved.' });
       if (onFeedSaved && next) {
         onFeedSaved({ handle: next.handle, current_state: next.account_status, ...(next.followers ? { follower_count_approx: next.followers.label } : {}) });
       }
     } catch (err) {
       console.error('[CharacterProfilePage] facts save failed:', err);
-      setNote({ kind: 'error', text: err.response?.data?.error || 'Could not save their facts.' });
+      // A refused save keeps the form as typed. When the facts changed since
+      // this card read them (409), the note offers the latest ones.
+      const stale = err.response?.status === 409 && ['FACTS_CHANGED', 'FACTS_VERSION_REQUIRED'].includes(err.response?.data?.code);
+      setNote({ kind: 'error', text: err.response?.data?.error || 'Could not save their facts.', stale });
     } finally {
       setBusy(false);
     }
@@ -820,11 +852,14 @@ export function TheirFacts({ character, onFeedSaved }) {
             <label>Why these facts changed<input value={form.reason} onChange={set('reason')} placeholder="Optional, one line, kept in their fact history" maxLength={500} /></label>
             <span className="ch-facts-row">
               <button type="submit" className="ch-btn" disabled={busy}>{busy ? 'Saving…' : 'Save facts'}</button>
-              <button type="button" className="ch-btn-soft" disabled={busy} onClick={() => setForm(null)}>Cancel</button>
+              <button type="button" className="ch-btn-soft" disabled={busy} onClick={() => { setForm(null); setOpened(null); }}>Cancel</button>
             </span>
           </form>
         )}
       {note && <p className={note.kind === 'error' ? 'ch-note is-error' : 'ch-note'} role={note.kind === 'error' ? 'alert' : 'status'}>{note.text}</p>}
+      {note?.stale && form && (
+        <button type="button" className="ch-btn-soft" disabled={busy} onClick={loadLatest} data-testid="ch-facts-load-latest">Load the latest</button>
+      )}
       {facts && !facts.error && !form && <FactHistory characterId={id} refreshKey={facts} />}
       {facts && !facts.error && !form && <ProfileCheck characterId={id} />}
       {facts && !facts.error && !form && <PressureTest characterId={id} />}

@@ -414,6 +414,15 @@ router.get('/characters/:id/story-trail', requireAuth, authorize(['ADMIN']), asy
   }
 });
 
+/**
+ * A facts change that lost a lock (Postgres's deadlock or lock-wait timeout:
+ * utils/episodeLocks isLockConflict) wrote nothing: the body of its 409, else null.
+ */
+function lockRefusal(err) {
+  if (!require('../utils/episodeLocks').isLockConflict(err)) return null;
+  return { success: false, code: 'RETRY', error: 'Someone else was saving this character at the same moment. Nothing was saved: try again.' };
+}
+
 /** The character and its feed profile, for the facts routes; null when missing. */
 async function characterWithFeed(db, id) {
   const character = await db.RegistryCharacter.findByPk(id);
@@ -432,8 +441,9 @@ router.get('/characters/:id/facts', requireAuth, authorize(['ADMIN']), async (re
     const db = getModels();
     const found = await characterWithFeed(db, req.params.id);
     if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
-    const facts = await require('../services/characterFacts').factsOf(db, found);
-    return res.json({ success: true, facts });
+    // facts_version names these facts: a save sends it back as expected_version.
+    const read = await require('../services/characterFacts').readFacts(db, found);
+    return res.json({ success: true, facts: read.facts, facts_version: read.version });
   } catch (err) {
     console.error('[Cast] GET /characters/:id/facts error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -448,10 +458,17 @@ router.put('/characters/:id/facts', requireAuth, authorize(['ADMIN']), async (re
     if (!found) return res.status(404).json({ success: false, error: 'Character not found' });
     const { setFacts, FactsError } = require('../services/characterFacts');
     try {
-      const facts = await setFacts(db, { ...found, body: req.body || {}, by: String(req.user?.email || req.user?.id || 'admin').slice(0, 255) });
-      return res.json({ success: true, facts });
+      // expected_version is the facts_version the page read: a save without
+      // it, or of facts that have changed since, is a 409 and writes nothing.
+      const { expected_version: expectedVersion, ...body } = req.body || {};
+      const { version, ...facts } = await setFacts(db, {
+        ...found, body, expectedVersion, by: String(req.user?.email || req.user?.id || 'admin').slice(0, 255),
+      });
+      return res.json({ success: true, facts, facts_version: version });
     } catch (err) {
-      if (err instanceof FactsError) return res.status(err.status).json({ success: false, error: err.message });
+      if (err instanceof FactsError) return res.status(err.status).json({ success: false, error: err.message, ...(err.code ? { code: err.code } : {}) });
+      const refusal = lockRefusal(err);
+      if (refusal) return res.status(409).json(refusal);
       throw err;
     }
   } catch (err) {
@@ -547,20 +564,19 @@ async function markIntentional(req, res, on) {
   try {
     if (!UUID_RE.test(req.params.id)) return res.status(400).json({ success: false, error: 'id must be a character id (UUID)' });
     const db = getModels();
-    const character = await db.RegistryCharacter.findByPk(req.params.id);
-    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
-    const { withIntentional } = require('../services/characterConsistency');
     const id = on ? req.body?.flag_id : req.params.flagId;
-    let next;
+    let intentional;
     try {
-      next = withIntentional(character.canon_facts, id, { note: req.body?.note, on });
+      // Only the marks are written, under the character's lock (services/characterFacts).
+      intentional = await require('../services/characterFacts').setIntentionalMark(db, req.params.id, id, { note: req.body?.note, on });
     } catch (err) {
       if (err.status === 400) return res.status(400).json({ success: false, error: err.message });
+      if (err.status === 404) return res.status(404).json({ success: false, error: 'Character not found' });
+      const refusal = lockRefusal(err);
+      if (refusal) return res.status(409).json(refusal);
       throw err;
     }
-    await character.update({ canon_facts: next });
-    await require('../services/flagLog').markIntentional(db, character.id, id, on);
-    return res.json({ success: true, intentional: next.intentional });
+    return res.json({ success: true, intentional });
   } catch (err) {
     console.error(`[Cast] ${on ? 'POST' : 'DELETE'} /characters/:id/check/intentional error:`, err);
     return res.status(500).json({ success: false, error: err.message });

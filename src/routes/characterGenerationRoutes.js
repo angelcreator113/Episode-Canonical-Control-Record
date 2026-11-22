@@ -140,6 +140,12 @@ router.post('/confirm', authorize(['ADMIN']), async (req, res) => {
 
     // If character_id provided — updating an existing character
     if (character_id) {
+      // Their facts change only through the fact sheet (services/characterFacts
+      // setFacts: locked, versioned, with a history). This spread would replace
+      // the whole fact sheet with neither (Evoni, 2026-11-22).
+      if (proposed && typeof proposed === 'object' && Object.prototype.hasOwnProperty.call(proposed, 'canon_facts')) {
+        return res.status(400).json({ error: 'canon_facts cannot be set here. Change their facts on the fact sheet.' });
+      }
       // F-Reg-2 fix group 2 (v1.2 R2), row 4: read, compute depth_level and
       // write under a row lock, so the depth is calculated from the row as it
       // is at write time and a field set since the read still counts.
@@ -284,6 +290,7 @@ router.post('/confirm-feed', authorize(['ADMIN']), async (req, res) => {
           character, feedProfile: profile,
           body: { followers: { count: proposedCount, reason: 'Proposed with the character and confirmed on their Feed profile.' } },
           by: String(req.user?.email || req.user?.id || 'confirm-feed').slice(0, 255),
+          internal: true, // a profile made a moment ago: no page holds older facts
         });
       } catch (ledgerErr) {
         console.error('[characterGenerationRoutes] /confirm-feed: the starting count could not be written to the ledger:', ledgerErr.message);

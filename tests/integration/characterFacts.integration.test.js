@@ -62,7 +62,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   const get = (id) => request(app).get(`/api/v1/cast/characters/${id}/facts`).set('Authorization', `Bearer ${admin}`);
-  const put = (id, body, token = admin) => request(app).put(`/api/v1/cast/characters/${id}/facts`).set('Authorization', `Bearer ${token}`).send(body);
+  // A save names the facts it read (facts_version), as the fact sheet does.
+  const putRaw = (id, body, token = admin) => request(app).put(`/api/v1/cast/characters/${id}/facts`).set('Authorization', `Bearer ${token}`).send(body);
+  const put = async (id, body, token = admin) => putRaw(id, { ...body, expected_version: (await get(id)).body.facts_version }, token);
 
   it('reads the facts: one handle, followers as an estimate until the ledger holds them, account status', async () => {
     const res = await get(ids.char);

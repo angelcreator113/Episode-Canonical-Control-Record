@@ -120,7 +120,8 @@ const REASON = 'Quiet deletion. 4K followers abandoned without announcement.';
   });
 
   it("setting followers on the fact sheet updates the count's stored copies, not the private account", async () => {
-    const res = await as(admin, request(app).put(`/api/v1/cast/characters/${ids.char}/facts`)).send({ followers: { count: 3000000, reason: 'test' } });
+    const read = await as(admin, request(app).get(`/api/v1/cast/characters/${ids.char}/facts`));
+    const res = await as(admin, request(app).put(`/api/v1/cast/characters/${ids.char}/facts`)).send({ followers: { count: 3000000, reason: 'test' }, expected_version: read.body.facts_version });
     expect(res.status).toBe(200);
     const row = await profile();
     expect(row).toMatchObject({ follower_count_approx: '3M', follower_tier: 'mega' });

@@ -50,6 +50,8 @@ const REASON = 'Fix what can be fixed, from what is written about them.';
 class FixAllError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
+// Thrown from a setFacts check: what this run decided from is no longer so, and nothing is written.
+class Moved extends Error {}
 
 const json = (v) => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
 // Key order aside (JSONB stores keys in its own order).
@@ -138,7 +140,19 @@ async function confirmFollowers(db, found, facts, by) {
   const { setFacts } = require('./characterFacts');
   const feedBefore = {};
   for (const f of FEED_COUNT_FIELDS) feedBefore[f] = json(found.feedProfile[f]);
-  await setFacts(db, { ...found, showId: facts.followers.show_id, body: { followers: { count: facts.followers.count, reason: REASON } }, by });
+  // Under the locks: only an estimate still standing at this count is confirmed
+  // (a count accepted, or an estimate edited, while this run worked is left).
+  try {
+    await setFacts(db, {
+      ...found, showId: facts.followers.show_id, body: { followers: { count: facts.followers.count, reason: REASON } }, by, internal: true,
+      check: (now) => {
+        if (now.followers?.source !== 'estimate' || now.followers.count !== facts.followers.count) throw new Moved();
+      },
+    });
+  } catch (err) {
+    if (err instanceof Moved || err.code === 'FACTS_CHANGED') return { left: 'Confirm followers: their count changed while this ran, so it was left as it is.' };
+    throw err;
+  }
   const [[row]] = await db.sequelize.query(
     `SELECT id FROM pulse_followers WHERE show_id = :show AND social_profile_id = :pid AND status = 'accepted' AND deleted_at IS NULL
       ORDER BY created_at DESC LIMIT 1`, { replacements: { show: facts.followers.show_id, pid: found.feedProfile.id } });
@@ -165,20 +179,38 @@ async function fillFacts(db, found, by) {
     if (err instanceof FactsError) return { left: `Set their facts: ${err.message}` };
     throw err;
   }
-  // Only into facts still missing now (nothing set while the call ran is overwritten).
-  const now = await factsOf(db, found);
-  const undecided = new Set(now.undecided);
-  const isMissing = (k) => !undecided.has(k) && (k === 'income' ? now.income?.amount == null
-    : k === 'major_possessions' ? !(now.major_possessions || []).length : !now[k]);
+  // Only into facts still missing (nothing set while the call ran is overwritten).
+  const missingIn = (now) => {
+    const undecided = new Set(now.undecided);
+    return (k) => !undecided.has(k) && (k === 'income' ? now.income?.amount == null
+      : k === 'major_possessions' ? !(now.major_possessions || []).length : !now[k]);
+  };
   const body = {};
   const before = {};
+  const isMissing = missingIn(await factsOf(db, found));
   for (const k of FACT_FIELDS) {
-    if (suggested.proposal[k] === undefined || !isMissing(k)) continue;
-    body[k] = suggested.proposal[k];
-    before[k] = json((found.character.canon_facts || {})[k] ?? null);
+    if (suggested.proposal[k] !== undefined && isMissing(k)) body[k] = suggested.proposal[k];
   }
   if (!Object.keys(body).length) return { left: 'Set their facts: nothing missing was proposed.' };
-  await setFacts(db, { ...found, body: { ...body, reason: suggested.why ? `${REASON} ${suggested.why}`.slice(0, 500) : REASON }, by });
+  const saved = { ...body, reason: suggested.why ? `${REASON} ${suggested.why}`.slice(0, 500) : REASON };
+  try {
+    await setFacts(db, {
+      ...found, body: saved, by, internal: true,
+      // Looked at again under the locks: a fact set since is taken out of
+      // this save, and what each was before is read from the locked row.
+      check: (now, locked) => {
+        const stillMissing = missingIn(now);
+        for (const k of Object.keys(body)) {
+          if (!stillMissing(k)) { delete body[k]; delete saved[k]; continue; }
+          before[k] = json((locked.character.canon_facts || {})[k] ?? null);
+        }
+        if (!Object.keys(body).length) throw new Moved();
+      },
+    });
+  } catch (err) {
+    if (err instanceof Moved || err.code === 'FACTS_CHANGED') return { left: 'Set their facts: they were set while this ran, so they were left as they are.' };
+    throw err;
+  }
   await found.character.reload();
   const after = {};
   for (const k of Object.keys(body)) after[k] = json(found.character.canon_facts[k]);
@@ -358,7 +390,7 @@ async function fixCharacter(db, characterId) {
 // ── Apply all (her one click) ────────────────────────────────────────────────
 async function applyQueued(db, items) {
   if (!Array.isArray(items) || !items.length || items.length > 200) throw new FixAllError(400, 'items must be a list of 1 to 200 suggestions.');
-  const { applyFix, withIntentional, FixError } = require('./characterConsistency');
+  const { applyFix, FixError } = require('./characterConsistency');
   const flagLog = require('./flagLog');
   const results = [];
   for (const item of items) {
@@ -368,9 +400,8 @@ async function applyQueued(db, items) {
       const found = await loadFound(db, item.character_id);
       if (isCounselor(found.character)) throw new FixAllError(403, 'That character is not changed here.');
       if (item.verdict === 'fine') {
-        const next = withIntentional(found.character.canon_facts, item.flag_id, { note: item.why || 'Reads fine as written (Fix what can be fixed).' });
-        await found.character.update({ canon_facts: next });
-        await flagLog.markIntentional(db, found.character.id, item.flag_id, true);
+        // Only the marks are written, under the character's lock (services/characterFacts).
+        await require('./characterFacts').setIntentionalMark(db, found.character.id, item.flag_id, { note: item.why || 'Reads fine as written (Fix what can be fixed).' });
         results.push({ ...base, ok: true, change: { id: changeId(), character_id: found.character.id, kind: 'intentional', flag_id: item.flag_id, label: 'Kept as written' } });
         continue;
       }
@@ -410,25 +441,40 @@ async function undoChange(db, change, { by = null } = {}) {
     }
     case 'followers': {
       if (!feedProfile || !change.ledger_id) throw new FixAllError(409, CHANGED);
-      const { countAt } = require('./pulseFollowers');
-      const row = await db.PulseFollower.findByPk(change.ledger_id);
-      if (!row || row.social_profile_id !== feedProfile.id || (await countAt(db, change.show_id, feedProfile.id)) !== change.count) throw new FixAllError(409, CHANGED);
-      for (const f of FEED_COUNT_FIELDS) if (!same(feedProfile[f], change.after?.[f])) throw new FixAllError(409, CHANGED);
+      const { countAt, lockProfileLedger } = require('./pulseFollowers');
       await db.sequelize.transaction(async (transaction) => {
+        // The profile, then its accepted rows (the order every facts change
+        // locks in); "changed since" is judged from the rows as locked.
+        const profile = await lockProfileLedger(db, transaction, change.show_id, feedProfile.id);
+        const row = await db.PulseFollower.findByPk(change.ledger_id, { transaction });
+        if (!profile || !row || row.social_profile_id !== profile.id
+          || (await countAt(db, change.show_id, profile.id, undefined, transaction)) !== change.count) throw new FixAllError(409, CHANGED);
+        for (const f of FEED_COUNT_FIELDS) if (!same(profile[f], change.after?.[f])) throw new FixAllError(409, CHANGED);
         await row.destroy({ transaction });
         const restore = {};
         for (const f of FEED_COUNT_FIELDS) restore[f] = change.before?.[f] ?? null;
-        await feedProfile.update(restore, { transaction });
+        await profile.update(restore, { transaction });
       });
       return { ok: true };
     }
     case 'facts': {
-      const stored = character.canon_facts || {};
       const keys = Object.keys(change.after || {}).filter((k) => FACT_FIELDS.includes(k));
-      if (!keys.length || keys.some((k) => !same(stored[k] ?? null, change.after[k]))) throw new FixAllError(409, CHANGED);
+      if (!keys.length) throw new FixAllError(409, CHANGED);
       const body = { reason: 'Undone: Fix what can be fixed.' };
       for (const k of keys) body[k] = change.before?.[k] ?? (k === 'major_possessions' ? [] : null);
-      await require('./characterFacts').setFacts(db, { ...found, body, by });
+      try {
+        await require('./characterFacts').setFacts(db, {
+          ...found, body, by, internal: true,
+          // "Changed since" is judged from the row as locked.
+          check: (_now, locked) => {
+            const stored = locked.character.canon_facts || {};
+            if (keys.some((k) => !same(stored[k] ?? null, change.after[k]))) throw new FixAllError(409, CHANGED);
+          },
+        });
+      } catch (err) {
+        if (err.code === 'FACTS_CHANGED') throw new FixAllError(409, CHANGED);
+        throw err;
+      }
       return { ok: true };
     }
     case 'typology': {
@@ -449,10 +495,13 @@ async function undoChange(db, change, { by = null } = {}) {
       return { ok: true };
     }
     case 'intentional': {
-      const { withIntentional } = require('./characterConsistency');
-      if (!(character.canon_facts?.intentional || []).some((m) => m.id === change.flag_id)) throw new FixAllError(409, CHANGED);
-      await character.update({ canon_facts: withIntentional(character.canon_facts, change.flag_id, { on: false }) });
-      await require('./flagLog').markIntentional(db, character.id, change.flag_id, false);
+      // Only the marks are written; whether the mark is still there is judged under the lock.
+      await require('./characterFacts').setIntentionalMark(db, character.id, change.flag_id, {
+        on: false,
+        check: (locked) => {
+          if (!(locked.canon_facts?.intentional || []).some((m) => m.id === change.flag_id)) throw new FixAllError(409, CHANGED);
+        },
+      });
       return { ok: true };
     }
     default:

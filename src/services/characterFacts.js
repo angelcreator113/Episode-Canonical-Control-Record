@@ -24,7 +24,18 @@
  * generator must not invent them, and the checker does not flag them.
  *
  *   factsOf(db, { character, feedProfile, showId })
- *   setFacts(db, { character, feedProfile, showId, body, by })
+ *   factsVersion(db, { character, feedProfile, showId })   a fingerprint of the
+ *                     state the facts are read from (see setFacts)
+ *   setFacts(db, { character, feedProfile, showId, body, by, expectedVersion, internal, check })
+ *   setIntentionalMark(db, characterId, flagId, { note, on, check })
+ *
+ * A change to the facts is made under row locks, taken in one order
+ * everywhere (Evoni, 2026-11-22): the Pulse profile, then the character,
+ * then the profile's accepted follower rows by id. A save from a browser
+ * says which facts it was looking at (expectedVersion); a save that does
+ * not, or whose facts have changed since, is refused with a 409 and writes
+ * nothing. The facts, the profile, the follower ledger and the fact history
+ * are written in the one transaction.
  *   formatCount(n), affordabilityOf(income), FACT_KEYS
  *
  * For the generators (Character Consistency Engine step 5, the spec's
@@ -107,24 +118,61 @@ function affordabilityOf(income) {
 const text = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 
 /** The show whose follower ledger holds the character's count. */
-async function showIdFor(db, character, feedProfile) {
+async function showIdFor(db, character, feedProfile, transaction = null) {
   const [[reg]] = await db.sequelize.query(
-    'SELECT show_id FROM character_registries WHERE id = :id', { replacements: { id: character.registry_id } });
+    'SELECT show_id FROM character_registries WHERE id = :id', { replacements: { id: character.registry_id }, transaction });
   if (reg?.show_id) return reg.show_id;
   if (!feedProfile) return null;
   const [[row]] = await db.sequelize.query(
     `SELECT show_id FROM pulse_followers WHERE social_profile_id = :pid AND deleted_at IS NULL
-      ORDER BY created_at DESC LIMIT 1`, { replacements: { pid: feedProfile.id } });
+      ORDER BY created_at DESC, id DESC LIMIT 1`, { replacements: { pid: feedProfile.id }, transaction });
   return row?.show_id || null;
 }
 
-async function factsOf(db, { character, feedProfile = null, showId = null }) {
+/** JSON with every object's keys in order, so two equal values always read the same (JSONB keeps no key order). */
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().filter((k) => value[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/**
+ * The fingerprint of what the facts are read from. It covers the stored
+ * facts (not the checker's "intentional" marks, which are not facts and
+ * are written key by key), the profile link, the show, the profile's handle
+ * and account status, and the follower count's source: the winning ledger
+ * row, or the profile's estimate when the ledger has none. The follower
+ * copies inside full_profile and platform_presences are derived from the
+ * count and are not in it, and neither is updated_at, which unrelated saves
+ * change.
+ */
+function versionOf({ character, feedProfile, show, ledger }) {
+  const { intentional: _marks, ...facts } = character.canon_facts || {};
+  const state = {
+    character: character.id,
+    profile: feedProfile ? feedProfile.id : null,
+    show: show || null,
+    facts,
+    handle: feedProfile ? feedProfile.handle ?? null : null,
+    status: feedProfile ? feedProfile.current_state ?? null : null,
+    ledger: ledger ? { id: ledger.id, count: ledger.count } : null,
+    estimate: feedProfile && !ledger ? feedProfile.follower_count_approx ?? null : null,
+  };
+  return `f1-${require('crypto').createHash('sha256').update(canonical(state)).digest('hex').slice(0, 40)}`;
+}
+
+/** The facts and their fingerprint, from one set of reads (on `transaction` when given). */
+async function readFacts(db, { character, feedProfile = null, showId = null, transaction = null }) {
   const stored = character.canon_facts || {};
-  const show = showId || await showIdFor(db, character, feedProfile);
+  const show = showId || await showIdFor(db, character, feedProfile, transaction);
   let followers = null;
+  let ledgerRow = null;
   if (feedProfile) {
-    const { countAt, parseApprox } = require('./pulseFollowers');
-    const ledger = show ? await countAt(db, show, feedProfile.id) : null;
+    const { acceptedAt, parseApprox } = require('./pulseFollowers');
+    ledgerRow = show ? await acceptedAt(db, show, feedProfile.id, undefined, transaction) : null;
+    const ledger = ledgerRow ? ledgerRow.count : null;
     if (ledger !== null) followers = { count: ledger, label: formatCount(ledger), source: 'ledger', show_id: show };
     else {
       const estimate = parseApprox(feedProfile.follower_count_approx);
@@ -132,7 +180,7 @@ async function factsOf(db, { character, feedProfile = null, showId = null }) {
     }
   }
   const income = stored.income || null;
-  return {
+  const facts = {
     feed_linked: Boolean(feedProfile),
     handle: feedProfile?.handle ? `@${String(feedProfile.handle).replace(/^@+/, '')}` : null,
     followers,
@@ -144,6 +192,16 @@ async function factsOf(db, { character, feedProfile = null, showId = null }) {
     home_price_range: homePriceRangeOf(stored.home_price_range),
     undecided: Array.isArray(stored.undecided) ? stored.undecided.filter((k) => FACT_KEYS.includes(k)) : [],
   };
+  return { facts, show, version: versionOf({ character, feedProfile, show, ledger: ledgerRow }) };
+}
+
+async function factsOf(db, args) {
+  return (await readFacts(db, args)).facts;
+}
+
+/** The fingerprint a save must name (setFacts' expectedVersion). */
+async function factsVersion(db, args) {
+  return (await readFacts(db, args)).version;
 }
 
 /** The canon_facts JSON after the body's changes; throws FactsError on a bad value. */
@@ -177,72 +235,166 @@ function nextCanonFacts(current, body) {
   return next;
 }
 
+const RELOAD = 'These facts have changed since you opened them. Load the latest, then save again.';
+const NEEDS_VERSION = 'This page is out of date and cannot save facts safely. Reload it, then save again.';
+const refused = (code, message) => Object.assign(new FactsError(409, message), { code });
+
+/**
+ * The rows a change to the facts is made from, locked in the one order:
+ * the Pulse profile, the character, then the profile's accepted follower
+ * rows by id. The character is read once without a lock to learn its
+ * profile, and looked at again under the lock: a link that moved in between
+ * is a 409, never a write to the wrong profile. FOR NO KEY UPDATE, so rows
+ * that only refer to the character or the profile are not held up.
+ * A profile shared by two characters is locked first by both, so their
+ * changes take turns.
+ */
+async function lockFactRows(db, transaction, characterId, { showId = null } = {}) {
+  await db.sequelize.query("SET LOCAL lock_timeout = '10s'", { transaction });
+  const lock = transaction.LOCK.NO_KEY_UPDATE;
+  const seen = await db.RegistryCharacter.findByPk(characterId, { transaction, attributes: ['id', 'feed_profile_id'] });
+  if (!seen) throw new FactsError(404, 'Character not found');
+  const feedProfile = seen.feed_profile_id
+    ? await db.SocialProfile.findByPk(seen.feed_profile_id, { transaction, lock })
+    : null;
+  const character = await db.RegistryCharacter.findByPk(characterId, { transaction, lock });
+  if (!character) throw new FactsError(404, 'Character not found');
+  if ((character.feed_profile_id ?? null) !== (seen.feed_profile_id ?? null)) throw refused('FACTS_CHANGED', RELOAD);
+  const show = showId || await showIdFor(db, character, feedProfile, transaction);
+  if (feedProfile && show) await lockLedger(db, transaction, show, feedProfile.id);
+  return { character, feedProfile, show };
+}
+
+/** Locks a profile's accepted follower rows for a show, by id. */
+async function lockLedger(db, transaction, showId, profileId) {
+  await db.sequelize.query(
+    `SELECT id FROM pulse_followers WHERE show_id = :showId AND social_profile_id = :profileId AND status = 'accepted' AND deleted_at IS NULL
+      ORDER BY id FOR UPDATE`,
+    { replacements: { showId, profileId }, transaction });
+}
+
 /**
  * Applies the body's changes: { handle?, account_status?, followers?: { count,
  * reason }, income?, occupation?, major_possessions?, home_price_range?,
  * undecided?, reason? }. Returns the facts after. Handle, status and
- * followers need a feed profile. Each other fact that changed goes into the
- * fact history with `reason` (services/factHistory); followers keep their
- * own ledger.
+ * followers need a feed profile. Only the facts the body names change; the
+ * others, and the checker's marks, are kept as the locked row has them.
+ * Each fact that changed goes into the fact history with `reason`
+ * (services/factHistory) in the same transaction, so a history that cannot
+ * be written undoes the change; followers keep their own ledger.
+ *
+ * `expectedVersion` is the fingerprint (factsVersion) of the facts the
+ * caller was looking at: without it, or when the facts under the lock read
+ * differently, the save is refused (409, code FACTS_VERSION_REQUIRED or
+ * FACTS_CHANGED) and nothing is written. A caller inside this server that
+ * has no page to be stale (a character made a moment ago, Fix what can be
+ * fixed) passes `internal: true` instead, and may pass `check(facts,
+ * { character, feedProfile })`, called under the locks, to refuse by
+ * throwing when the facts are no longer what it decided from.
+ *
+ * The character and profile passed in are brought up to date after the save.
  */
-async function setFacts(db, { character, feedProfile = null, showId = null, body = {}, by = null }) {
-  const feedChanges = {};
-  if ('handle' in body || 'account_status' in body || 'followers' in body) {
-    if (!feedProfile) throw new FactsError(409, 'They have no Pulse profile, so they have no handle, followers or account status yet.');
-  }
+async function setFacts(db, {
+  character, feedProfile = null, showId = null, body = {}, by = null, expectedVersion = null, internal = false, check = null,
+}) {
+  if (!internal && (typeof expectedVersion !== 'string' || !expectedVersion)) throw refused('FACTS_VERSION_REQUIRED', NEEDS_VERSION);
+  const touchesFeed = 'handle' in body || 'account_status' in body || 'followers' in body;
+  // Shape checks that need no row are made before anything is locked.
+  let handle = null;
   if ('handle' in body) {
-    const raw = String(body.handle ?? '').trim();
-    const bare = raw.replace(/^@/, '');
+    const bare = String(body.handle ?? '').trim().replace(/^@/, '');
     if (!HANDLE_RE.test(bare)) throw new FactsError(400, 'A handle is one @ then letters, numbers, dots or underscores (no spaces, no second @).');
-    const { findHandleHolder, handleTakenMessage } = require('../utils/socialProfileHandle');
-    const holder = await findHandleHolder(db, bare, { excludeId: feedProfile.id });
-    if (holder) throw new FactsError(409, handleTakenMessage(bare, holder));
-    feedChanges.handle = `@${bare}`;
+    handle = bare;
   }
   if ('account_status' in body) {
     const s = body.account_status || null;
     if (s !== null && !ACCOUNT_STATUSES.includes(s)) throw new FactsError(400, `Account status is one of: ${ACCOUNT_STATUSES.join(', ')}.`);
-    feedChanges.current_state = s;
   }
   let followerTarget = null;
   if ('followers' in body) {
     const count = Number(body.followers?.count);
     if (!Number.isInteger(count) || count < 0) throw new FactsError(400, 'Followers must be a whole number of 0 or more.');
     followerTarget = count;
-    Object.assign(feedChanges, followerCopies(feedProfile, count));
   }
-  const canon = nextCanonFacts(character.canon_facts, body);
+  nextCanonFacts({}, body);
 
-  const show = showId || await showIdFor(db, character, feedProfile);
-  // What they were, for the fact history (services/factHistory, the spec's #1).
-  const before = await factsOf(db, { character, feedProfile, showId: show });
-  await db.sequelize.transaction(async (transaction) => {
+  const after = await db.sequelize.transaction(async (transaction) => {
+    const locked = await lockFactRows(db, transaction, character.id, { showId });
+    // The profile the caller holds must be the one the character has now.
+    if ((feedProfile ? feedProfile.id : null) !== (locked.feedProfile ? locked.feedProfile.id : null)) throw refused('FACTS_CHANGED', RELOAD);
+    const read = await readFacts(db, { ...locked, showId: locked.show, transaction });
+    if (!internal && read.version !== expectedVersion) throw refused('FACTS_CHANGED', RELOAD);
+    if (check) await check(read.facts, locked);
+    if (touchesFeed && !locked.feedProfile) throw new FactsError(409, 'They have no Pulse profile, so they have no handle, followers or account status yet.');
+
+    const feedChanges = {};
+    if (handle !== null) {
+      const { findHandleHolder, handleTakenMessage } = require('../utils/socialProfileHandle');
+      const holder = await findHandleHolder(db, handle, { excludeId: locked.feedProfile.id, transaction });
+      if (holder) throw new FactsError(409, handleTakenMessage(handle, holder));
+      feedChanges.handle = `@${handle}`;
+    }
+    if ('account_status' in body) feedChanges.current_state = body.account_status || null;
+    if (followerTarget !== null) Object.assign(feedChanges, followerCopies(locked.feedProfile, followerTarget));
+    const canon = nextCanonFacts(locked.character.canon_facts, body);
+
+    const show = locked.show;
     if (followerTarget !== null && show) {
       const { countAt } = require('./pulseFollowers');
-      const before = await countAt(db, show, feedProfile.id);
+      const before = await countAt(db, show, locked.feedProfile.id, undefined, transaction);
       const reason = text(body.followers?.reason, 500) || 'Set on the fact sheet.';
       if (before === null) {
         await db.PulseFollower.create({
-          show_id: show, social_profile_id: feedProfile.id, story_order: 0, change: followerTarget, count_after: followerTarget,
+          show_id: show, social_profile_id: locked.feedProfile.id, story_order: 0, change: followerTarget, count_after: followerTarget,
           cause: 'start', reason, status: 'accepted', decided_by: by, decided_at: new Date(),
         }, { transaction });
       } else if (before !== followerTarget) {
         const [[last]] = await db.sequelize.query(
           `SELECT COALESCE(MAX(story_order), 0) AS at FROM pulse_followers
             WHERE show_id = :show AND social_profile_id = :pid AND status = 'accepted' AND deleted_at IS NULL`,
-          { replacements: { show, pid: feedProfile.id }, transaction });
+          { replacements: { show, pid: locked.feedProfile.id }, transaction });
         await db.PulseFollower.create({
-          show_id: show, social_profile_id: feedProfile.id, story_order: Number(last.at), change: followerTarget - before,
+          show_id: show, social_profile_id: locked.feedProfile.id, story_order: Number(last.at), change: followerTarget - before,
           count_after: followerTarget, cause: 'override', reason, status: 'accepted', decided_by: by, decided_at: new Date(),
         }, { transaction });
       }
     }
-    if (Object.keys(feedChanges).length) await feedProfile.update(feedChanges, { transaction });
-    await character.update({ canon_facts: canon }, { transaction });
+    if (Object.keys(feedChanges).length) await locked.feedProfile.update(feedChanges, { transaction });
+    await locked.character.update({ canon_facts: canon }, { transaction });
+    const written = await readFacts(db, { ...locked, showId: show, transaction });
+    await require('./factHistory').recordFactChanges(db, {
+      character: locked.character, showId: show, before: read.facts, after: written.facts, reason: text(body.reason, 500) || null, by, transaction,
+    });
+    return written;
   });
-  const after = await factsOf(db, { character, feedProfile, showId: show });
-  await require('./factHistory').recordFactChanges(db, { character, showId: show, before, after, reason: text(body.reason, 500) || null, by });
-  return after;
+  // The caller's own copies, as saved.
+  await character.reload();
+  if (feedProfile) await feedProfile.reload();
+  return { ...after.facts, version: after.version };
+}
+
+/**
+ * Marks a checker flag intentional, or unmarks it: the one key
+ * canon_facts.intentional, written from the row as it is under the lock, so
+ * a fact saved a moment before is not put back. The flag log is marked in
+ * the same transaction. `check(character)` may refuse by throwing. Returns
+ * the marks after.
+ */
+async function setIntentionalMark(db, characterId, flagId, { note = null, on = true, check = null } = {}) {
+  const { withIntentional } = require('./characterConsistency');
+  withIntentional({}, flagId, { note, on });
+  return db.sequelize.transaction(async (transaction) => {
+    await db.sequelize.query("SET LOCAL lock_timeout = '10s'", { transaction });
+    const character = await db.RegistryCharacter.findByPk(characterId, { transaction, lock: transaction.LOCK.NO_KEY_UPDATE });
+    if (!character) throw new FactsError(404, 'Character not found');
+    if (check) await check(character);
+    const marks = withIntentional(character.canon_facts, flagId, { note, on }).intentional;
+    await db.sequelize.query(
+      `UPDATE registry_characters SET canon_facts = jsonb_set(COALESCE(canon_facts::jsonb, '{}'::jsonb), '{intentional}', CAST(:marks AS jsonb)), updated_at = NOW() WHERE id = :id`,
+      { replacements: { id: character.id, marks: JSON.stringify(marks) }, transaction });
+    await require('./flagLog').markIntentional(db, character.id, flagId, on, { transaction });
+    return marks;
+  });
 }
 
 /**
@@ -273,16 +425,18 @@ function followerCopies(feedProfile, count) {
  * audit, 2026-10-19: three follower numbers for one person). Nothing when
  * the profile has no accepted count; a fault is logged, never thrown.
  */
-async function syncFollowerCopies(db, showId, profileId) {
+async function syncFollowerCopies(db, showId, profileId, { transaction = null, profile: held = null } = {}) {
   try {
     const { countAt } = require('./pulseFollowers');
-    const count = await countAt(db, showId, profileId);
+    const count = await countAt(db, showId, profileId, undefined, transaction);
     if (count === null) return null;
-    const profile = await db.SocialProfile.findByPk(profileId);
+    const profile = held || await db.SocialProfile.findByPk(profileId, { transaction });
     if (!profile) return null;
-    await profile.update(followerCopies(profile, count));
+    await profile.update(followerCopies(profile, count), { transaction });
     return count;
   } catch (err) {
+    // On a caller's transaction a failed statement has ended it: the caller must know.
+    if (transaction) throw err;
     console.error('[characterFacts] the follower copies could not be brought up to date:', err.message);
     return null;
   }
@@ -429,7 +583,8 @@ async function factsForProfile(db, profile) {
 
 module.exports = {
   FACT_KEYS, ACCOUNT_STATUSES, INCOME_CADENCES, AFFORDABILITY, HOME_PRICE_RANGES, homePriceRangeOf, FactsError,
-  formatCount, affordabilityOf, yearlyIncome, factsOf, setFacts, nextCanonFacts, showIdFor,
+  formatCount, affordabilityOf, yearlyIncome, factsOf, factsVersion, readFacts, setFacts, setIntentionalMark, nextCanonFacts, showIdFor,
+  lockFactRows, lockLedger,
   isDecided, factsPromptBlock, factsForCharacter, factsForProfile, holdToFacts, agreeingFollowers, primaryPresenceKey, FACT_FIELDS, STATUS_WORDS,
   followerCopies, syncFollowerCopies,
 };
