@@ -1,34 +1,35 @@
 const express = require('express');
 const router = express.Router();
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 const db = require('../models');
 
+// What a show with no saved configuration reads as. Saved by the PUT below.
+const DEFAULT_SHOW_CONFIG = Object.freeze({
+  target_duration: 600,
+  target_scene_count: 7,
+  format: 'YouTube long-form',
+  niche_category: 'general',
+  content_specs: { words_per_minute: 150, target_tolerance: 60 },
+});
+
 /**
- * Get or create show configuration
+ * Get show configuration
  * GET /api/v1/shows/:showId/config
+ *
+ * A read: it writes nothing (Evoni, 2026-11-22). It used to save a default
+ * row for any show id it was asked about. A show with none saved reads as
+ * the defaults, with `saved: false`; the PUT below saves one.
  */
 router.get('/:showId/config', requireAuth, async (req, res) => {
   try {
     const { showId } = req.params;
 
-    let config = await db.ShowConfig.findOne({ where: { show_id: showId } });
-
+    const config = await db.ShowConfig.findOne({ where: { show_id: showId } });
     if (!config) {
-      // Create default config
-      config = await db.ShowConfig.create({
-        show_id: showId,
-        target_duration: 600,
-        target_scene_count: 7,
-        format: 'YouTube long-form',
-        niche_category: 'general',
-        content_specs: {
-          words_per_minute: 150,
-          target_tolerance: 60
-        }
-      });
+      return res.json({ success: true, saved: false, data: { show_id: showId, ...DEFAULT_SHOW_CONFIG, content_specs: { ...DEFAULT_SHOW_CONFIG.content_specs } } });
     }
 
-    res.json({ success: true, data: config });
+    res.json({ success: true, saved: true, data: config });
   } catch (error) {
     console.error('Failed to get show config:', error);
     res.status(500).json({ error: 'Failed to load configuration' });
@@ -38,8 +39,11 @@ router.get('/:showId/config', requireAuth, async (req, res) => {
 /**
  * Update show configuration
  * PUT /api/v1/shows/:showId/config
+ *
+ * ADMIN only (Evoni, 2026-11-22): with the read no longer saving one, this is
+ * the one place a show's configuration is made.
  */
-router.put('/:showId/config', requireAuth, async (req, res) => {
+router.put('/:showId/config', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { showId } = req.params;
     const updates = req.body;

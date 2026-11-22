@@ -96,17 +96,19 @@ async function lookAngles(sequelize, lookIds) {
   const out = new Map();
   if (!ids.length) return out;
   // A dressed angle generating for longer than STUCK_AFTER_MS (a restart, a
-  // hung call) is marked failed, so the beat stops waiting on it (audit,
-  // 2026-10-15: nothing ever released it).
-  await sequelize.query(
-    `UPDATE scene_set_look_angles SET status = ${KEEP_PREVIOUS_IMAGE}, error = :reason, updated_at = NOW()
-      WHERE look_id IN (:ids) AND status = 'generating' AND deleted_at IS NULL
-        AND updated_at < NOW() - make_interval(secs => :stuck)`,
-    { replacements: { ids, reason: STUCK_REASON, stuck: STUCK_AFTER_MS / 1000 } });
+  // hung call) reads as failed, so the beat stops waiting on it (audit,
+  // 2026-10-15: nothing ever released it). It is read that way and not
+  // written: this runs inside reads (the plan, the dressed angles list), and
+  // a read writes nothing (Evoni, 2026-11-22). The row itself is released by
+  // the next run's claim (upsertRow, which takes a row stuck this long).
+  const STUCK = `status = 'generating' AND updated_at < NOW() - make_interval(secs => :stuck)`;
   const [rows] = await sequelize.query(
-    `SELECT id, look_id, scene_angle_id, status, image_url, source, error FROM scene_set_look_angles
+    `SELECT id, look_id, scene_angle_id, image_url, source,
+            CASE WHEN ${STUCK} THEN ${KEEP_PREVIOUS_IMAGE} ELSE status END AS status,
+            CASE WHEN ${STUCK} THEN :reason ELSE error END AS error
+       FROM scene_set_look_angles
       WHERE look_id IN (:ids) AND deleted_at IS NULL`,
-    { replacements: { ids } });
+    { replacements: { ids, reason: STUCK_REASON, stuck: STUCK_AFTER_MS / 1000 } });
   for (const r of rows) out.set(`${r.look_id}:${r.scene_angle_id}`, r);
   return out;
 }
