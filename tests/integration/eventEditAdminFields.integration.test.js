@@ -387,6 +387,140 @@ const EMPTIES = [['null', null], ["''", ''], ["'null'", 'null'], ["'undefined'",
     });
   });
 
+  // Evoni, 2026-11-22: "An unauthorized request must receive 403 without
+  // private episode details, regardless of stale version. Preserve existing
+  // stale-save behavior for authorized event-only edits and ADMIN requests."
+  describe('a save made from an older read of the event (expected_updated_at)', () => {
+    const STALE = { expected_updated_at: '2001-01-01T00:00:00.000Z' };
+    const expectStale = async (who, w, body) => {
+      const before = await snapshot(w);
+      const res = await put(who, w.ev, { ...body, ...STALE });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('EVENT_CHANGED');
+      expect(res.body.expected_updated_at).toBe(STALE.expected_updated_at);
+      expect(await snapshot(w)).toEqual(before);
+      return res;
+    };
+
+    it.each(SHAPES)('not an admin, a change of the link as %s: the 403, with no event row and nothing of the episode, nothing written', async (_name, shape) => {
+      const w = await world();
+      await expectRefused('editor', w, { used_in_episode_id: shape(w.otherEp), ...STALE }, ['used_in_episode_id']);
+      await expectRefused('viewer', w, { used_in_episode_id: shape(w.otherEp), name: 'Renamed', ...STALE }, ['used_in_episode_id']);
+    });
+
+    it.each(EMPTIES)('not an admin, the link cleared as %s: the 403', async (_name, empty) => {
+      const w = await world();
+      await expectRefused('editor', w, { used_in_episode_id: empty, ...STALE }, ['used_in_episode_id']);
+    });
+
+    it.each(SHAPES)('not an admin, a change of the place of a linked event as %s: the 403', async (_name, shape) => {
+      const w = await world();
+      await expectRefused('editor', w, { scene_set_id: shape(w.setB), ...STALE }, ['scene_set_id']);
+      await expectRefused('viewer', w, { scene_set_id: shape(w.setB), name: 'Renamed', description: 'Also sent', ...STALE }, ['scene_set_id']);
+    });
+
+    it('not an admin, an event with no episode being linked and placed: the 403 for both', async () => {
+      const w = await world({ linked: null });
+      await expectRefused('editor', w, { used_in_episode_id: w.otherEp, scene_set_id: w.setB, ...STALE }, ['used_in_episode_id', 'scene_set_id']);
+    });
+
+    it("not an admin, the event's own fields: answered as stale, as before, nothing written", async () => {
+      const w = await world();
+      await expectStale('editor', w, { name: 'Renamed', description: 'Edited' });
+      const free = await world({ linked: null });
+      await expectStale('viewer', free, { name: 'Renamed', scene_set_id: free.setB });
+    });
+
+    it.each([...SHAPES, ['in capitals', (v) => v.toUpperCase()]])('not an admin, the stored link and place sent back as %s with a field of the event: not a change of either, so answered as stale', async (_name, shape) => {
+      const w = await world();
+      await expectStale('editor', w, { used_in_episode_id: shape(w.ep), scene_set_id: shape(w.setA), name: 'Renamed' });
+    });
+
+    it('an admin: stale is stale, whatever the save carries, as before', async () => {
+      const w = await world();
+      await expectStale('admin', w, { name: 'Renamed' });
+      await expectStale('admin', w, { scene_set_id: w.setB });
+      await expectStale('admin', w, { used_in_episode_id: null, name: 'Renamed' });
+      await expectStale('admin', w, { used_in_episode_id: { id: w.ep }, scene_set_id: { value: w.setB } });
+    });
+  });
+
+  // The same id in another letter case is the same id, for both fields.
+  describe.each([
+    ['a draft episode', {}],
+    ['an accepted episode', { evaluation: 'accepted' }],
+  ])('ids that differ only in letter case, on the event of %s', (_name, options) => {
+    it.each(['editor', 'admin'])('%s: the stored link and place in capitals are unchanged: 200, nothing of the episode moved', async (who) => {
+      const w = await world(options);
+      const before = await snapshot(w);
+      for (const body of [
+        { scene_set_id: w.setA.toUpperCase() },
+        { used_in_episode_id: w.ep.toUpperCase() },
+        { used_in_episode_id: { id: w.ep.toUpperCase() }, scene_set_id: { value: w.setA.toUpperCase() }, description: 'Edited' },
+      ]) {
+        const res = await put(who, w.ev, body);
+        expect(res.status).toBe(200);
+        expect(res.body.code).toBeUndefined();
+      }
+      const after = await snapshot(w);
+      for (const part of ['briefs', 'plans', 'links', 'scenes', 'episodes']) expect(after[part]).toEqual(before[part]);
+      expect(await eventRow(w.ev)).toMatchObject({ description: 'Edited', scene_set_id: w.setA, used_in_episode_id: w.ep });
+    });
+  });
+
+  // A value the route does not read as the stored id is either refused as
+  // malformed before anything is read (400, for anyone), or it is a change:
+  // the 403 for someone who is not an admin. Neither names the episode.
+  describe.each([
+    ['a started event (terms locked)', {}],
+    ['an event whose episode is accepted and filmed', { evaluation: 'accepted', filmed: true }],
+  ])('the stored ids sent back in a shape the route does not unwrap, on %s (not an admin)', (_name, options) => {
+    const MALFORMED = [
+      ['{ id: { id } }', (v) => ({ id: { id: v } })],
+      ['{ value: { id } }', (v) => ({ value: { id: v } })],
+      ['{ value: { value } }', (v) => ({ value: { value: v } })],
+      ['[id]', (v) => [v]],
+      ['{ uuid }', (v) => ({ uuid: v })],
+      ['a number', () => 12345],
+      ['true', () => true],
+    ];
+    it.each(MALFORMED)('the link as %s: 400 before anything is read, nothing of the episode, nothing written', async (_shape, shape) => {
+      const w = await world(options);
+      const before = await snapshot(w);
+      const res = await put('editor', w.ev, { used_in_episode_id: shape(w.ep), name: 'Renamed' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Invalid value for used_in_episode_id');
+      expectNoEpisodeIn(res.body, w);
+      expect(await snapshot(w)).toEqual(before);
+    });
+
+    it.each(MALFORMED)('the place as %s: 400 before anything is read, nothing of the episode, nothing written', async (_shape, shape) => {
+      const w = await world(options);
+      const before = await snapshot(w);
+      const res = await put('editor', w.ev, { scene_set_id: shape(w.setA), name: 'Renamed' });
+      expect(res.status).toBe(400);
+      expectNoEpisodeIn(res.body, w);
+      expect(await snapshot(w)).toEqual(before);
+    });
+
+    it('the link padded with spaces is not the stored id: a change, so the 403', async () => {
+      const w = await world(options);
+      await expectRefused('editor', w, { used_in_episode_id: ` ${w.ep} `, name: 'Renamed' }, ['used_in_episode_id']);
+      await expectRefused('editor', w, { used_in_episode_id: { id: `${w.ep}\n` } }, ['used_in_episode_id']);
+    });
+
+    it('the place padded with spaces is never answered with a body that names the episode, and nothing is written', async () => {
+      const w = await world(options);
+      const before = await snapshot(w);
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      const res = await put('editor', w.ev, { scene_set_id: ` ${w.setA} `, name: 'Renamed' });
+      expect(res.status).not.toBe(200);
+      expect(res.status).not.toBe(409);
+      expectNoEpisodeIn(res.body, w);
+      expect(await snapshot(w)).toEqual(before);
+    });
+  });
+
   describe('an admin saves as before', () => {
     it('links an event to an episode, changes the place of a linked event (its draft episode follows), and unlinks one with no episode started from it', async () => {
       const free = await world({ linked: null });
