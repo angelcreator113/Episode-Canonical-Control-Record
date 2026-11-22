@@ -700,6 +700,9 @@ function call(handler, req) {
       expect(trace.records.filter((r) => r.kind === 'write').map((r) => r.sql)).toHaveLength(1); // the delete's own, undone
       expect(await all(shape, ep)).toEqual(before);
       expect((await one(shape, ids[0])).deleted_at).toBeNull();
+      // The scene the delete was refused for is still live: a live read returns it, first, with its number.
+      expect(await live(shape, ep)).toEqual([[ids[0], 1], [ids[1], 2], [ids[2], 2147483646]]);
+      expect((await reg().models.Scene.findByPk(ids[0])).id).toBe(ids[0]); // the model's own (paranoid) read finds it
       // A delete that needs no renumbering (the last scene) is not in the way of anything.
       expect((await del(reg(), ids[2])).status).toBe(200);
       expect(await live(shape, ep)).toEqual([[ids[0], 1], [ids[1], 2]]);
@@ -707,18 +710,20 @@ function call(handler, req) {
 
     it('a scene added by a route that takes no episode lock, numbered just above the highest, while a reorder is part-way', async () => {
       const ep = await episode();
-      const ids = await seed(shape, ep, [1, 2, 3]);
+      const ids = await seed(shape, ep, [3, 1, 2]); // ids[0] (number 3) is left out of the list: a live scene the reorder does not move
       const before = await all(shape, ep);
       jest.spyOn(console, 'error').mockImplementation(() => {});
       const trace = lockTrace.install(reg().sequelize);
       let res;
       let added;
+      let addedRow;
       try {
         // Held after it read the numbers in use (highest: 3), before its first pass.
         const gate = trace.gate((r) => r.kind === 'lock' && r.table === 'scenes');
-        const reordering = reorder(reg(), ep, [ids[2], ids[1], ids[0]]);
+        const reordering = reorder(reg(), ep, [ids[2], ids[1]]);
         await gate.reached;
         [added] = await seed(shape, ep, [4]); // what createScene and scene duplicate do: highest + 1, no episode lock
+        addedRow = await one(shape, added);
         gate.open();
         res = await reordering;
       } finally { trace.uninstall(); }
@@ -726,15 +731,24 @@ function call(handler, req) {
       if (shape === 'present') {
         // The first waiting number (4) is now taken: the index refuses it, the whole reorder rolls back, and it says so.
         expect(res).toEqual({ status: 500, body: { success: false, error: 'Failed to reorder scenes', message: 'Validation error' } });
+        // The reorder's one transaction ended in a rollback and never committed.
+        expect(trace.records.filter((r) => r.kind === 'commit')).toEqual([]);
+        expect(trace.records.filter((r) => r.kind === 'rollback')).toHaveLength(1);
+        expect(trace.records.filter((r) => r.error).map((r) => r.error)).toEqual(['23505']);
+        // Every row of the episode is as it was, scene_number and updated_at included: the two listed scenes and the
+        // one left out. The scene added meanwhile is exactly as its creator committed it.
         expect((await all(shape, ep)).filter((r) => r.id !== added)).toEqual(before);
-        expect(await live(shape, ep)).toEqual([[ids[0], 1], [ids[1], 2], [ids[2], 3], [added, 4]]);
+        expect(await one(shape, added)).toEqual(addedRow);
+        expect(await live(shape, ep)).toEqual([[ids[1], 1], [ids[2], 2], [ids[0], 3], [added, 4]]);
         // Tried again, it sees the new scene's number and goes above it.
-        expect((await reorder(reg(), ep, [ids[2], ids[1], ids[0]])).status).toBe(200);
+        expect((await reorder(reg(), ep, [ids[2], ids[1]])).status).toBe(200);
       } else {
-        // No index: nothing forbids the shared number mid-way, as before; the end state has no repeat.
+        // No index: nothing refuses the number shared mid-way, as before this change; the reorder goes through.
         expect(res.status).toBe(200);
+        expect((await one(shape, ids[0])).updated_at).toEqual(before.find((r) => r.id === ids[0]).updated_at); // the scene left out is not written
       }
       expect(await live(shape, ep)).toEqual([[ids[2], 1], [ids[1], 2], [ids[0], 3], [added, 4]]);
+      expect(await one(shape, added)).toEqual(addedRow);
     });
 
     it('a list that leaves a scene out whose number the listed ones would take: unchanged from before this change', async () => {
@@ -744,10 +758,17 @@ function call(handler, req) {
       const ids = await seed(shape, ep, [1, 2, 3]);
       const before = await all(shape, ep);
       jest.spyOn(console, 'error').mockImplementation(() => {});
-      const res = await reorder(reg(), ep, [ids[2], ids[1]]);
+      const trace = lockTrace.install(reg().sequelize);
+      let res;
+      try { res = await reorder(reg(), ep, [ids[2], ids[1]]); } finally { trace.uninstall(); }
       jest.restoreAllMocks();
       if (shape === 'present') {
         expect(res).toEqual({ status: 500, body: { success: false, error: 'Failed to reorder scenes', message: 'Validation error' } });
+        // Its one transaction rolled back and never committed; the index's refusal is the only error.
+        expect(trace.records.filter((r) => r.kind === 'commit')).toEqual([]);
+        expect(trace.records.filter((r) => r.kind === 'rollback')).toHaveLength(1);
+        expect(trace.records.filter((r) => r.error).map((r) => r.error)).toEqual(['23505']);
+        // Every row of the episode, the two listed scenes and the one left out, is as it was (updated_at included).
         expect(await all(shape, ep)).toEqual(before);
       } else {
         expect(res.status).toBe(200);
@@ -777,9 +798,11 @@ function call(handler, req) {
         status: 409,
         body: { success: false, error: 'Someone else changed this at the same moment. Nothing was saved: try again.', code: 'RETRY' },
       });
-      const reordered = await reorder(regs.present, ep, [ids[2], ids[1], ids[0]]);
-      expect(reordered.status).toBe(409);
-      expect(reordered.body.code).toBe('RETRY');
+      // The reorder's refusal is the same established body (utils/episodeLocks RetryableConflictError).
+      expect(await reorder(regs.present, ep, [ids[2], ids[1], ids[0]])).toEqual({
+        status: 409,
+        body: { success: false, error: 'Someone else changed this at the same moment. Nothing was saved: try again.', code: 'RETRY' },
+      });
     } finally {
       await holder.rollback();
     }
