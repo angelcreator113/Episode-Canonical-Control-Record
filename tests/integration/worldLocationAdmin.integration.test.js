@@ -755,14 +755,43 @@ const shouldSkip =
       expect((await locationRow(target.id)).venue_type).toBe('salon');
     });
 
-    test('an ADMIN still seeds the infrastructure (what it added is removed again here)', async () => {
-      const before = new Set((await rows('SELECT id FROM world_locations')).map((r) => r.id));
-      const res = await send('post', 'admin', '/api/v1/world/locations/seed-infrastructure', {});
-      const added = (await rows('SELECT id FROM world_locations')).map((r) => r.id).filter((id) => !before.has(id));
-      if (added.length) await run('DELETE FROM world_locations WHERE id IN (:ids)', { ids: added });
+    // The seed is NOT run for real here (Evoni, 2026-11-22). This file runs
+    // against whatever TEST_DATABASE_URL names, and on a developer's machine
+    // that can be the shared local episode_metadata_test: a real seed would
+    // add some thirty-five DREAM locations to it. So the handler's three
+    // model calls are stood in for: WorldLocation.findOne answers "no such
+    // row" and WorldLocation.create writes nothing.
+    //   Exercised: an ADMIN passes requireAuth and authorize(['ADMIN']), the
+    //   real handler runs to its end, asks for each location by slug, asks
+    //   to create each one, and answers its usual success body.
+    //   Not exercised: the INSERTs themselves, the "already there" skip, and
+    //   the rename of an old "Lala's Penthouse" row.
+    // The handler calls no provider and no storage; the suite's last test
+    // asserts that none was called.
+    test('an ADMIN still reaches the seed handler, which answers its usual body (the model writes are stood in for: no row is written)', async () => {
+      const total = await count();
+      const findOne = jest.spyOn(models.WorldLocation, 'findOne').mockResolvedValue(null);
+      const create = jest.spyOn(models.WorldLocation, 'create').mockResolvedValue({});
+      const update = jest.spyOn(models.WorldLocation, 'update');
+      const trace = lockTrace.install(sequelize);
+      let res;
+      try { res = await send('post', 'admin', '/api/v1/world/locations/seed-infrastructure', {}); } finally { trace.uninstall(); }
+      const asked = { findOne: findOne.mock.calls.length, create: create.mock.calls.map(([row]) => row), update: update.mock.calls.length };
+      jest.restoreAllMocks();
       expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.created).toBe(added.length);
+      expect(res.body).toMatchObject({ success: true, renamed: 0, old_penthouse_id: null });
+      expect(res.body.total).toBeGreaterThan(0);
+      expect(res.body.created).toBe(res.body.total);
+      expect(res.body.message).toBe(`Seeded ${res.body.total} DREAM locations across 5 cities`);
+      // The handler asked to create every location of its list, each with a slug, Lala's Home among them.
+      expect(asked.create).toHaveLength(res.body.total);
+      for (const row of asked.create) expect(row).toEqual(expect.objectContaining({ name: expect.any(String), slug: expect.any(String), location_type: expect.any(String) }));
+      expect(asked.create.map((row) => row.slug)).toContain('lala-s-home');
+      expect(asked.findOne).toBeGreaterThanOrEqual(res.body.total);
+      expect(asked.update).toBe(0);
+      // Nothing reached the database: no statement at all, and the table is as it was.
+      expect(trace.records).toEqual([]);
+      expect(await count()).toBe(total);
     });
 
     test('GET /api/v1/tier/world-locations and GET /api/v1/world/locations/studio-types still answer a signed-in account that is not an admin', async () => {
