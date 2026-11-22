@@ -216,7 +216,59 @@ let _db = null;
 function setDb(db) { _db = db; }
 
 function getConfig() { return { ...schedulerConfig }; }
+
+// What a configuration update may set interval_hours and batch_size to
+// (Evoni, 2026-11-22; docs/audit/F-AUTH-1_FeedSchedulerWrites_AdminOnly_Amendment_2026-11-22.md).
+//   batch_size: a whole number from 1 to 20. The Automation panel offers 1 to
+//     20, and the routes cap one request's count at 20.
+//   interval_hours: from 1 to 168. The server starts the scheduler at 4 and
+//     no page sets it. Under an hour nothing here uses; over a week is not a
+//     schedule, and a delay past 2^31-1 ms (about 596 hours) makes setInterval
+//     fire every millisecond.
+// A value that is null or absent is left as it is, as before.
+const CONFIG_LIMITS = Object.freeze({
+  interval_hours: Object.freeze({ min: 1, max: 168, integer: false }),
+  batch_size: Object.freeze({ min: 1, max: 20, integer: true }),
+});
+const CONFIG_REFUSED = 'INVALID_SCHEDULER_CONFIG';
+
+// A JSON number, or text that is only digits (the form the config has always
+// coerced); anything else is not a number here.
+function configNumber(v) {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v.trim())) return Number(v);
+  return NaN;
+}
+
+// Null when every bounded key in `updates` is within its limits; else what to
+// refuse with. Reads only: the whole request is checked before any of it is applied.
+function configRefusal(updates) {
+  if (!updates || typeof updates !== 'object') return null;
+  const fields = [];
+  const parts = [];
+  for (const [key, { min, max, integer }] of Object.entries(CONFIG_LIMITS)) {
+    const v = updates[key];
+    if (v == null) continue;
+    const n = configNumber(v);
+    if (Number.isFinite(n) && n >= min && n <= max && (!integer || Number.isInteger(n))) continue;
+    fields.push(key);
+    parts.push(`${key} must be a ${integer ? 'whole number' : 'number'} from ${min} to ${max}`);
+  }
+  if (!fields.length) return null;
+  return { code: CONFIG_REFUSED, message: `${parts.join('; ')}. Nothing was changed.`, fields };
+}
+
 function updateConfig(updates) {
+  // Refuse before anything is applied: no key set, no interval recalculated,
+  // no timer touched.
+  const refusal = configRefusal(updates);
+  if (refusal) {
+    const err = new Error(refusal.message);
+    err.code = refusal.code;
+    err.status = 400;
+    err.fields = refusal.fields;
+    throw err;
+  }
   for (const [k, v] of Object.entries(updates)) {
     if (k in schedulerConfig && v != null) {
       schedulerConfig[k] = typeof schedulerConfig[k] === 'number' ? Number(v) : v;
@@ -1303,6 +1355,8 @@ module.exports = {
   getHistory,
   getConfig,
   updateConfig,
+  configRefusal,
+  CONFIG_LIMITS,
   runManualCycle,
   setDb,
   generateCreatorSpark,

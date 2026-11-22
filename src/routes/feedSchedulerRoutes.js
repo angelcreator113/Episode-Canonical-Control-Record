@@ -31,6 +31,7 @@ const {
   getHistory,
   getConfig,
   updateConfig,
+  configRefusal,
   runManualCycle,
   generateCreatorSpark,
   generateSmartSparks,
@@ -72,16 +73,27 @@ router.get('/config', requireAuth, (req, res) => {
   res.json(getConfig());
 });
 
-// ── PUT /config ─────────────────────────────────────────────────────────────
-router.put('/config', requireAuth, (req, res) => {
-  const updated = updateConfig(req.body);
-  res.json({ config: updated, message: 'Configuration updated' });
-});
-
 // The scheduler's controls start paid AI work (a full cycle is estimated at
 // $30-50), so they are admin only, and the paid ones rate-limited (SEC-4,
 // Evoni's admin-only ruling 2026-10-29). They were open to any signed-in user.
+// So are the configuration and the two auto-generate routes (Evoni,
+// 2026-11-22): the group check runs after the sign-in and before the rate
+// limiter, the handler, any AI call, any job and any change.
 const admin = [requireAuth, authorize(['ADMIN'])];
+
+// ── PUT /config ─────────────────────────────────────────────────────────────
+// interval_hours and batch_size are bounded (feedScheduler CONFIG_LIMITS). A
+// request with a value outside them is refused whole: nothing is set and the
+// timer is left alone.
+router.put('/config', ...admin, (req, res) => {
+  const refusal = configRefusal(req.body);
+  if (refusal) {
+    console.warn(`[FeedScheduler] config update refused (${refusal.fields.join(', ')}): ${refusal.message}`);
+    return res.status(400).json({ success: false, code: refusal.code, error: refusal.message, message: refusal.message, fields: refusal.fields });
+  }
+  const updated = updateConfig(req.body);
+  return res.json({ config: updated, message: 'Configuration updated' });
+});
 
 // ── POST /start ─────────────────────────────────────────────────────────────
 // startScheduler does nothing unless FEED_SCHEDULER_ENABLED is 'true'; say so
@@ -171,7 +183,7 @@ router.get('/layer-status', requireAuth, async (req, res) => {
 // ── POST /auto-generate ─────────────────────────────────────────────────────
 // Fully automated batch generation — AI creates the sparks AND the profiles.
 // No manual input needed. This replaces the manual "New Creator Spark" form.
-router.post('/auto-generate', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/auto-generate', ...admin, aiRateLimiter, async (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   const layer = req.body.feed_layer || 'real_world';
   const count = Math.min(parseInt(req.body.count) || 5, 20); // max 20 per request
@@ -228,7 +240,7 @@ router.post('/auto-generate', requireAuth, aiRateLimiter, async (req, res) => {
 // Background auto-generation — returns immediately with a job ID so the user
 // can navigate away and generation continues server-side.
 // Progress is tracked via the existing bulk-job SSE infrastructure.
-router.post('/auto-generate-job', requireAuth, aiRateLimiter, async (req, res) => {
+router.post('/auto-generate-job', ...admin, aiRateLimiter, async (req, res) => {
   const db = req.app.locals.db || req.app.get('models') || require('../models');
   const layer = req.body.feed_layer || 'real_world';
   const count = Math.min(parseInt(req.body.count) || 5, 20);
