@@ -148,6 +148,56 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(at(12)).toMatchObject({ scene_set_id: sets.glasshouse, angle_label: 'WIDE' });
   });
 
+  // The plan's read writes nothing (Evoni, 2026-11-22): each beat's scene row
+  // (L12a) is made where the plan is made. No GET is sent in these two tests.
+  const scenesOf = (ep) => rows('SELECT scene_plan_id, scene_number, scene_set_id, background_url FROM scenes WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY scene_number', { ep });
+  const planned = (ep) => rows('SELECT id, beat_number, scene_set_id FROM scene_plans WHERE episode_id = :ep AND deleted_at IS NULL AND scene_set_id IS NOT NULL ORDER BY beat_number', { ep });
+
+  it('Start Episode makes each beat\'s scene row with the plan, with no read of the plan or the scenes', async () => {
+    const event = await readyEvent(sets.glasshouse);
+    const res = await start(event, [
+      { role: 'event', scene_set_id: sets.glasshouse },
+      { role: 'home', scene_set_id: sets.apartment },
+      { role: 'closet', scene_set_id: sets.closet },
+    ]);
+    expect(res.status).toBe(201);
+    const ep = res.body.data.episode.id;
+    const beats = await planned(ep);
+    const scenes = await scenesOf(ep);
+    expect(beats.length).toBeGreaterThanOrEqual(10);
+    // One scene per beat with a set, tied to that beat's plan row, numbered by its beat, at its set.
+    expect(scenes.map((s) => [s.scene_number, s.scene_plan_id, s.scene_set_id])).toEqual(beats.map((b) => [b.beat_number, b.id, b.scene_set_id]));
+    // The arrival beat is on the entrance angle, so its scene shows that angle's image.
+    const [door] = await rows("SELECT still_image_url FROM scene_angles WHERE scene_set_id = :set AND angle_label = 'DOORWAY'", { set: sets.glasshouse });
+    expect(scenes.find((s) => s.scene_number === 10).background_url).toBe(door.still_image_url);
+  });
+
+  it('resuming a partly made episode makes the missing beats and their scene rows, with no read', async () => {
+    const event = await readyEvent(sets.glasshouse);
+    const res = await start(event, [
+      { role: 'event', scene_set_id: sets.glasshouse },
+      { role: 'home', scene_set_id: sets.apartment },
+    ]);
+    expect(res.status).toBe(201);
+    const ep = res.body.data.episode.id;
+    // As a Start that stopped part-way leaves it: three beats, and every scene, not made.
+    await run('DELETE FROM scenes WHERE episode_id = :ep', { ep });
+    await run('DELETE FROM scene_plans WHERE episode_id = :ep AND beat_number IN (10, 11, 12)', { ep });
+    expect(await scenesOf(ep)).toEqual([]);
+    expect((await planned(ep)).map((b) => b.beat_number)).not.toEqual(expect.arrayContaining([10, 11, 12]));
+
+    const resumed = await auth(request(app).post(`/api/v1/episode-brief/${ep}/setup/resume`)).send({});
+    expect(resumed.status).toBe(200);
+    const beats = await planned(ep);
+    expect(beats.map((b) => b.beat_number)).toEqual(expect.arrayContaining([10, 11, 12]));
+    const scenes = await scenesOf(ep);
+    expect(scenes.map((s) => [s.scene_number, s.scene_plan_id, s.scene_set_id])).toEqual(beats.map((b) => [b.beat_number, b.id, b.scene_set_id]));
+
+    // Resuming again makes nothing more.
+    expect((await auth(request(app).post(`/api/v1/episode-brief/${ep}/setup/resume`)).send({})).status).toBe(200);
+    expect(await scenesOf(ep)).toEqual(scenes);
+  });
+
   it('with no closet chosen, the closet beat is at home', async () => {
     const event = await readyEvent(sets.glasshouse);
     const res = await start(event, [

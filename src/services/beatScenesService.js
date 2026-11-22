@@ -16,9 +16,12 @@
  * for no angle uses the event's look on its set, else the set's base image;
  * an angle with no image yet leaves the background empty until it has one.
  *
- * syncBeatScenes runs where the beats are read or changed (the plan, the
- * scenes list the Timeline and the Scenes tab load, a beat's save, export),
- * so a finished image reaches its scene the next time either is opened.
+ * syncBeatScenes runs where the beats are made or changed (Start Episode
+ * and its resume, generate-plan, a beat's save), at export, and when the
+ * scenes list the Timeline and the Scenes tab load is read, so a finished
+ * image reaches its scene the next time that list is opened. The plan's
+ * own read (GET /episode-brief/:episodeId/plan) no longer runs it: that
+ * read writes nothing (Evoni, 2026-11-22).
  * The Timeline's own edits (duration, characters, overlays, dialogue) are
  * kept; the sync writes only the background, set, angle and scene number.
  * A re-plan replaces plan rows: a tied scene whose row is gone moves to the
