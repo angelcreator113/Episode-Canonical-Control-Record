@@ -6,7 +6,7 @@ const router = express.Router();
 const beatService = require('../services/beatService');
 const { Scene, AudioClip } = require('../models');
 const asyncHandler = require('express-async-handler');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, authorize } = require('../middleware/auth');
 
 // ==========================================
 // BEAT AUTO-GENERATION
@@ -95,8 +95,10 @@ router.post('/scenes/:sceneId/beats/preview', requireAuth, asyncHandler(async (r
 /**
  * DELETE /api/v1/scenes/:sceneId/beats/clear
  * Clear all beats and character clips for a scene
+ * A hard delete of both with no restore, so an ADMIN's (Evoni, 2026-11-22;
+ * docs/audit/F-AUTH-1_DestructiveOps_ParseScript_AdminOnly_Amendment_2026-11-22.md).
  */
-router.delete('/scenes/:sceneId/beats/clear', requireAuth, asyncHandler(async (req, res) => {
+router.delete('/scenes/:sceneId/beats/clear', requireAuth, authorize(['ADMIN']), asyncHandler(async (req, res) => {
   const { sceneId } = req.params;
 
   // Verify scene exists

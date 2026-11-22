@@ -5,6 +5,11 @@
 // line-wrapped route declarations that still carry requireAuth inline.
 //
 // Promoted at 8ba2b95c. Static source assertions; diff-lock only.
+//
+// animatic.js also imports authorize since 2026-11-22: its DELETE
+// /scenes/:sceneId/beats/clear is an ADMIN's (Evoni;
+// F-AUTH-1_DestructiveOps_ParseScript_AdminOnly_Amendment_2026-11-22.md).
+// iconSlots.js keeps the requireAuth-only import.
 const fs = require('fs');
 const path = require('path');
 
@@ -16,12 +21,15 @@ const SRC = {
   animatic: read('animatic.js'),
 };
 
+const IMPORT = {
+  iconSlots: /const \{ requireAuth \} = require\(['"]\.\.\/middleware\/auth['"]\)/,
+  animatic: /const \{ requireAuth, authorize \} = require\(['"]\.\.\/middleware\/auth['"]\)/,
+};
+
 describe('F-AUTH-1 FD-63 Shape 3 — multi-line middleware declarations', () => {
   describe.each(Object.entries(SRC))('%s.js', (name, src) => {
     test('imports requireAuth from middleware/auth', () => {
-      expect(src).toMatch(
-        /const \{ requireAuth \} = require\(['"]\.\.\/middleware\/auth['"]\)/
-      );
+      expect(src).toMatch(IMPORT[name]);
     });
 
     test('no optionalAuth survivors, including in comments', () => {
@@ -47,6 +55,14 @@ describe('F-AUTH-1 FD-63 Shape 3 — multi-line middleware declarations', () => 
   ])('%s.js carries %i requireAuth occurrences in total', (name, expected) => {
     const hits = SRC[name].match(/requireAuth/g) || [];
     expect(hits).toHaveLength(expected);
+  });
+
+  test('animatic.js — only the beats clear carries authorize([\'ADMIN\']), after requireAuth', () => {
+    expect(SRC.animatic).toMatch(
+      /router\.delete\('\/scenes\/:sceneId\/beats\/clear', requireAuth, authorize\(\['ADMIN'\]\), asyncHandler\(/
+    );
+    expect(SRC.animatic.match(/authorize\(/g)).toHaveLength(1);
+    expect(SRC.iconSlots).not.toMatch(/authorize/);
   });
 
   test('Shape 3 still exists as a shape — the wrapped declarations are still promoted', () => {

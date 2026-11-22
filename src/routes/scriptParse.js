@@ -24,7 +24,12 @@ const express = require('express');
 const router = express.Router();
 const { parseScript } = require('../utils/scriptBeatParser');
 
-const { requireAuth } = require('../middleware/auth');
+// The two routes that read or replace an episode's own script and scenes are
+// an ADMIN's (Evoni, 2026-11-22): apply-scene-plan can hard-delete every scene
+// of the episode, and parse-script answers with a plan built from its script
+// (docs/audit/F-AUTH-1_DestructiveOps_ParseScript_AdminOnly_Amendment_2026-11-22.md).
+// POST /parse reads only the text the caller posts and stays sign-in.
+const { requireAuth, authorize } = require('../middleware/auth');
 
 /**
  * POST /api/v1/scripts/parse
@@ -79,7 +84,7 @@ router.post('/parse', requireAuth, async (req, res) => {
  * 
  * Returns: Scene Plan JSON
  */
-router.post('/:id/parse-script', requireAuth, async (req, res) => {
+router.post('/:id/parse-script', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -171,7 +176,7 @@ router.post('/:id/parse-script', requireAuth, async (req, res) => {
  * 
  * Returns: Created scenes + Scene Plan metadata
  */
-router.post('/:id/apply-scene-plan', requireAuth, async (req, res) => {
+router.post('/:id/apply-scene-plan', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
     const { content: bodyContent, clearExisting = false } = req.body;
