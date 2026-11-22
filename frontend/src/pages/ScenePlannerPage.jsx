@@ -1,3 +1,4 @@
+import { adminOnlyMessage } from '../utils/authGroups';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
@@ -298,7 +299,7 @@ export default function ScenePlannerPage() {
       setBrief(res.data.data);
       showToast('Brief saved');
     } catch (err) {
-      showToast(err.response?.data?.error || 'Save failed', 'error');
+      showToast(adminOnlyMessage(err) || err.response?.data?.error || 'Save failed', 'error');
     }
   };
 
@@ -309,7 +310,7 @@ export default function ScenePlannerPage() {
       showToast(`Scene plan generated — ${res.data.data.length} beats mapped`);
       await fetchAll();
     } catch (err) {
-      showToast(err.response?.data?.error || 'Generation failed', 'error');
+      showToast(adminOnlyMessage(err) || err.response?.data?.error || 'Generation failed', 'error');
     } finally {
       setGenerating(false);
     }

@@ -1,3 +1,4 @@
+import { adminOnlyMessage } from '../../utils/authGroups';
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
@@ -698,7 +699,7 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
       await checkReadiness();
     } catch (err) {
       console.error('[EpisodeProductionChecklist] resume setup failed:', err);
-      setToast({ msg: err.response?.data?.error || 'Could not resume setup', type: 'error' });
+      setToast({ msg: adminOnlyMessage(err) || err.response?.data?.error || 'Could not resume setup', type: 'error' });
       setTimeout(() => setToast(null), 5000);
     } finally {
       setResuming(false);

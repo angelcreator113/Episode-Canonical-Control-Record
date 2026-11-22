@@ -145,7 +145,7 @@ function track(promise) {
       const f = await seed();
       await sqlDelete(f.episodeId); // outside the app: the refusal above cannot stop it
       process.env.ANTHROPIC_API_KEY = 'stub-not-a-key';
-      const res = await as(userToken)(request(app).post(`/api/v1/world/${f.show}/events/${f.eventId}/generate-episode`)).send({});
+      const res = await as(adminToken)(request(app).post(`/api/v1/world/${f.show}/events/${f.eventId}/generate-episode`)).send({});
       expect(res.status).toBe(409);
       expect(res.body).toMatchObject({ code: 'EVENT_EPISODE_FROZEN', event_id: f.eventId, episode_id: f.episodeId });
       expect(mockAsk.create).not.toHaveBeenCalled();
@@ -155,7 +155,7 @@ function track(promise) {
     test('generate-episode-from-many: 409 EVENT_EPISODE_FROZEN, nothing created', async () => {
       const f = await seed();
       await sqlDelete(f.episodeId);
-      const res = await as(userToken)(request(app).post(`/api/v1/world/${f.show}/events/generate-episode-from-many`)).send({ event_ids: [f.eventId] });
+      const res = await as(adminToken)(request(app).post(`/api/v1/world/${f.show}/events/generate-episode-from-many`)).send({ event_ids: [f.eventId] });
       expect(res.status).toBe(409);
       expect(res.body.code).toBe('EVENT_EPISODE_FROZEN');
       expect(await showEpisodes(f.show)).toEqual([{ id: f.episodeId, live: false }]);
@@ -167,7 +167,7 @@ function track(promise) {
       const other = uuid();
       await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at)
                  VALUES (:other, :show, 'Another episode', 2, 'draft', NOW(), NOW())`, { other, show: f.show });
-      const res = await as(userToken)(request(app).post(`/api/v1/world/${f.show}/events/${f.eventId}/inject`)).send({ episode_id: other });
+      const res = await as(adminToken)(request(app).post(`/api/v1/world/${f.show}/events/${f.eventId}/inject`)).send({ episode_id: other });
       expect(res.status).toBe(409);
       expect(res.body.code).toBe('EVENT_EPISODE_FROZEN');
       expect((await eventRow(f.eventId)).used_in_episode_id).toBe(f.episodeId);

@@ -1,4 +1,5 @@
 // frontend/src/components/Episodes/EpisodeOverviewTab.jsx
+import { adminOnlyMessage } from '../../utils/authGroups';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { CalendarHeart, Tv, Globe, Link2, Briefcase, Zap, Trophy, RefreshCw, X, Sparkles, ArrowRight, ListOrdered, Package } from 'lucide-react';
@@ -363,7 +364,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
       // the field shows its saved value again, so the page never shows an
       // unsaved change as if it were kept.
       if (isFreezeRefusal(err)) setDraft((d) => ({ ...d, [field]: brief[field] ?? (field === 'allowed_outcomes' ? [] : '') }));
-      alert('Save failed: ' + (err?.response?.data?.error || err.message));
+      alert(adminOnlyMessage(err) || 'Save failed: ' + (err?.response?.data?.error || err.message));
     } finally {
       setSavingBrief(false);
     }
@@ -505,7 +506,7 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     } catch (err) {
       console.error('[Episode] Failed to regenerate from the event:', err);
       // The refusal (a filmed episode, a blocked start) in the server's words, on the card.
-      setLinkError(`Could not regenerate the episode: ${err?.response?.data?.error || err.message || 'request failed'}`);
+      setLinkError(adminOnlyMessage(err) || `Could not regenerate the episode: ${err?.response?.data?.error || err.message || 'request failed'}`);
     }
   };
 

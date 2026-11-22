@@ -33,7 +33,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-planner-b2', email: 'user@planner-b2.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-planner-b2', email: 'user@planner-b2.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
       { show, name: `B2 ${show.slice(0, 8)}`, slug: `b2-${show.slice(0, 8)}` });

@@ -37,7 +37,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   beforeAll(async () => {
     await setupStatusMigration.up(sequelize.getQueryInterface(), require('sequelize'));
     token = TokenService.generateTokenPair({
-      id: 'test-user-setup-resume', email: 'user@setupresume.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-setup-resume', email: 'user@setupresume.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     // shows.name is unique: one name per run.
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:id, :name, :slug, '{}', NOW(), NOW())`, { id: showId, name: `Resume show ${showId.slice(0, 8)}`, slug: `resume-${showId.slice(0, 8)}` });

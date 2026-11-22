@@ -186,7 +186,7 @@ const asJson = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
     expect((await propose(ids)).status).toBe(200);
     // Not agreed yet: no snapshot.
     expect(await snapshotOf(ids)).toEqual([]);
-    const started = await as(user, request(app).post(`/api/v1/world/${ids.show}/events/${ids.event}/generate-episode`)).send({});
+    const started = await as(admin, request(app).post(`/api/v1/world/${ids.show}/events/${ids.event}/generate-episode`)).send({});
     expect(started.status).toBeLessThan(300);
 
     const frozen = await snapshotOf(ids);

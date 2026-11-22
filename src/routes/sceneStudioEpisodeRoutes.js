@@ -11,6 +11,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
+const { authorize } = require('../middleware/auth');
 const { ScenePlan, SceneSet, SceneAngle, SceneSetEpisode } = require('../models');
 
 // ── GET VISUAL SEQUENCE FOR EPISODE ──────────────────────────────────────────
@@ -119,7 +120,7 @@ router.get('/:episodeId/visual-sequence', requireAuth, async (req, res) => {
 // ── CHANGE ANGLE FOR BEAT ────────────────────────────────────────────────────
 // PUT /api/v1/scene-studio-episodes/:episodeId/beat/:beatNumber/angle
 // Body: { angle_id }
-router.put('/:episodeId/beat/:beatNumber/angle', requireAuth, async (req, res) => {
+router.put('/:episodeId/beat/:beatNumber/angle', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId, beatNumber } = req.params;
     const { angle_id } = req.body;
@@ -169,7 +170,7 @@ router.put('/:episodeId/beat/:beatNumber/angle', requireAuth, async (req, res) =
 // ── CHANGE SCENE SET FOR BEAT ────────────────────────────────────────────────
 // PUT /api/v1/scene-studio-episodes/:episodeId/beat/:beatNumber/scene-set
 // Body: { scene_set_id }
-router.put('/:episodeId/beat/:beatNumber/scene-set', requireAuth, async (req, res) => {
+router.put('/:episodeId/beat/:beatNumber/scene-set', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { episodeId, beatNumber } = req.params;
     const { scene_set_id } = req.body;

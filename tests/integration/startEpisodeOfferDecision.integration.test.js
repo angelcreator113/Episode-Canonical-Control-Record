@@ -17,6 +17,17 @@
  */
 jest.unmock('uuid');
 
+// The two Start routes are an ADMIN's (authorize(['ADMIN']); Evoni,
+// 2026-11-22), so over HTTP someone who is not an admin gets authorize's 403
+// and never reaches the handler. The offer decision's own check stays as a
+// second layer in the service (startOfferDecision: offerActor.isAdmin, and
+// the terms kept out of what a non-admin is told). This file tests the two
+// layers apart, with no pass around the middleware:
+//   - over HTTP, through the real routes: an admin's Start, and the plain
+//     401 / 403 for anyone else;
+//   - the service itself, asked as the routes ask it but with an actor who
+//     is not an admin (asActor, below), on the same database.
+
 // Start Episode is an AI route (aiRateLimiter: 30 calls in five minutes per
 // address by default); this file starts more episodes than that.
 process.env.AI_RATE_LIMIT_PER_IP = '100000';
@@ -26,6 +37,9 @@ const crypto = require('crypto');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
+const { generateEpisodeFromEvent } = require('../../src/services/episodeGeneratorService');
+const { offerDecisionBody, OFFER_DECISION_CODES } = require('../../src/services/startOfferDecision');
+const { loadScopedEvent } = require('../../src/utils/eventScope');
 
 const { sequelize } = models;
 
@@ -48,7 +62,30 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   // (writes a minute, AI calls in five) count each test apart.
   let ip = 0;
   const from = (r) => r.set('X-Forwarded-For', `10.78.${ip}.1`);
-  const auth = (r) => from(r).set('Authorization', `Bearer ${token}`);
+  // Someone who is not an admin, over HTTP: stopped by the route's ADMIN check.
+  const asEditor = (r) => from(r).set('Authorization', `Bearer ${token}`);
+  /**
+   * The Start service asked directly by an actor who is not an admin, with
+   * the arguments the two routes pass it (episodeGenerate.js, episodeBatch.js:
+   * showId, offerDecision, offerActor, offerReason, offerOpportunityIds; the
+   * from-many route adds secondaryEvents). An offer-decision refusal is
+   * answered as the routes answer it: the error's status, and
+   * offerDecisionBody(error) as the body. Any other error is thrown.
+   */
+  const NOT_ADMIN = { id: 'test-user-offer-decision', isAdmin: false };
+  const asActor = async (event, body = {}, extra = {}) => {
+    const row = await loadScopedEvent(sequelize, { showId: show, eventId: event });
+    try {
+      const result = await generateEpisodeFromEvent(row, models, {
+        showId: show, offerDecision: body.offer_decision, offerActor: NOT_ADMIN,
+        offerReason: body.offer_decision_reason, offerOpportunityIds: body.offer_decision_opportunity_ids, ...extra,
+      });
+      return { started: true, result };
+    } catch (err) {
+      if (!OFFER_DECISION_CODES.includes(err.code)) throw err;
+      return { started: false, status: err.status, body: offerDecisionBody(err) };
+    }
+  };
   const asAdmin = (r) => from(r).set('Authorization', `Bearer ${adminToken}`);
 
   const makeEvent = async (name, opportunityId = null) => {
@@ -74,7 +111,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     return { opp, event };
   };
   const start = (event, body = {}) =>
-    auth(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false, ...body });
+    asAdmin(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false, ...body });
   // An admin's decision about these offers, with a reason (A1).
   const decide = (event, opps, decision, body = {}) =>
     asAdmin(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({
@@ -253,7 +290,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   it('generate-episode-from-many asks for the anchor\'s decision the same way', async () => {
     const { opp, event } = await scheduled('Anchor offer', 'offered');
     const url = `/api/v1/world/${show}/events/generate-episode-from-many`;
-    const refused = await auth(request(app).post(url)).send({ event_ids: [event] });
+    const refused = await asAdmin(request(app).post(url)).send({ event_ids: [event] });
     expect(refused.status).toBe(409);
     expect(refused.body).toMatchObject({ code: 'OFFER_DECISION_REQUIRED', opportunity: { id: opp } });
     const ok = await asAdmin(request(app).post(url)).send({
@@ -266,10 +303,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   // ── A1 (Evoni, 2026-11-13): who, why, which offers ──
 
-  it('a decision is an admin\'s: anyone else is refused 403 and nothing is started, changed or recorded', async () => {
+  it('a decision is an admin\'s: the service refuses anyone else 403 and nothing is started, changed or recorded', async () => {
     const { opp, event } = await scheduled('Admin only', 'offered');
     for (const decision of ['accept', 'negotiate', 'decline', 'proceed_unaccepted']) {
-      const res = await start(event, { offer_decision: decision, offer_decision_opportunity_ids: [opp], offer_decision_reason: 'Trying' });
+      const res = await asActor(event, { offer_decision: decision, offer_decision_opportunity_ids: [opp], offer_decision_reason: 'Trying' });
       expect(res.status).toBe(403);
       expect(res.body.code).toBe('OFFER_DECISION_FORBIDDEN');
     }
@@ -395,7 +432,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
 
   it('the question says whether the person asking can answer it', async () => {
     const { opp, event } = await scheduled('Who can answer', 'offered');
-    const editor = await start(event);
+    const editor = await asActor(event);
     expect(editor.status).toBe(409);
     expect(editor.body).toMatchObject({ code: 'OFFER_DECISION_REQUIRED', can_decide: false, opportunity: { id: opp } });
     expect(editor.body.error).toMatch(/An admin decides/);
@@ -445,6 +482,47 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(await auditOf(opp)).toHaveLength(1);
   });
 
+  // ── Evoni, 2026-11-22: Start Episode is an ADMIN's, at the route ──
+  describe('over plain HTTP, someone who is not an admin is stopped by the route', () => {
+    const AUTHORIZE_BODY = { error: 'Forbidden', message: 'User must be in one of these groups: ADMIN', code: 'AUTH_GROUP_REQUIRED' };
+    const SENDS = [
+      ['generate-episode', (event, body = {}) => asEditor(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false, ...body })],
+      ['generate-episode-from-many', (event, body = {}) => asEditor(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [event], ...body })],
+    ];
+    it.each(SENDS)('%s: 403 from authorize, with or without a decision; nothing started, changed or recorded, and nothing of the offer in the answer', async (route, send) => {
+      const opp = await makeOpp(`Route check ${route}`, 'offered', { payment: 987654, paymentType: 'usage_buyout_zq', brand: 'Maison Zephyrine' });
+      const event = await makeEvent(`Route check ${route}`, opp);
+      await run('UPDATE opportunities SET event_id = :event WHERE id = :opp', { event, opp });
+      const bodies = [{}, { offer_decision: 'book_it' },
+        ...['accept', 'negotiate', 'decline', 'proceed_unaccepted'].map((d) => ({ offer_decision: d, offer_decision_opportunity_ids: [opp], offer_decision_reason: 'Trying' }))];
+      for (const body of bodies) {
+        const res = await send(event, body);
+        expect(res.status).toBe(403);
+        expect(res.body).toEqual(AUTHORIZE_BODY);
+        expect(JSON.stringify(res.body)).not.toContain(opp);
+      }
+      expect(await episodesOf(event)).toHaveLength(0);
+      const row = await oppRow(opp);
+      expect(row.status).toBe('offered');
+      expect(row.status_history).toHaveLength(1);
+      expect(await auditOf(opp)).toHaveLength(0);
+    });
+
+    it('a settled offer changes nothing: still 403, no episode', async () => {
+      const { event } = await scheduled('Route check settled', 'booked');
+      for (const [, send] of SENDS) expect((await send(event)).status).toBe(403);
+      expect(await episodesOf(event)).toHaveLength(0);
+    });
+
+    it('signed out: 401, nothing started', async () => {
+      const { event } = await scheduled('Route check signed out', 'offered');
+      const one = await from(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false });
+      const many = await from(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [event] });
+      expect([one.status, many.status]).toEqual([401, 401]);
+      expect(await episodesOf(event)).toHaveLength(0);
+    });
+  });
+
   // ── Security review of 2026-11-13: the deal's terms never go to someone who cannot decide ──
   describe('what each Start route sends about the offer', () => {
     // An amount, a type and a brand that appear nowhere else in an answer.
@@ -460,11 +538,17 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       ['generate-episode', (as, event, body = {}) => as(request(app).post(`/api/v1/world/${show}/events/${event}/generate-episode`)).send({ draft_script: false, ...body })],
       ['generate-episode-from-many', (as, event, body = {}) => as(request(app).post(`/api/v1/world/${show}/events/generate-episode-from-many`)).send({ event_ids: [event], ...body })],
     ];
+    // What the service is passed beyond the decision by each route: nothing
+    // more by generate-episode; the other events of the start (here none) by
+    // generate-episode-from-many.
+    const SERVICE_ARGS = { 'generate-episode': {}, 'generate-episode-from-many': { secondaryEvents: [] } };
 
     describe.each(ROUTES)('%s', (route, call) => {
-      it('the question, to someone who is not an admin: which offer waits, and nothing of its terms', async () => {
+      const ask = (event, body) => asActor(event, body, SERVICE_ARGS[route]);
+
+      it('the question, to someone who is not an admin (the service, as this route asks it): which offer waits, and nothing of its terms', async () => {
         const { opp, event } = await withTerms(`Private terms ${route}`, 'negotiating');
-        const res = await call(auth, event);
+        const res = await ask(event);
         expect(res.status).toBe(409);
         expect(res.body.code).toBe('OFFER_DECISION_REQUIRED');
         expect(res.body.can_decide).toBe(false);
@@ -475,10 +559,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
         expect(await episodesOf(event)).toHaveLength(0);
       });
 
-      it('a decision refused 403, to someone who is not an admin: nothing of its terms', async () => {
+      it('a decision refused 403, to someone who is not an admin (the service): nothing of its terms', async () => {
         const { opp, event } = await withTerms(`Refused terms ${route}`, 'offered');
         for (const decision of ['accept', 'negotiate', 'decline', 'proceed_unaccepted']) {
-          const res = await call(auth, event, { offer_decision: decision, offer_decision_opportunity_ids: [opp], offer_decision_reason: 'Trying' });
+          const res = await ask(event, { offer_decision: decision, offer_decision_opportunity_ids: [opp], offer_decision_reason: 'Trying' });
           expect(res.status).toBe(403);
           expect(res.body.code).toBe('OFFER_DECISION_FORBIDDEN');
           expect(res.body.opportunities).toEqual([{ id: opp, name: `Refused terms ${route} ${TAG}`, status: 'offered' }]);
@@ -488,21 +572,36 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
         expect((await oppRow(opp)).status).toBe('offered');
       });
 
-      it('an unknown decision from someone who is not an admin: nothing of its terms', async () => {
+      it('an unknown decision from someone who is not an admin (the service): nothing of its terms', async () => {
         const { event } = await withTerms(`Odd decision ${route}`, 'offered');
-        const res = await call(auth, event, { offer_decision: 'book_it' });
+        const res = await ask(event, { offer_decision: 'book_it' });
         expect(res.status).toBe(400);
         expect(JSON.stringify(res.body)).not.toMatch(SECRET);
       });
 
-      it('a start that needs no decision, by someone who is not an admin: it starts, and the answer holds nothing of the settled offer\'s terms', async () => {
+      it('a start that needs no decision, by an actor who is not an admin (the service): it starts, and what it returns holds nothing of the settled offer\'s terms', async () => {
         const { opp, event } = await withTerms(`Settled terms ${route}`, 'booked');
-        const res = await call(auth, event);
-        expect(res.status).toBe(201);
-        expect(res.body.success).toBe(true);
+        const res = await ask(event);
+        // The routes answer 201 with { success: true, data: <this result> }.
+        expect(res.started).toBe(true);
+        expect(res.result.episode.id).toBeTruthy();
         expect(await episodesOf(event)).toHaveLength(1);
-        expect(JSON.stringify(res.body)).not.toMatch(/987654|usage_buyout_zq|Maison Zephyrine/);
-        expect(JSON.stringify(res.body)).not.toContain(opp);
+        expect(JSON.stringify(res.result)).not.toMatch(/987654|usage_buyout_zq|Maison Zephyrine/);
+        expect(JSON.stringify(res.result)).not.toContain(opp);
+      });
+
+      it('over HTTP someone who is not an admin gets none of it: 403 from authorize, with nothing of the offer or its terms', async () => {
+        const { opp, event } = await withTerms(`HTTP terms ${route}`, 'negotiating');
+        const bodies = [{}, { offer_decision: 'book_it' }, { offer_decision: 'accept', offer_decision_opportunity_ids: [opp], offer_decision_reason: 'Trying' }];
+        for (const body of bodies) {
+          const res = await call(asEditor, event, body);
+          expect(res.status).toBe(403);
+          expect(res.body).toEqual({ error: 'Forbidden', message: 'User must be in one of these groups: ADMIN', code: 'AUTH_GROUP_REQUIRED' });
+          expect(JSON.stringify(res.body)).not.toMatch(SECRET);
+          expect(JSON.stringify(res.body)).not.toContain(opp);
+        }
+        expect(await episodesOf(event)).toHaveLength(0);
+        expect((await oppRow(opp)).status).toBe('negotiating');
       });
 
       it('an admin still gets the offer with its terms: the question, a refusal, and what was decided', async () => {

@@ -39,7 +39,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   };
 
   beforeAll(async () => {
-    token = TokenService.generateTokenPair({ id: 'test-user-cover', email: 'user@cover.dev', name: 'Editor', groups: ['USER'], role: 'USER' }).accessToken;
+    token = TokenService.generateTokenPair({ id: 'test-user-cover', email: 'user@cover.dev', name: 'Editor', groups: ['ADMIN'], role: 'ADMIN' }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, metadata, created_at, updated_at) VALUES (:show, :name, :slug, CAST('{}' AS jsonb), NOW(), NOW())`,
       { show, name: `Cover ${TAG}`, slug: `cover-${TAG}` });
     await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at) VALUES (:ep, :show, 'The Gala', 3, 'draft', NOW(), NOW())`, { ep, show });

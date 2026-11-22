@@ -37,8 +37,8 @@ const REQUIREMENTS = { reputation_min: 3 };
       id: 'test-user-terms-lock',
       email: 'test@terms-lock.dev',
       name: 'Terms Lock Test',
-      groups: ['USER', 'EDITOR'],
-      role: 'USER',
+      groups: ['ADMIN'],
+      role: 'ADMIN',
     }).accessToken;
   });
 

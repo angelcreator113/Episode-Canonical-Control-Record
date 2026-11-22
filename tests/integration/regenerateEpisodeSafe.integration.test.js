@@ -35,8 +35,8 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
       id: 'test-user-safe-regenerate',
       email: 'test@safe-regenerate.dev',
       name: 'Safe Regenerate Test',
-      groups: ['USER', 'EDITOR'],
-      role: 'USER',
+      groups: ['ADMIN'],
+      role: 'ADMIN',
     }).accessToken;
   });
 
