@@ -926,6 +926,37 @@ function briefDb(models) {
 const GENERATED_NOT_SAVED = 'generated_not_saved';
 const GENERATED_NOT_SAVED_MESSAGE = 'The image was generated but it was not saved. Generating it again costs again.';
 
+// The pause the generation paths ask the Place finalizer for between tries
+// that lost to a lock (utils/placeLock retryDelayMs; Evoni, 2026-11-23).
+// The rows it can lose to are held by single short transactions
+// (makeEventVersion, makeEveryday, approveBase): a quarter of a second
+// outlasts them, and three tries add at most half a second.
+const PLACE_FINALIZE_RETRY_DELAY_MS = 250;
+
+// The save failing for another reason (a database error that is no lock
+// conflict and no refusal): the picture is generated and stored, the save
+// is rolled back whole. Still a failure (the route's 500), told apart from
+// a failed generation by this code. The answer carries these fixed
+// sentences, never the database's own message.
+const GENERATED_SAVE_FAILED = 'GENERATED_SAVE_FAILED';
+const GENERATED_SAVE_FAILED_ERROR = 'The image was generated and stored, but saving it failed. Nothing was saved.';
+const GENERATED_SAVE_FAILED_MESSAGE = 'The image was generated and stored, but saving it failed. Generating it again costs again.';
+
+/** An error's class for a log line: its name and its SQLSTATE or code. Never its message, SQL or parameters. */
+function errorClassOf(err) {
+  const name = String(err?.name || 'Error').replace(/[^\w.-]/g, '');
+  const code = String(err?.original?.code || err?.parent?.code || err?.code || '').replace(/[^\w.-]/g, '');
+  return code ? `${name}/${code}` : name;
+}
+
+/** Marks an error as "generated and stored, the save failed"; the same error is thrown on, so its other catchers see what they did. */
+function markSaveFailed(err) {
+  if (err && typeof err === 'object') {
+    Object.defineProperty(err, 'generatedSaveFailed', { value: true, enumerable: false, configurable: true });
+  }
+  return err;
+}
+
 /** Thrown when a generated picture was not saved: .code is the finalizer's outcome code. */
 class PlaceFinalizeRefusal extends Error {
   constructor(result = {}) {
@@ -960,7 +991,7 @@ function storageKeyOf(url) {
  * is known of the cost. Nothing deletes those objects: the line is how they
  * are found.
  */
-function generatedNotSavedLine({ keys = [], eventId = null, setId = null, code, attempts = null, costUsd = null, estimateUsd = null, usageLogIds = [] } = {}) {
+function generatedNotSavedLine({ keys = [], eventId = null, setId = null, code, attempts = null, costUsd = null, estimateUsd = null, usageLogIds = [], errorClass = null } = {}) {
   const stored = (keys || []).filter(Boolean);
   const cost = typeof costUsd === 'number' ? `$${costUsd}` : 'unknown';
   const estimate = typeof estimateUsd === 'number' ? `$${estimateUsd}` : 'unknown';
@@ -968,6 +999,7 @@ function generatedNotSavedLine({ keys = [], eventId = null, setId = null, code, 
     + ` storage_keys=${stored.length ? stored.join(',') : 'none (no bucket is configured: nothing was stored)'}`
     + ` event=${eventId || 'none'} set=${setId || 'none'} outcome=${code || 'unknown'} attempts=${attempts ?? 'n/a'}`
     + ` cost=${cost} estimate=${estimate} usage_log_ids=${(usageLogIds || []).length ? usageLogIds.join(',') : 'none'}`
+    + (errorClass ? ` error=${errorClass}` : '')
     + '; nothing was deleted from storage';
 }
 
@@ -984,6 +1016,19 @@ function priorBaseStatus(sceneSet, given) {
   const own = sceneSet?.generation_status;
   if (RESTORABLE_STATUSES.includes(own)) return own;
   return sceneSet?.base_still_url ? 'complete' : 'pending';
+}
+
+/** The reason alone, in base_generation.last_error with failed_at; the status is not touched. Never throws. */
+async function recordBaseLastError(db, setId, reason) {
+  try {
+    await db.query(
+      `UPDATE scene_sets SET base_generation = COALESCE(base_generation, '{}'::jsonb)
+              || jsonb_build_object('last_error', CAST(:reason AS text), 'failed_at', NOW()), updated_at = NOW()
+        WHERE id = :id`,
+      { replacements: { id: setId, reason: String(reason || 'not saved').slice(0, 500) } });
+  } catch (err) {
+    console.error(`[SceneGen] set ${setId}: the reason its picture was not saved could not be recorded:`, err.message);
+  }
 }
 
 /**
@@ -1006,8 +1051,7 @@ async function restoreBaseAfterRefusal(db, setId, prior, reason) {
     if (Array.isArray(restored) && restored.length) return true;
     // No longer generating (another writer moved it on): its status is
     // left as it is; the reason is still kept.
-    await db.query(`UPDATE scene_sets SET ${lastError}, updated_at = NOW() WHERE id = :id`,
-      { replacements: { id: setId, reason: replacements.reason } });
+    await recordBaseLastError(db, setId, replacements.reason);
     return false;
   } catch (err) {
     console.error(`[SceneGen] set ${setId}: its status could not be put back after an unsaved picture:`, err.message);
@@ -1155,7 +1199,8 @@ async function generateBaseScene(sceneSet, models, options = {}) {
         else await run();
         return { outcome: 'OK', code: 'OK' };
       };
-    const orphan = (code, attempts) => generatedNotSavedLine({
+    const orphan = (code, attempts, errorClass = null) => generatedNotSavedLine({
+      errorClass,
       keys: [storageKeyOf(stillUrl)],
       eventId: brief?.event_id || options.eventId || options.environmentEventId || null,
       setId: sceneSet.id,
@@ -1173,7 +1218,12 @@ async function generateBaseScene(sceneSet, models, options = {}) {
         console.warn(`[SceneGen] ${sceneSet.name}: base approved during generation; new still not kept (${stillUrl})`);
         await restoreBaseAfterRefusal(db, sceneSet.id, priorStatus, saveErr.message);
       } else {
-        console.error(orphan('SAVE_FAILED', null));
+        // The save failed for another reason: rolled back whole. The set is
+        // marked failed below, as a failed final write always was; the
+        // reason kept on it is a fixed sentence, not the database's.
+        console.error(orphan('SAVE_FAILED', null, errorClassOf(saveErr)));
+        await recordBaseLastError(db, sceneSet.id, GENERATED_SAVE_FAILED_MESSAGE);
+        markSaveFailed(saveErr);
       }
       throw saveErr;
     }
@@ -2834,6 +2884,12 @@ module.exports = {
   PlaceFinalizeRefusal,
   GENERATED_NOT_SAVED,
   GENERATED_NOT_SAVED_MESSAGE,
+  GENERATED_SAVE_FAILED,
+  GENERATED_SAVE_FAILED_ERROR,
+  GENERATED_SAVE_FAILED_MESSAGE,
+  PLACE_FINALIZE_RETRY_DELAY_MS,
+  errorClassOf,
+  markSaveFailed,
   generatedNotSavedLine,
   storageKeyOf,
   priorBaseStatus,

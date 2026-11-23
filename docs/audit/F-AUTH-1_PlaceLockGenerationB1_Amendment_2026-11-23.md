@@ -1,9 +1,9 @@
-| **PRIME STUDIOS** **F-AUTH-1 — THE PLACE LOCK, GENERATION B1: `generate-venue` SAVES THROUGH THE FINALIZER (AMENDMENT)** *The two paid paths of `generate-venue` (a new venue; the missing base of the set the event has) now save what they generated in the Foundation A finalizer's transaction. A save refused after the picture was made answers 409 `generated_not_saved`: nothing is written, nothing is deleted from storage, the provider is not called again. Event looks, dressed angles, the venue-look draft, the Locations save and Start Episode are not changed.* |
+| **PRIME STUDIOS** **F-AUTH-1 — THE PLACE LOCK, GENERATION B1: `generate-venue` SAVES THROUGH THE FINALIZER (AMENDMENT)** *The two paid paths of `generate-venue` (a new venue; the missing base of the set the event has) now save what they generated in the Foundation A finalizer's transaction. A save refused after the picture was made answers 409 `generated_not_saved`: nothing is written, nothing is deleted from storage, the provider is not called again. A save that fails for another reason stays a 500, told apart by a code. The finalizer gains one opt-in pause between tries that lost to a lock. Event looks, dressed angles, the venue-look draft, the Locations save and Start Episode are not changed.* |
 | --- |
 
 **Document version**
 
-v1.0. This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
+v1.1 (v1.0 was this file before Evoni's review of the same day, on the same unmerged branch; §2 "Her review", §5a, the 500 in §4 and the test lists are what changed). This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
 - The FD tail, XK tail and PE tail are unchanged.
 - No earlier register file is edited, and no banner is added to one.
 
@@ -56,6 +56,24 @@ How it is built, in her words:
 
 > "Before adding database operations inside finalizer callbacks, trace Scene Set and angle creation hooks for implicit writes or side effects. Verify every helper involved accepts and actually uses the transaction, including relevant nested calls. If a hidden hook performs work outside the transaction, stop and report the smallest safe correction before proceeding."
 
+## Her review of the change (RULED, 2026-11-23)
+
+On the set-row lock and the three immediate tries (§5, §5a):
+
+> "Keep NOWAIT for the set-row lock because it avoids the identified opposing lock-order deadlock. However, three immediate retries may prematurely abandon an already-paid generation. Before changing code, inspect Foundation A's retry helper and propose the smallest backward-compatible way to introduce a bounded delay between eligible lock-contention retries. Requirements: Maximum three attempts remains unchanged. Delay happens outside all transactions. No paid provider or storage operation is repeated. Non-retryable errors and Place-lock refusals are never retried. Existing callers keep their current behavior unless separately approved. Preserve the established exhaustion response and strict locking guarantees. Test a transient row lock, persistent lock, real acceptance in both orders and the established timeout behavior. If introducing this safely requires expanding Foundation A in an unexpected way, stop and report before modifying it."
+
+On a save that fails for a reason that is no refusal (§4):
+
+> "Do not classify an unexpected database exception as PLACE_LOCKED. Preserve the existing HTTP 500 behavior and safe error code, but distinguish 'image generated and stored, database finalization failed' through consistent structured error metadata. Do not expose SQL, stack traces or private storage credentials. Log known stored-object keys, event, outcome, error classification and known cost. Preserve rollback of all database work inside the finalizer. Do not delete stored images automatically or rerun paid generation. Before modifying response contracts, identify any existing callers and tests that depend on the current HTTP 500 body. Reuse existing error conventions."
+
+On the look panel (§8):
+
+> "Leave the incomplete read-field integration for B2. Do not expand B1 to change the B2-reserved read path. Ensure B1 does not introduce a regression into the current Event look panel."
+
+And on the new venue:
+
+> "A generated venue must not report successful Scene Set creation if required angle creation or event-location synchronization fails. Use one finalizer transaction for its required database writes. Keep optional provider-based post-success work outside the retryable callback."
+
 No migration, table, endpoint, lock service, synchronization service, cleanup service, permission model or second generation pipeline is created.
 
 # §3. What was verified before the callbacks were written (MEASURED)
@@ -94,43 +112,46 @@ Sequelize fills `created_at` and `updated_at` itself at `create`. To honour "gen
 | `syncEpisodeEventLocation` (`src/services/eventPlaceSync.js:26-70`) | Takes `transaction`. All seven statements go through its `opts()` (`:28`), which adds the transaction. It calls nothing else that queries (`episodeEventIdSql` builds text). It reads only episodes that are not accepted. |
 | `baseReplaceRefusal` (`src/services/approvedBaseService.js:40-48`) | **Did not take a transaction** at the basis, though `locationApprovingSet` did. It now takes `{ transaction }` and passes it on. Its other callers pass none and are unchanged. |
 | `locationApprovingSet` (`:23-32`) | One `SELECT`, given the transaction. |
-| `finalizePlaceWrite` (`src/utils/placeLock.js`) | Not changed. |
+| `finalizePlaceWrite` (`src/utils/placeLock.js`) | Its checks, locks, tries and outcomes are not changed. One opt-in option is added on her ruling (§5a). |
 
 ## The last-error mechanism
 
-`markBaseFailed` (`src/services/venueLookImageService.js:361-369`) is the one writer of `scene_sets.base_generation.last_error` and `failed_at`; it also sets `generation_status = 'failed'`, in one statement, and lives in a file this change may touch in one place only (§7). It cannot be reused without marking the set failed. `restoreBaseAfterRefusal` (`src/services/sceneGenerationService.js:997-1016`) writes the same two keys in the same shape (`jsonb_build_object('last_error', CAST(:reason AS text), 'failed_at', NOW())`, the reason cut to 500 characters) and does not set `failed`.
+`markBaseFailed` (`src/services/venueLookImageService.js:361-369`) is the one writer of `scene_sets.base_generation.last_error` and `failed_at`; it also sets `generation_status = 'failed'`, in one statement, and lives in a file this change may touch in one place only (§7). It cannot be reused without marking the set failed. `restoreBaseAfterRefusal` (`src/services/sceneGenerationService.js:1042-1061`) writes the same two keys in the same shape (`jsonb_build_object('last_error', CAST(:reason AS text), 'failed_at', NOW())`, the reason cut to 500 characters) and does not set `failed`.
 
 # §4. What the change does (MEASURED on the branch)
 
-## The new venue: `generateVenueImages` (`src/services/venueGenerationService.js:174-352`)
+## The new venue: `generateVenueImages` (`src/services/venueGenerationService.js:174-355`)
 
 1. `sourceSetId = event.scene_set_id ?? null`, from the row the route loaded, before anything is generated (`:176`).
 2. Outside the transaction, as before: the briefs, the interior and exterior provider calls, the downloads, the two storage puts. The provider calls are given an `onLogged` callback, so the cost and `ai_usage_logs` ids they were logged with are known afterwards. The object keys written are collected (`uploadToS3`, `:35-44`).
 3. Before the transaction: the set's id, the angles' ids, one timestamp, and the whole rows (`:249-308`).
-4. `finalizePlaceWrite(sequelize, event.id, { sourceSetId, work })` (`:340`). `work({ transaction })` (`:315-325`), every statement with that transaction and no `catch`: `SceneSet.create`, the `SceneAngle.create`s, `UPDATE world_events SET scene_set_id`, then `syncEpisodeEventLocation({ eventId, fromSetId: sourceSetId, toSetId, transaction })`. A new model instance is built on each try.
-5. `OK`: what the route answered before. Any other outcome: one log line (below) and a `PlaceFinalizeRefusal`. An error thrown by `work` that is no lock conflict is rolled back by the helper and thrown on, after the same log line with `outcome=SAVE_FAILED`.
+4. `finalizePlaceWrite(sequelize, event.id, { sourceSetId, work, retryDelayMs })` (`:341`; the pause is §5a). `work({ transaction })` (`:315-325`), every statement with that transaction and no `catch`: `SceneSet.create`, the `SceneAngle.create`s, `UPDATE world_events SET scene_set_id`, then `syncEpisodeEventLocation({ eventId, fromSetId: sourceSetId, toSetId, transaction })`. A new model instance is built on each try.
+5. `OK`: what the route answered before. Any other outcome: one log line (below) and a `PlaceFinalizeRefusal`. An error thrown by `work` that is no lock conflict is rolled back by the helper and thrown on, marked as a failed save, after the same log line with `outcome=SAVE_FAILED` and the error's class.
+6. Nothing provider-based runs after the save on this path: the venue has no analysis or style call. Every required write (the set, each angle, the event's move, the episode's Event location) is in the one transaction, so none can fail and leave the venue answered as created.
 
 The two `catch` blocks that swallowed a failed create or a failed link are gone. A failed statement now fails the save as a whole: before, a venue whose angles failed to insert was still answered as "scene set created".
 
-## The missing base: `generateBaseScene` (`src/services/sceneGenerationService.js:1047-1257`)
+## The missing base: `generateBaseScene` (`src/services/sceneGenerationService.js:1091-1307`)
 
 One pipeline, with two new options. Callers that pass neither behave as before except where this section says so.
 
 - `options.finalize`: `async (work) => { outcome, code, message, attempts }`. Not given: one plain `sequelize.transaction` around `work`.
-- `options.priorStatus`: the status put back on a refusal. Not given (`priorBaseStatus`, `:982-987`): the row's own status when it is `pending`, `complete` or `failed`; else (the caller's claim already marked it `generating`) `complete` with a base and `pending` without, the rule the cascade route uses (`src/routes/sceneSetRoutes.js:2505`). Never `generating`, never `uncertain`.
+- `options.priorStatus`: the status put back on a refusal. Not given (`priorBaseStatus`, `:1014-1019`): the row's own status when it is `pending`, `complete` or `failed`; else (the caller's claim already marked it `generating`) `complete` with a base and `pending` without, the rule the cascade route uses (`src/routes/sceneSetRoutes.js:2505`). Never `generating`, never `uncertain`.
 
 In order:
-1. The marker (`:1070-1073`): one statement, `generation_status = 'generating'` only. `base_runway_prompt` is no longer written here; it is written with the picture. (After a failed run the set keeps its earlier prompt. The readers of that column are the Scene Sets page's "prompt" disclosure and the angle-suggestion context, `sceneSetRoutes.js:1553`.)
+1. The marker (`:1114-1117`): one statement, `generation_status = 'generating'` only. `base_runway_prompt` is no longer written here; it is written with the picture. (After a failed run the set keeps its earlier prompt. The readers of that column are the Scene Sets page's "prompt" disclosure and the angle-suggestion context, `sceneSetRoutes.js:1553`.)
 2. The provider call and the storage put, as before.
-3. Everything the final write needs, built before the save (`:1094-1121`).
-4. `finalize(work)`. `work({ transaction })` (`:1135-1150`): lock the set row; ask whether the base was approved meanwhile, in the transaction; the final `UPDATE`, with the prompt.
+3. Everything the final write needs, built before the save (`:1138-1165`).
+4. `finalize(work)`. `work({ transaction })` (`:1179-1194`): lock the set row; ask whether the base was approved meanwhile, in the transaction; the final `UPDATE`, with the prompt.
 5. `OK`: then, outside the transaction and as before, `repointBaseAngles`, `deleteOldBaseImage`, `noteBaseChanged`, the analysis and the style call.
-6. Not `OK` (`:1180-1185`): `restoreBaseAfterRefusal`; the log line; `throw new PlaceFinalizeRefusal(outcome)`.
-7. Approved meanwhile (`:1172-1174`): the same `ApprovedBaseError` and message as before. The status is put back to what it was instead of always to `complete`, and the reason is now kept in `last_error` (a set with an approved base that was `complete` before reads `complete` after, as before).
+6. Not `OK` (`:1230-1235`): `restoreBaseAfterRefusal`; the log line; `throw new PlaceFinalizeRefusal(outcome)`.
+7. Approved meanwhile (`:1217-1219`): the same `ApprovedBaseError` and message as before. The status is put back to what it was instead of always to `complete`, and the reason is now kept in `last_error` (a set with an approved base that was `complete` before reads `complete` after, as before).
 
-`venue.js:143-153` passes `finalize: (work) => finalizePlaceWrite(sequelize, event.id, { sourceSetId: attached.id, work })`. No other caller passes a `finalize` in B1.
+8. The save throwing anything else (`:1220-1227`): the log line with `outcome=SAVE_FAILED` and the error's class; the fixed sentence of the 500 below kept in `last_error` with `failed_at`; the error marked as a failed save and thrown on unchanged, so the set is marked `failed` by the `catch` below it exactly as a failed final write was at the basis (`sceneGenerationService.js:1077-1084` there).
 
-## The route's answers (`src/routes/worldEvents/venue.js:101-195`)
+`venue.js:143-155` passes `finalize: (work) => finalizePlaceWrite(sequelize, event.id, { sourceSetId: attached.id, work, retryDelayMs })`. No other caller passes a `finalize` in B1.
+
+## The route's answers (`src/routes/worldEvents/venue.js:101-211`)
 
 The early Place check and the "already available" answer are where they were, before the provider key is looked for and before any marker. Their bodies are unchanged.
 
@@ -153,13 +174,44 @@ A save refused after the picture was made is HTTP **409**, never the 500:
 
 `outcome` is the field the route already answered `generated`, `already_available` and `failed` in; `message` is the free-text field its success answers already carry. No field is added. The early refusal has no `outcome`, as before.
 
-An error thrown inside the save that is no lock conflict (a constraint violation, a lost connection) is still the route's 500 `{ success: false, outcome: "failed", error }`. Everything is rolled back, and the stored objects are logged with `outcome=SAVE_FAILED`. See §8.
+### A save that fails for another reason (her ruling, §2)
+
+An error inside the save that is no lock conflict and no refusal (a constraint violation, a lost connection, any exception from a required write). It is never answered as `PLACE_LOCKED` or `generated_not_saved`, and never as a set created.
+
+What depended on the 500 body, read before it was changed:
+
+| Reader | What it reads |
+|---|---|
+| The frontend | Nothing. `grep -rn "generate-venue" frontend/src scripts` finds one test file, which asserts the route is **not** called (`EventLibrary.venueBrief.test.jsx:70, 98`). No page calls the route. |
+| `tests/integration/venueAttachedSet.integration.test.js:208-209` | A provider failure: status 500, `toMatchObject({ success: false, outcome: 'failed' })`. Not this case, and still true of it. |
+| `p2bSceneSetAdmin`, `venueBrief`, `tests/unit/routes/world-cluster-tier-promotion.test.js` | No 500 body. |
+
+At the basis, and for every other failure still, the body is `{ success: false, outcome: "failed", error: err.message }`, HTTP 500 (429 for a budget refusal): `error` is the exception's own message. For a provider failure that is the provider's text, as before, and it is left exactly so. For a database error it is the database's message, which names tables and constraints. There was no `code` on this route's 500.
+
+The repository's convention for a 5xx that must not echo the exception is a fixed `error` sentence with a stable `code` (`src/routes/sceneSetRoutes.js:299, 318`: `{ success: false, error: 'Scene sets could not be read', code: 'SCENE_SETS_UNAVAILABLE', … }`; `src/utils/aiFailure.js:44`). That is what is used. No new field: `code` and `message` are fields the route's other answers already carry.
+
+```
+HTTP 500
+{ "success": false,
+  "outcome": "failed",
+  "code":    "GENERATED_SAVE_FAILED",
+  "error":   "The image was generated and stored, but saving it failed. Nothing was saved.",
+  "message": "The image was generated and stored, but saving it failed. Generating it again costs again." }
+```
+
+- The status, `success` and `outcome` are what they were. `code` tells it from a failed generation (which has none).
+- `error` and `message` are fixed sentences. The exception's message, SQL, parameters, constraint detail and stack are not sent.
+- The server logs the `[GeneratedNotSaved]` line (below) with `outcome=SAVE_FAILED` and `error=<error name>/<SQLSTATE or code>`, and one line `[VenueGen] generated, the save failed (<class>)`. For this case the exception itself is not logged: a database error's parameters can carry the provider's signed URL when no bucket is configured. Every other failure is logged as it was (`console.error('[VenueGen] Error:', err)`).
+- Everything the finalizer's transaction wrote is rolled back by the helper (not changed). Nothing is deleted from storage. The provider is not called again.
+- On the missing-base path the set is marked `failed`, as at the basis for a failed final write, and `last_error` holds the `message` sentence.
+
+How it is carried: the error thrown is the original one, with a non-enumerable `generatedSaveFailed` mark (`markSaveFailed`, `sceneGenerationService.js:953-958`), so `generateBaseScene`'s other callers see the same error and message they saw before.
 
 ## The three callers that mark a base failed
 
 | Caller | Now |
 |---|---|
-| `generateBaseScene`'s own `catch` (`sceneGenerationService.js:1248-1256`) | Skips `ApprovedBaseError` (as before) and `PlaceFinalizeRefusal`. |
+| `generateBaseScene`'s own `catch` (`sceneGenerationService.js:1298-1306`) | Skips `ApprovedBaseError` (as before) and `PlaceFinalizeRefusal`. |
 | The `generate-base` route (`sceneSetRoutes.js:1442-1451`) | The same two. |
 | The look's base step (`venueLookImageService.js:244-250`) | Returns on `PlaceFinalizeRefusal` before `markBaseFailed`. Everything else, an approval meanwhile included, is marked failed as before: that flow is B2's. |
 
@@ -169,7 +221,7 @@ The worker (`src/workers/sceneGenerationWorker.js:190-191`, `:258`) marks a set 
 
 ## The log line
 
-One `console.error` line per picture that was made and not saved (`generatedNotSavedLine`, `sceneGenerationService.js:963-972`):
+One `console.error` line per picture that was made and not saved (`generatedNotSavedLine`, `sceneGenerationService.js:994-1004`):
 
 ```
 [GeneratedNotSaved] an image was generated and not saved: storage_keys=venues/<event id>/<uuid>-venue.png,venues/<event id>/<uuid>-exterior.png event=<event id> set=none outcome=PLACE_LOCKED attempts=1 cost=$0.08 estimate=$0.08 usage_log_ids=<id>,<id>; nothing was deleted from storage
@@ -177,7 +229,7 @@ One `console.error` line per picture that was made and not saved (`generatedNotS
 
 - `storage_keys`: the object keys (for a base, `scene-sets/<set id>/stills/<ms>-base.jpg`). Never a URL, a host or a query string. With no bucket configured the venue path stores nothing and the line says `none (no bucket is configured: nothing was stored)`.
 - `cost`: the sum the provider calls were logged with; `unknown` when none was priced. `estimate`: the rate-table estimate. `usage_log_ids`: the `ai_usage_logs` rows.
-- `outcome`: the code, or `SAVE_FAILED`.
+- `outcome`: the code, or `SAVE_FAILED`. With `SAVE_FAILED` the line also carries ` error=<error name>/<SQLSTATE or code>` before the last clause (for example `error=SequelizeForeignKeyConstraintError/23503`): the class, never the message, the SQL or its parameters. `attempts` reads `n/a` there: the helper throws such an error on the try it happened in and does not say which.
 
 ## The frontend (display only)
 
@@ -201,11 +253,44 @@ Inside the finalizer the order is the one Foundation A set: the linked episodes 
 
 A base save that holds the event row and then **waits** for the set row closes a circle with the first two: each holds what the other waits for. This is so whether the wait is an explicit row lock or the `UPDATE`'s own: `FOR NO KEY UPDATE` conflicts with their `FOR UPDATE` as `FOR UPDATE` does, so neither of the two options first considered (a weaker explicit lock, or no explicit lock) removes it. PostgreSQL would break the circle after `deadlock_timeout` by aborting whichever waiter checks first, here the existing `makeEventVersion` (it began waiting first), which has no retry.
 
-**The decision: the set row is locked `FOR NO KEY UPDATE NOWAIT` when the save runs under a caller's finalizer** (`sceneGenerationService.js:1137-1141`). The save never waits for a set row while it holds the event row, so it can be in no such circle. A held set row is PostgreSQL 55P03 at once; the finalizer treats 55P03 as a lock conflict, rolls back (releasing the event row and the episodes) and tries again, up to three times in all. With no caller's finalizer (the Scene Sets `generate-base`, the cascade, the look's base step, the model comparison) nothing else is held, and the lock is a plain `FOR NO KEY UPDATE` that waits, as the `UPDATE` always did.
+**The decision: the set row is locked `FOR NO KEY UPDATE NOWAIT` when the save runs under a caller's finalizer** (`sceneGenerationService.js:1181-1185`). The save never waits for a set row while it holds the event row, so it can be in no such circle. A held set row is PostgreSQL 55P03 at once; the finalizer treats 55P03 as a lock conflict, rolls back (releasing the event row and the episodes) and tries again, up to three times in all. With no caller's finalizer (the Scene Sets `generate-base`, the cascade, the look's base step, the model comparison) nothing else is held, and the lock is a plain `FOR NO KEY UPDATE` that waits, as the `UPDATE` always did.
 
-What that costs, plainly: the three tries follow one another with no pause (the helper has none, and it is not changed here). When the set row's holder is itself waiting for this event, the first rollback lets it through and the second try queues behind it at the event row: saved on try two (raced with the real `makeEventVersion`, §9). When the holder is not waiting for this event and holds the set row for longer than three immediate tries take, the save ends `PLACE_FINALIZE_RETRY_EXHAUSTED` and the picture is not saved. The existing holders are single short transactions, so this is expected to be rare (INFERRED); it is not impossible. A pause between tries would be a change to the Foundation A helper and is not made here.
+Ruled kept (§2). What it cost in v1.0 of this change: the three tries followed one another with no pause, so a set row held for a few milliseconds longer than three tries take ended `PLACE_FINALIZE_RETRY_EXHAUSTED` with a picture already paid for. §5a is the answer to that.
+
+When the set row's holder is itself waiting for this event, the first rollback lets it through and the next try queues behind it at the event row (raced with the real `makeEventVersion`, §9).
 
 The restore after a refusal is one statement outside any transaction; it waits for the set row like any other write, holding nothing.
+
+# §5a. The pause between tries (RULED §2; MEASURED)
+
+## What was read first in the helper (at the basis, `src/utils/placeLock.js:182-197`)
+
+- The loop calls `attemptPlaceFinalize` up to three times. Each call opens its own transaction and has committed or rolled it back before it returns or throws (`:75`, `:93`, `:100`, `:105`, `:113`, `:123`, `:126`). So between two iterations no transaction, lock or connection is held: a pause placed there holds nothing.
+- A try is repeated for two kinds of reason: a link that changed between the read and the locks (`EVENT_LINK_CHANGED`, `:99-102`), and a lock conflict caught at `:125-131` (PostgreSQL 40P01 or 55P03, or a `RetryableConflictError` thrown by `work`). The three refusals return at once; any other error is thrown at once.
+- Its callers: at the basis, none in the application; on this branch, the two of B1 (`venueGenerationService.js:341`, `venue.js:151`). Its suite (`placeLockFinalizer`) pins the attempts, the outcomes, the 55P03 timings and the module's exact exports (`Object.keys(placeLock)`).
+
+## The change (`src/utils/placeLock.js`)
+
+One optional option, `retryDelayMs`, default `0`.
+
+- **Default 0: no pause, exactly as before.** A caller that does not pass it is unchanged; the existing suite passes without an edit (§9).
+- **Bound:** a finite number from 0 to 2000 (`finalizePlaceWrite.MAX_RETRY_DELAY_MS`). Anything else (negative, `NaN`, `Infinity`, above the bound, a string, `null`) is an error thrown before any transaction, as a bad `lockTimeout` is. It is not clamped: a wrong value is a caller's mistake, and silence would hide it.
+- **Where:** in the loop, after a try returned "try again" and before the next begins (`:225`). The lost try's transaction is finished by then.
+- **When:** only after a lock conflict (40P01, 55P03, `RetryableConflictError`). `attemptPlaceFinalize` now says which kind of retry it is (`contention: true` from its `catch`). After `EVENT_LINK_CHANGED` the next try is immediate, as before: nothing is being waited for there, the new link is simply locked on the next try.
+- **Never:** after the last try; before a refusal (`PLACE_LOCKED`, `STALE_SOURCE_SET`, `EVENT_DELETED`); before a thrown error. Those end at once, as before.
+- **Unchanged:** three tries at most; every check repeated on every try; the lock order; the 10-second lock wait; the outcomes and the exhaustion result's shape; `work` once per try. The pause repeats nothing paid: `work` is database work only.
+- The timer is `finalizePlaceWrite.retryPause.sleep`, and the bound `finalizePlaceWrite.MAX_RETRY_DELAY_MS`: both on the function, not on the module, whose exports the suite pins. The stale comment "No route calls it yet" is corrected (comment only).
+
+Nothing else in the helper needed to change, and `episodeLocks.js` is not touched.
+
+## What B1 passes: 250 ms, on both paths
+
+`PLACE_FINALIZE_RETRY_DELAY_MS = 250` (`sceneGenerationService.js:934`), passed by both call sites.
+
+- The lock it is for is the `NOWAIT` set-row lock of the missing-base path. Its holders are single short transactions (`makeEventVersion`, `makeEveryday`, `approveBase`: a handful of statements). A quarter of a second outlasts them by a wide margin; three tries now span at least half a second instead of a few milliseconds.
+- The cost is at most two pauses: half a second added to a request that has already waited many seconds for a provider.
+- The new-venue path takes no `NOWAIT` lock, but its tries can lose to a deadlock (40P01) or a lock wait that ran out (55P03) on the episode, event or episode-location rows. A pause after a deadlock lets the other transaction finish before the same rows are asked for again; after a 10-second wait it is negligible. Both paths pass the same value so that one number describes the behaviour.
+- A row held for longer than that by a transaction that is not waiting for this event still ends `PLACE_FINALIZE_RETRY_EXHAUSTED`, with the established answer. The pause makes that rare; it does not make it impossible.
 
 # §6. A refusal after the picture was made: the contract
 
@@ -231,14 +316,14 @@ What exists to find the object afterwards is the one log line of §4, in the app
 - **The Locations save and Start Episode are not changed (B3).** `episodeLocationsService` and `episodeGeneratorService` take their own locks in their own order. Until B3, a Locations save can still deadlock with a finalization (it holds episode-location rows the sync writes, and then needs rows the finalization holds), and a Start Episode can still write the set an event had before a finalization moved it.
 - **The acceptance-against-event-writer deadlocks remain (C1).** B1 adds none (§5) and removes none.
 - **Saved scenes are not frozen (S1).**
-- **The acceptance code is not changed**, nor `src/utils/placeLock.js`, `looks.js`, `episodeBriefRoutes.js`, the worker, or the World Location delete. The helper's own comment still says "No route calls it yet" (`src/utils/placeLock.js:28-29`); it is left, because that file is outside this change. `generate-venue` now calls it.
+- **The acceptance code is not changed**, nor `looks.js`, `episodeBriefRoutes.js`, `episodeLocks.js`, the worker, or the World Location delete. `src/utils/placeLock.js` gains the one option of §5a and a corrected comment, and nothing else.
 - **Deployment.** The unit is Foundation A, the `generate-venue` Place check (#3926) and all of B (B1, B2 and B3) together, never one of them alone. Deployed without B2 and B3, B1 closes the race on one route and leaves the others open, and adds the Locations-save deadlock named above. This amendment authorizes no deployment.
 
 # §8. Limits and open points
 
-- **A save that fails for another reason is still a 500 "failed"** (§4). The picture was generated and stored in that case too, so "generated, not saved" would describe it; it is not mapped to `generated_not_saved` because that outcome's `code` is the finalizer's refusal code and there is no established generic one. The stored keys are logged with `outcome=SAVE_FAILED`. On the missing-base path the set is marked `failed`, as a failed final write was before. Left for Evoni to rule.
-- **Retry exhaustion on a held set row** (§5).
-- **The look panel's new display has no data yet.** `eventLook` (`venueLookImageService.js:413`) sends `scene_set.error` only when the set is `failed`, and sends no `failed_at` or `generated_at`. That line is in the file B1 may change in one place only, so it was left. `EventLookImage` shows the reason when the read carries `error`, `failed_at` and `generated_at` on `scene_set`; until the read sends them (B2), the panel shows a not-saved base as it did before. The Scene Sets page's correction needs no server change and is complete.
+- **A save that fails for another reason is a 500 "failed" with `GENERATED_SAVE_FAILED`** (§4; ruled, §2).
+- **Retry exhaustion on a set row held for longer than the three tries and their two pauses** (§5a).
+- **The look panel's new display has no data yet.** `eventLook` (`venueLookImageService.js:413`) sends `scene_set.error` only when the set is `failed`, and sends no `failed_at` or `generated_at`. Ruled left for B2 (§2): the read path is not changed. `EventLookImage` shows the reason when the read carries `error`, `failed_at` and `generated_at` on `scene_set`; until the read sends them, the panel shows a not-saved base as it did before. **With today's read the panel is as it was**: `baseNotSaved` needs a `failed_at`, which today's read never sends, so every branch it guards takes the path it took at the basis; a Vitest file with today's payload (a base generating, failed with and without a reason, complete, absent, and no set) passes against the component at the basis and on the branch (§9). The Scene Sets page's correction needs no server change and is complete.
 - **`generate-venue`'s missing-base path takes no claim.** Two requests for the same set at once both pay, as before.
 - **The doubles.** The provider and the object storage are test doubles in every run here. No provider was called and nothing was stored.
 - **The live schema and the running processes were not verified.** Tables, columns, triggers and foreign keys are read from `src/migrations` and from a local database built by them. `deadlock_timeout` and the worker's database role on any server were not read. No server was contacted.
@@ -248,7 +333,7 @@ What exists to find the object afterwards is the one log line of §4, in the app
 
 On a private, migrated local PostgreSQL test database, through the real app. The image provider (`axios`) and the object storage (`S3Client`) are doubles. No test sends DDL. The network guard reports 0 external attempts for every run below.
 
-`tests/integration/placeLockGenerationB1.integration.test.js` (48 cases), against the real acceptance (`completeEpisode`, a real two-part completion made by the season routes and Start Episode), the real event `PUT` and the real `makeEventVersion`. A latch in the provider double holds a generation open while something else commits; other interleavings are held with the statement trace's gate or a second transaction, and a wait is seen in `pg_stat_activity`, not slept for.
+`tests/integration/placeLockGenerationB1.integration.test.js` (56 cases), against the real acceptance (`completeEpisode`, a real two-part completion made by the season routes and Start Episode), the real event `PUT` and the real `makeEventVersion`. A latch in the provider double holds a generation open while something else commits; other interleavings are held with the statement trace's gate or a second transaction, and a wait is seen in `pg_stat_activity`, not slept for.
 
 - **New venue.** Saved with the same 200 body; one provider call and one put per image; the set, two angles, the event link and the sync in one transaction that ends in a commit, with no such write outside it; the stored `created_at` / `updated_at` are the timestamp made before it. The draft episode's Event location and its free beat move and its locked beat stays, row for row what a real event `PUT` to the same set does to a twin episode. An event with no set and no episode.
 - **Accepted during generation** (a real completion committed while the provider double is held), for a primary event and for an event linked by its stamp alone: 409 `generated_not_saved` `PLACE_LOCKED` with the established text; one provider call per image; the puts happened and nothing was deleted; the event row (with `updated_at` and `scene_set_id`), every set, angle, episode link, plan and scene of the show equal before and after; no writing statement to those tables; one log line with the stored keys, the event, the outcome and the usage-log ids, and no `?`, signature or URL in any error line.
@@ -256,25 +341,29 @@ On a private, migrated local PostgreSQL test database, through the real app. The
 - **A two-part special**, on both paths: Part 1 accepted and Part 2's `UPDATE` held in its real window (refused under the strict rule), and the full two-part completion.
 - **The set changed during generation** (a real event `PUT`; and no set, then one chosen): `STALE_SOURCE_SET`, the newer set kept, nothing written. **The event soft-deleted**: `EVENT_DELETED`.
 - **Retries.** New venue: the event's links change between the finalizer's read and its locks on tries one and two, saved on try three, the provider and storage used once, one set row; on all three tries, `PLACE_FINALIZE_RETRY_EXHAUSTED`. A lock conflict raised inside the save after the set insert: that try rolled back whole, the next writes the same ids once. Missing base: the set row really held by another transaction (55P03 from `NOWAIT`, three times, in well under one lock timeout), exhausted; held on tries one and two and freed, saved on try three. The helper's `lockTimeout` test seam is not used: no production caller passes it.
-- **A partial write**: the second angle insert, and the sync, made to throw: no set, no angle, the event and the episode's rows as they were; the route's 500 "failed"; the `SAVE_FAILED` line.
+- **A save that fails for another reason** (§4), with an error shaped as the database driver's (a message naming a table and a constraint, SQL, parameters holding a signed URL). New venue, thrown at each required write in turn (the second angle insert; the event's move to the new set; the sync): the 500 body exactly; never a 200, `outcome: "generated"` or `data`; nothing of the error in the body (no SQL keyword, constraint text, stack frame, URL or `?`); the event row and every set, angle, episode link, plan and scene equal before and after; one provider call and one put per image, nothing deleted, no second try and no pause; the log line with the keys, the event, `outcome=SAVE_FAILED`, `error=SequelizeForeignKeyConstraintError/23503`, the cost and the usage-log ids; no error line carrying the message, SQL, URL or signature. Missing base, thrown at the final set update: the same body; the set `failed` with the fixed sentence in `last_error`; the image columns equal; everything else equal.
+- **The pause** (§5a) on the generation paths: none after a changed link (saved on try three, and exhausted); one of 250 ms after a lock conflict inside the new venue's save; the missing base with its set row held when the save begins and let go during the pause (a transient lock): saved on try two, one pause, and during it no session but the holder's inside a transaction and the lost try's transaction rolled back; held throughout: three tries, two pauses, the established exhaustion answer; against the real `makeEventVersion`: one 55P03, one pause, both commit.
+- **What the source still says**: `requireAuth, authorize(['ADMIN']), aiRateLimiter` on `generate-venue`, in that order; the early Place check before the provider key, `generateBaseScene` and `generateVenueImages`; no storage delete in the venue service; both call sites passing the same pause.
 - **Missing base.** Saved as before; the marker is one autocommit statement `SET "generation_status"=…,"updated_at"=…` with no prompt, and the prompt is written once, in the final write, in the finalizer's transaction; the trace reads `E:episodes:share, W:world_events:update, X:scene_sets:update, X:scene_sets:write` and the set lock ends `FOR NO KEY UPDATE NOWAIT`. Accepted during generation with the set `pending` before and `failed` before: the status put back, the image columns equal, `last_error` and `failed_at` kept, one write to the set, nothing deleted. An attempt in flight on the set: the marker is refused by the database guard as before, and nothing is generated.
 - **The set row against the real `makeEventVersion`**, both orders: the save holding the event row while the version holds the set row and waits for the event (no 40P01; one 55P03; the version commits; the save commits on its next try); the save holding both first (the version waits holding nothing; no lock conflict).
 - **The three callers**, with a `finalize` that refuses: `generateBaseScene` itself (the typed error; `complete` with its old base put back, the old base neither replaced nor deleted; `pending` for a claimed set; a given `priorStatus`; never `uncertain`; a row another writer moved on is left), the `generate-base` route, and the look's base step: not marked failed. For each, a provider failure is still marked failed. With no `finalize`: one plain transaction and a waiting set lock. The base approved while the picture was being made: refused as before, `complete` put back, the reason kept.
 - **The early refusal**, on both paths: the same body, with no `outcome`; no provider call, nothing stored, no writing statement.
 
-Also run on that database, unchanged and passing: `p2bSceneSetAdmin` (in full: its early-refusal pins and both success paths), `placeLockStrict`, `placeLockFinalizer`, `sceneGenerationPlannedFlows`, `eventPlaceSync`, `worldLocationAdmin`; `tests/unit/routes`, `tests/unit/guards`, `tests/unit/middleware`, the `tests/unit/services/scene*` suites, `tests/unit/queues` and `tests/unit/workers`. One note on `sceneGenerationPlannedFlows`: it runs on the default daily image budget ($10) and passed unchanged in the first run; after several runs of the new suite the scratch database's logged spend for the day was above that budget (the new suite then left its `ai_usage_logs` rows behind), and one of its cases was refused by the budget gate before the provider double. The new suite now removes the usage rows it logs, by id, as `approvedBase` does; `sceneGenerationPlannedFlows` passes on that same database with `AI_DAILY_IMAGE_BUDGET_USD` raised for the run.
+`tests/integration/placeLockFinalizer.integration.test.js`: its 31 cases are not edited; 21 are added, each named "retryDelayMs: …" (52 in all). Not given, or 0: no pause, a lock conflict tried again at once. A transient row lock let go during the pause: saved on try two, one pause, and during it the lost try's transaction is rolled back and no session but the holder's is inside a transaction (`pg_stat_activity`). A real timer waited between tries. A persistent lock: three tries, two pauses, the exhaustion result equal field for field. The three refusals and an error that is no lock conflict: one try, no pause. A changed link: tried again at once. The 10-second `SET LOCAL lock_timeout` still issued; a real 55P03 at a held event row (shortened through the existing `lockTimeout` seam) let go during the pause: saved after one pause. Seven invalid values refused before any transaction; the maximum accepted. A real acceptance in both orders, for both kinds of event, and the two-part window, with the pause asked for: the outcomes of the cases without it, and no pause. Run three times in a row, passing each time. **Control:** with `src/utils/placeLock.js` put back to the basis, none of the 31 existing cases fails; 20 of the 21 new ones do (the one that passes asks only that the maximum be accepted, which the basis does by ignoring it).
 
-Frontend (Vitest): `SceneSetsTab.baseNotSaved.test.jsx` (7) and `EventLookImage.notSaved.test.jsx` (5): the success toast on a real success, on a success after an older recorded error, and the recorded sentence on a run that was not saved; with the page's and the panel's existing suites.
+Also run on that database, unchanged and passing: `p2bSceneSetAdmin` (in full: its early-refusal pins and both success paths), `placeLockStrict`, `sceneGenerationPlannedFlows`, `eventPlaceSync`, `worldLocationAdmin`; `tests/unit/routes`, `tests/unit/guards`, `tests/unit/middleware`, the `tests/unit/services/scene*` suites, `tests/unit/queues` and `tests/unit/workers`. One note on `sceneGenerationPlannedFlows`: it runs on the default daily image budget ($10) and passed unchanged in the first run; after several runs of the new suite the scratch database's logged spend for the day was above that budget (the new suite then left its `ai_usage_logs` rows behind), and one of its cases was refused by the budget gate before the provider double. The new suite now removes the usage rows it logs, by id, as `approvedBase` does; `sceneGenerationPlannedFlows` passes on that same database with `AI_DAILY_IMAGE_BUDGET_USD` raised for the run.
 
-**Control.** With the six changed backend source files put back to the basis (`git checkout origin/main --` on them, then restored), 40 of the 48 cases fail and 8 pass. The 8 are the ones that describe what did not change: an event with no set and no episode, no provider key and a failing provider (both paths), the attempt in flight, the two early refusals, the network guard, and one case the basis satisfies by ignoring the option it is given (a `finalize` that runs the work twice ends with the base saved either way). That run used an 8-second limit per case (`GENB1_TEST_TIMEOUT_MS`), since a case that holds an interleaving the basis never reaches waits out its whole limit; the suite's own limit is 90 seconds.
+Frontend (Vitest): `SceneSetsTab.baseNotSaved.test.jsx` (7) and `EventLookImage.notSaved.test.jsx` (5): the success toast on a real success, on a success after an older recorded error, and the recorded sentence on a run that was not saved; with the page's and the panel's existing suites. `EventLookImage.todaysPayload.test.jsx` (7): the panel with the read as it is today, passing on the branch and, as a control, against `EventLookImage.jsx` at the basis.
 
-**No existing test was changed.**
+**Control (v1.0 of the suite, 48 cases).** With the six changed backend source files put back to the basis (`git checkout origin/main --` on them, then restored), 40 of the 48 cases fail and 8 pass. The 8 are the ones that describe what did not change: an event with no set and no episode, no provider key and a failing provider (both paths), the attempt in flight, the two early refusals, the network guard, and one case the basis satisfies by ignoring the option it is given (a `finalize` that runs the work twice ends with the base saved either way). That run used an 8-second limit per case (`GENB1_TEST_TIMEOUT_MS`), since a case that holds an interleaving the basis never reaches waits out its whole limit; the suite's own limit is 90 seconds.
+
+**No test that existed at the basis was changed.** Cases were added to `placeLockFinalizer`; its existing cases are not edited.
 
 **Not run locally, by the rule that a local run sends no DDL** (each runs `ALTER TABLE` or a migration's `up()` / `down()` in its own setup; CI runs them): `approvedBase`, `venueAttachedSet`, `venueBrief`, `venueLookImage`, `sceneGenerationLegacyCompat`, `sceneGenerationGuards`, `sceneBrief`, `sceneBriefShown`, `sceneEventChoice`, `sceneBaseModelComparison`, `baseDescriptionReview`, `workerRestrictedRole`. They exercise `generateBaseScene` and `generate-venue` and were read against this change: `approvedBase`'s late-approval case sets the set `complete` before the run, so the status put back is `complete`, as it asserts; the others read the prompt only after a run that completed. The late-approval behaviour and the default path are covered locally by the new suite.
 
 ---
 
 **Type:** amendment.
-**Rules:** `generate-venue`'s new-venue and missing-base paths save through `finalizePlaceWrite`; a save refused after the picture was made is 409 `generated_not_saved`, with the contract of §6, on Evoni's authorization quoted in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** nothing.
+**Rules:** `generate-venue`'s new-venue and missing-base paths save through `finalizePlaceWrite`; a save refused after the picture was made is 409 `generated_not_saved`, with the contract of §6; a save that fails for another reason is a 500 `GENERATED_SAVE_FAILED`; `finalizePlaceWrite` takes an opt-in pause between tries that lost to a lock; on Evoni's authorization and rulings quoted in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** nothing.
 **Host/AWS/DB/Cognito contact (this session):** the tests ran against a local PostgreSQL test database in the session's own container. No deployed host, AWS service, production or development database, or Cognito pool was contacted for this change, and no paid provider was called.
 **Production standing:** as the newest Fix Plan revision states it (`F-Deploy-1_Fix_Plan_v1.56.md`, footer): "Production's freeze is lifted (`F-Deploy-1_Fix_Plan_v1.53.md` §1)". What an agent session may do in production is set by `CLAUDE.md` and `F-Tools-5_AgentProductionAccess_Ruling_2026-10-31.md`.

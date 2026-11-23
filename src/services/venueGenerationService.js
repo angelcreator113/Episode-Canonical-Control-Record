@@ -325,8 +325,9 @@ async function generateVenueImages(event, models, options = {}) {
   };
 
   const { finalizePlaceWrite, PLACE_FINALIZE_OUTCOMES } = require('../utils/placeLock');
-  const { PlaceFinalizeRefusal, generatedNotSavedLine } = require('./sceneGenerationService');
-  const orphan = (code, attempts) => generatedNotSavedLine({
+  const { PlaceFinalizeRefusal, generatedNotSavedLine, errorClassOf, markSaveFailed, PLACE_FINALIZE_RETRY_DELAY_MS } = require('./sceneGenerationService');
+  const orphan = (code, attempts, errorClass = null) => generatedNotSavedLine({
+    errorClass,
     keys: storedKeys,
     eventId: event.id,
     code,
@@ -337,10 +338,12 @@ async function generateVenueImages(event, models, options = {}) {
   });
   let saved;
   try {
-    saved = await finalizePlaceWrite(models.sequelize, event.id, { sourceSetId, work });
+    saved = await finalizePlaceWrite(models.sequelize, event.id, { sourceSetId, work, retryDelayMs: PLACE_FINALIZE_RETRY_DELAY_MS });
   } catch (err) {
-    console.error(orphan('SAVE_FAILED', null));
-    throw err;
+    // No lock conflict and no refusal: a required write failed, and the
+    // helper rolled all of them back. Not answered as a set created.
+    console.error(orphan('SAVE_FAILED', null, errorClassOf(err)));
+    throw markSaveFailed(err);
   }
   if (saved.outcome !== PLACE_FINALIZE_OUTCOMES.OK) {
     console.error(orphan(saved.code, saved.attempts));

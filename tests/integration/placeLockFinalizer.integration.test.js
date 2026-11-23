@@ -666,6 +666,23 @@ const settle = (promise) => promise.then(
       expect([await evaluationOf(w.partOne), await evaluationOf(w.partTwo)]).toEqual(['accepted', 'accepted']);
       expect((await finalizePlaceWrite(sequelize, w.ev, { sourceSetId: w.set, work })).outcome).toBe(O.PLACE_LOCKED);
     });
+
+    test('retryDelayMs: the two-part window with the pause asked for: refused at once, as without it; no pause', async () => {
+      const w = await twoParter();
+      const pause = jest.spyOn(finalizePlaceWrite.retryPause, 'sleep');
+      const holder = await holdTransaction();
+      await lockEpisodes(sequelize, [w.partTwo], { transaction: holder, mode: 'share' });
+      const acceptance = settle(completeEpisode(w.partTwo, w.show, sequelize));
+      await waitForLockWait(sequelize, `%UPDATE episodes SET evaluation_status = %accepted%${w.partTwo}%`);
+      expect(await evaluationOf(w.partOne)).toBe('accepted');
+      const { work, calls } = writer();
+      expect(await finalizePlaceWrite(sequelize, w.ev, { sourceSetId: w.set, work, retryDelayMs: 250 })).toMatchObject({ outcome: O.PLACE_LOCKED, attempts: 1 });
+      expect(calls).toHaveLength(0);
+      expect(pause).not.toHaveBeenCalled();
+      await holder.rollback();
+      const a = await acceptance;
+      if (!a.ok) throw a.error;
+    });
   });
 
   describe('against an event-first writer: the event PUT changing the scene set (its INSERT of the episode\'s Event location)', () => {
@@ -711,6 +728,245 @@ const settle = (promise) => promise.then(
       expect(calls).toHaveLength(1);
       expect(await eventRow(ev)).toMatchObject({ scene_set_id: setB, venue_name: 'Finalised' });
       expect(await eventLocations(ep)).toEqual([{ scene_set_id: setB }]);
+    });
+  });
+
+  // The pause between tries (retryDelayMs; Evoni, 2026-11-23). Every case
+  // name here begins "retryDelayMs:"; the cases above are as they were.
+  describe('retryDelayMs: the pause between tries that lost to a lock', () => {
+    const DELAY = 250;
+    const pauses = () => jest.spyOn(finalizePlaceWrite.retryPause, 'sleep');
+    /** `work` that takes a set row without waiting (as the base save does), then writes. */
+    function setRowWriter(set) {
+      const { work, calls } = writer();
+      return {
+        calls,
+        work: async (ctx) => {
+          calls.push('try');
+          await sequelize.query('SELECT id FROM scene_sets WHERE id = :set FOR NO KEY UPDATE NOWAIT', { replacements: { set }, transaction: ctx.transaction });
+          calls.pop();
+          return work(ctx);
+        },
+      };
+    }
+    async function holdRow(sql, replacements) {
+      const holder = await holdTransaction();
+      const [[me]] = await sequelize.query('SELECT pg_backend_pid() AS pid', { transaction: holder });
+      await sequelize.query(sql, { replacements, transaction: holder });
+      return { holder, pid: me.pid };
+    }
+    /** Sessions of this database left inside a transaction, other than the holder's. */
+    const openTransactions = async (holderPid) => (await rows(
+      `SELECT pid, state, query FROM pg_stat_activity
+        WHERE datname = current_database() AND pid NOT IN (pg_backend_pid(), :holderPid) AND state LIKE 'idle in transaction%'`, { holderPid }));
+
+    test('retryDelayMs: the constant, and the timer it waits on', async () => {
+      expect(finalizePlaceWrite.MAX_RETRY_DELAY_MS).toBe(2000);
+      const started = Date.now();
+      await finalizePlaceWrite.retryPause.sleep(40);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(35);
+    });
+
+    test('retryDelayMs: not given, there is no pause: a lock conflict is tried again at once, as before', async () => {
+      const { ev } = await primary();
+      const pause = pauses();
+      const { work, calls } = writer();
+      let first = true;
+      const failingOnce = async (ctx) => {
+        if (first) {
+          first = false;
+          throw new RetryableConflictError();
+        }
+        return work(ctx);
+      };
+      expect(await finalizePlaceWrite(sequelize, ev, { sourceSetId: setA, work: failingOnce })).toMatchObject({ outcome: O.OK, attempts: 2 });
+      expect(calls).toHaveLength(1);
+      expect(pause).not.toHaveBeenCalled();
+      // And 0 is the same as not given.
+      first = true;
+      expect(await finalizePlaceWrite(sequelize, ev, { sourceSetId: setA, retryDelayMs: 0, work: failingOnce })).toMatchObject({ outcome: O.OK, attempts: 2 });
+      expect(pause).not.toHaveBeenCalled();
+    });
+
+    test('retryDelayMs: a transient row lock, let go during the pause: saved on the second try; one pause, with no transaction open while it waits', async () => {
+      const { ev } = await primary();
+      const { holder, pid } = await holdRow('SELECT id FROM scene_sets WHERE id = :set FOR UPDATE', { set: setA });
+      const { work, calls } = setRowWriter(setA);
+      const t = tracing();
+      const seen = [];
+      const pause = pauses().mockImplementation(async (ms) => {
+        // Inside the pause: every transaction the helper began is finished,
+        // and no session but the holder's is inside one.
+        const ends = [...t.byTransaction().entries()].filter(([id]) => id !== holder.id).map(([, recs]) => recs.at(-1).kind);
+        seen.push({ ms, ends, open: await openTransactions(pid) });
+        await holder.rollback();
+      });
+      const res = await finalizePlaceWrite(sequelize, ev, { sourceSetId: setA, work, retryDelayMs: DELAY });
+      expect(res).toMatchObject({ outcome: O.OK, attempts: 2 });
+      expect(pause).toHaveBeenCalledTimes(1);
+      expect(seen).toEqual([{ ms: DELAY, ends: ['rollback'], open: [] }]);
+      expect(t.records.filter((r) => r.error === '55P03')).toHaveLength(1);
+      expect(calls.filter((c) => c === 'try')).toHaveLength(1); // one try stopped at the held row
+      expect(calls.filter((c) => c !== 'try')).toHaveLength(1); // the write ran once
+      expect(await venueName(ev)).toBe('Finalised');
+    });
+
+    test('retryDelayMs: a real pause is waited between the tries (a held row let go while it waits)', async () => {
+      const { ev } = await primary();
+      const { holder } = await holdRow('SELECT id FROM scene_sets WHERE id = :set FOR UPDATE', { set: setA });
+      const { work } = setRowWriter(setA);
+      const pause = pauses(); // the real timer
+      setTimeout(() => { holder.rollback().catch((err) => console.error('holder rollback:', err.message)); }, 60);
+      const started = Date.now();
+      const res = await finalizePlaceWrite(sequelize, ev, { sourceSetId: setA, work, retryDelayMs: DELAY });
+      expect(res).toMatchObject({ outcome: O.OK, attempts: 2 });
+      expect(pause).toHaveBeenCalledTimes(1);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(DELAY - 10);
+    });
+
+    test('retryDelayMs: a persistent lock: three tries, two pauses, the same exhaustion result; nothing saved', async () => {
+      const { ev } = await primary();
+      const { holder } = await holdRow('SELECT id FROM scene_sets WHERE id = :set FOR UPDATE', { set: setA });
+      const { work, calls } = setRowWriter(setA);
+      const pause = pauses().mockImplementation(async () => {});
+      const t = tracing();
+      const res = await finalizePlaceWrite(sequelize, ev, { sourceSetId: setA, work, retryDelayMs: DELAY });
+      expect(res).toEqual({
+        outcome: O.RETRY_EXHAUSTED, code: 'PLACE_FINALIZE_RETRY_EXHAUSTED', message: expect.stringMatching(/Nothing was saved/), attempts: 3, last_conflict: '55P03',
+      });
+      expect(pause.mock.calls).toEqual([[DELAY], [DELAY]]); // between the tries; none after the last
+      expect(t.records.filter((r) => r.error === '55P03')).toHaveLength(3);
+      expect(t.records.filter((r) => r.kind === 'begin')).toHaveLength(3);
+      expect(calls).toEqual(['try', 'try', 'try']); // each try stopped at the held row
+      await holder.rollback();
+      expect(await venueName(ev)).toBeNull();
+    });
+
+    test('retryDelayMs: a refusal or an error that is no lock conflict ends at once: one try, no pause', async () => {
+      const pause = pauses();
+      const { work, calls } = writer();
+      const locked = await primary({ evaluation: 'accepted' });
+      expect(await finalizePlaceWrite(sequelize, locked.ev, { sourceSetId: setA, work, retryDelayMs: DELAY })).toMatchObject({ outcome: O.PLACE_LOCKED, attempts: 1 });
+      const ok = await primary();
+      expect(await finalizePlaceWrite(sequelize, ok.ev, { sourceSetId: setB, work, retryDelayMs: DELAY })).toMatchObject({ outcome: O.STALE_SOURCE_SET, attempts: 1 });
+      expect(await finalizePlaceWrite(sequelize, fx.uuid(), { work, retryDelayMs: DELAY })).toMatchObject({ outcome: O.EVENT_DELETED, attempts: 1 });
+      expect(calls).toHaveLength(0);
+      let tries = 0;
+      await expect(finalizePlaceWrite(sequelize, ok.ev, {
+        sourceSetId: setA,
+        retryDelayMs: DELAY,
+        work: async () => {
+          tries += 1;
+          throw new Error('not a lock conflict');
+        },
+      })).rejects.toThrow('not a lock conflict');
+      expect(tries).toBe(1);
+      expect(pause).not.toHaveBeenCalled();
+      expect(await venueName(ok.ev)).toBeNull();
+    });
+
+    test('retryDelayMs: a changed link is tried again at once, with no pause', async () => {
+      const { ev } = await primary();
+      const pause = pauses();
+      const { work, calls } = writer();
+      const g = gateOn((rec, sql) => Boolean(rec.txId) && /FROM episodes e WHERE e\.deleted_at IS NULL AND \(e\.id = \(SELECT w\.used_in_episode_id/.test(sql));
+      const fin = settle(finalizePlaceWrite(sequelize, ev, { sourceSetId: setA, work, retryDelayMs: DELAY }));
+      await g.reached;
+      await mkBrief(show, await mkEpisode(show), ev);
+      g.open();
+      expect((await fin).value).toMatchObject({ outcome: O.OK, attempts: 2 });
+      expect(calls).toHaveLength(1);
+      expect(pause).not.toHaveBeenCalled();
+    });
+
+    test('retryDelayMs: the lock wait is still bounded by LOCK_TIMEOUT; a real 55P03 at the event row, then the row let go during the pause: saved after one pause', async () => {
+      const bounded = await mkEvent(show, { set: setA });
+      const first = tracing();
+      expect(await finalizePlaceWrite(sequelize, bounded, { sourceSetId: setA, work: writer().work, retryDelayMs: DELAY })).toMatchObject({ outcome: O.OK, attempts: 1 });
+      expect(first.records.map((r) => r.sql)).toContain(`SET LOCAL lock_timeout = '${LOCK_TIMEOUT}'`);
+      first.clear();
+
+      const { ev } = await primary();
+      const { holder, pid } = await holdRow('SELECT id FROM world_events WHERE id = :ev FOR UPDATE', { ev });
+      const { work, calls } = writer();
+      const openAtPause = [];
+      const pause = pauses().mockImplementation(async () => {
+        openAtPause.push(await openTransactions(pid));
+        await holder.rollback();
+      });
+      // lockTimeout is the helper's existing test seam (a short wait instead of ten seconds).
+      const res = await finalizePlaceWrite(sequelize, ev, { sourceSetId: setA, work, lockTimeout: '300ms', retryDelayMs: DELAY });
+      expect(res).toMatchObject({ outcome: O.OK, attempts: 2 });
+      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(openAtPause).toEqual([[]]);
+      expect(first.records.filter((r) => r.error === '55P03')).toHaveLength(1);
+      expect(calls).toHaveLength(1);
+      expect(await venueName(ev)).toBe('Finalised');
+    });
+
+    test.each([
+      ['negative', -1], ['NaN', NaN], ['above the maximum', 2001], ['Infinity', Infinity], ['a string', '250'], ['null', null], ['an object', {}],
+    ])('retryDelayMs: %s is refused before any transaction', async (_name, value) => {
+      const { ev } = await primary();
+      const t = tracing();
+      const { work, calls } = writer();
+      await expect(finalizePlaceWrite(sequelize, ev, { sourceSetId: setA, work, retryDelayMs: value })).rejects.toThrow(/retryDelayMs must be a number from 0 to 2000/);
+      expect(t.records).toEqual([]);
+      expect(calls).toHaveLength(0);
+    });
+
+    test('retryDelayMs: the maximum itself is accepted', async () => {
+      const { ev } = await primary();
+      expect(await finalizePlaceWrite(sequelize, ev, { sourceSetId: setA, work: writer().work, retryDelayMs: 2000 })).toMatchObject({ outcome: O.OK, attempts: 1 });
+    });
+
+    describe.each([
+      ['its primary event (stamp and Brief)', primary],
+      ['an event linked by its stamp alone (no Brief names it)', stampOnly],
+    ])('retryDelayMs: against a real acceptance with the pause asked for, for %s', (_name, make) => {
+      test('retryDelayMs: the finalizer first: it commits, the acceptance waits for it and then succeeds; no pause', async () => {
+        const { ep, ev } = await make();
+        const pause = pauses();
+        const inWork = latch();
+        const hold = latch();
+        const { work, calls } = writer();
+        const fin = settle(finalizePlaceWrite(sequelize, ev, {
+          sourceSetId: setA,
+          retryDelayMs: DELAY,
+          work: async (ctx) => {
+            inWork.open();
+            await hold.wait;
+            return work(ctx);
+          },
+        }));
+        await inWork.wait;
+        const acceptance = settle(completeEpisode(ep, show, sequelize));
+        await waitForLockWait(sequelize, `%episodes%${ep}%`);
+        hold.open();
+        const [f, a] = await Promise.all([fin, acceptance]);
+        expect(f.value).toMatchObject({ outcome: O.OK, attempts: 1 });
+        if (!a.ok) throw a.error;
+        expect(calls).toHaveLength(1);
+        expect(await evaluationOf(ep)).toBe('accepted');
+        expect(pause).not.toHaveBeenCalled();
+      });
+
+      test('retryDelayMs: the acceptance first: the finalizer waits for it, then answers PLACE_LOCKED; no pause, work not called', async () => {
+        const { ep, ev } = await make();
+        const pause = pauses();
+        const { work, calls } = writer();
+        const g = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'episodes' && rec.mode === 'update');
+        const acceptance = settle(completeEpisode(ep, show, sequelize));
+        await Promise.race([g.reached, acceptance]);
+        const fin = settle(finalizePlaceWrite(sequelize, ev, { sourceSetId: setA, work, retryDelayMs: DELAY }));
+        await waitForLockWait(sequelize, `%FROM episodes WHERE id IN%${ep}%FOR SHARE%`);
+        g.open();
+        const [f, a] = await Promise.all([fin, acceptance]);
+        if (!a.ok) throw a.error;
+        expect(f.value).toMatchObject({ outcome: O.PLACE_LOCKED, attempts: 1 });
+        expect(calls).toHaveLength(0);
+        expect(pause).not.toHaveBeenCalled();
+      });
     });
   });
 });

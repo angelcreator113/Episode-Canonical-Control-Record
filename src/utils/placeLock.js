@@ -26,7 +26,9 @@
  * when it ran: an acceptance can commit a moment later.
  *
  * finalizePlaceWrite is how a write that must not land on a locked Place is
- * committed (after paid generation, for one). No route calls it yet.
+ * committed (after paid generation, for one). generate-venue's two paid
+ * paths save through it (Generation B1); the other Place writers still read
+ * the rule and then write.
  */
 
 const PLACE_LOCKED_CODE = 'PLACE_LOCKED';
@@ -55,6 +57,13 @@ const RETRY_EXHAUSTED_MESSAGE = 'This could not be saved: the event or its episo
 const sameSet = (a, b) => String(a ?? '') === String(b ?? '');
 const TIMEOUT_RE = /^\d{1,6}(ms|s)$/;
 
+// The pause between tries (retryDelayMs): never longer than this, so three
+// tries add at most two pauses of it.
+const PLACE_FINALIZE_MAX_RETRY_DELAY_MS = 2000;
+// The timer the pause waits on. An object, so a test can watch it; nothing
+// else replaces it.
+const retryPause = { sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) };
+
 async function rollBack(transaction) {
   if (!transaction || transaction.finished) return;
   try {
@@ -66,7 +75,10 @@ async function rollBack(transaction) {
 
 /**
  * One attempt, in one transaction. Resolves { result } (final) or
- * { retry: reason }; a non-retryable error is thrown after the rollback.
+ * { retry: reason, contention }; a non-retryable error is thrown after the
+ * rollback. contention: the try lost to a lock (40P01, 55P03 or a
+ * RetryableConflictError), not to a link that changed. Whatever it
+ * resolves or throws, its transaction is finished first.
  */
 async function attemptPlaceFinalize(sequelize, eventId, { sourceSetId, work, lockTimeout }) {
   const { linkedLiveEpisodes, lockLiveEvent, EVENT_DELETED_CODE } = require('./eventEpisodeLink');
@@ -126,7 +138,7 @@ async function attemptPlaceFinalize(sequelize, eventId, { sourceSetId, work, loc
     await rollBack(transaction);
     const retryable = asRetryable(err);
     if (retryable instanceof RetryableConflictError) {
-      return { retry: err?.original?.code || err?.parent?.code || retryable.code || 'RETRY' };
+      return { retry: err?.original?.code || err?.parent?.code || retryable.code || 'RETRY', contention: true };
     }
     throw err;
   }
@@ -165,6 +177,21 @@ async function attemptPlaceFinalize(sequelize, eventId, { sourceSetId, work, loc
  *                not commit wrote nothing.
  *   lockTimeout  a test seam: the wait for the event row. It defaults to
  *                episodeLocks.LOCK_TIMEOUT, and no caller should pass it.
+ *   retryDelayMs a pause before the next try, after a try that lost to a
+ *                lock (40P01, 55P03, a RetryableConflictError): 0 (the
+ *                default) is no pause, as it always was; at most
+ *                finalizePlaceWrite.MAX_RETRY_DELAY_MS (2000). The pause is a plain
+ *                timer between tries: the lost try's transaction is rolled
+ *                back before it and the next one begins after it, so no
+ *                transaction, lock or connection is held while it waits.
+ *                There is none after the last try, none before a refusal
+ *                or a thrown error (those end at once), and none after a
+ *                changed link (EVENT_LINK_CHANGED is tried again at once:
+ *                nothing is being waited for). It adds no try. Anything
+ *                but a finite number from 0 to the maximum is an error,
+ *                thrown before any transaction (Evoni, 2026-11-23: a held
+ *                row tried three times in a few milliseconds gave up work
+ *                already paid for).
  *
  * Resolves { outcome, code, attempts, ... }:
  *   OK                              + value (what `work` returned); committed
@@ -179,22 +206,31 @@ async function attemptPlaceFinalize(sequelize, eventId, { sourceSetId, work, loc
  * It serialises only with writers that lock the episode row or the event
  * row. Run it on its own connection: never inside another transaction.
  */
-async function finalizePlaceWrite(sequelize, eventId, { sourceSetId, work, maxAttempts = PLACE_FINALIZE_MAX_ATTEMPTS, lockTimeout } = {}) {
+async function finalizePlaceWrite(sequelize, eventId, { sourceSetId, work, maxAttempts = PLACE_FINALIZE_MAX_ATTEMPTS, lockTimeout, retryDelayMs = 0 } = {}) {
   if (!eventId) throw new Error('finalizePlaceWrite needs an event id');
   if (typeof work !== 'function') throw new Error('finalizePlaceWrite needs work({ transaction, event })');
   const { LOCK_TIMEOUT } = require('./episodeLocks');
   const timeout = lockTimeout === undefined ? LOCK_TIMEOUT : lockTimeout;
   if (!TIMEOUT_RE.test(String(timeout))) throw new Error('finalizePlaceWrite: lockTimeout must look like "10s" or "500ms"');
+  if (typeof retryDelayMs !== 'number' || !Number.isFinite(retryDelayMs) || retryDelayMs < 0 || retryDelayMs > PLACE_FINALIZE_MAX_RETRY_DELAY_MS) {
+    throw new Error(`finalizePlaceWrite: retryDelayMs must be a number from 0 to ${PLACE_FINALIZE_MAX_RETRY_DELAY_MS}`);
+  }
   const limit = Number.isInteger(maxAttempts) && maxAttempts > 0 ? maxAttempts : PLACE_FINALIZE_MAX_ATTEMPTS;
   let lastConflict = null;
   for (let attempts = 1; attempts <= limit; attempts += 1) {
-    const { result, retry } = await attemptPlaceFinalize(sequelize, eventId, { sourceSetId, work, lockTimeout: timeout });
+    const { result, retry, contention } = await attemptPlaceFinalize(sequelize, eventId, { sourceSetId, work, lockTimeout: timeout });
     if (result) return { ...result, attempts };
     lastConflict = retry;
+    // Between tries only, with nothing open: the lost try is rolled back.
+    if (contention && retryDelayMs > 0 && attempts < limit) await retryPause.sleep(retryDelayMs);
   }
   const O = PLACE_FINALIZE_OUTCOMES;
   return { outcome: O.RETRY_EXHAUSTED, code: O.RETRY_EXHAUSTED, message: RETRY_EXHAUSTED_MESSAGE, attempts: limit, last_conflict: lastConflict };
 }
+
+// On the function, not the module: the module's exports are as they were.
+finalizePlaceWrite.MAX_RETRY_DELAY_MS = PLACE_FINALIZE_MAX_RETRY_DELAY_MS;
+finalizePlaceWrite.retryPause = retryPause;
 
 module.exports = {
   PLACE_LOCKED_CODE,

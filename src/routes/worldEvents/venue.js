@@ -148,7 +148,9 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, author
       await sceneGenService.generateBaseScene(attached, models, {
         overrides: briefOverrides.value || {},
         eventId: event.id,
-        finalize: (work) => finalizePlaceWrite(models.sequelize, event.id, { sourceSetId: attached.id, work }),
+        finalize: (work) => finalizePlaceWrite(models.sequelize, event.id, {
+          sourceSetId: attached.id, work, retryDelayMs: sceneGenService.PLACE_FINALIZE_RETRY_DELAY_MS,
+        }),
       });
       await attached.reload();
       if (!attached.base_still_url) throw new Error(`No base image was stored for "${attached.name}"`);
@@ -188,6 +190,20 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, author
     if (err?.outcome === GENERATED_NOT_SAVED) {
       console.error(`[VenueGen] generated, not saved (${err.code}):`, err.message);
       return res.status(409).json({ success: false, outcome: GENERATED_NOT_SAVED, code: err.code, error: err.message, message: err.detail });
+    }
+    // Generated and stored, and then the save failed for another reason (a
+    // database error that is no lock conflict and no refusal; Evoni,
+    // 2026-11-23). Still this route's 500 "failed", with a code that tells
+    // it from a failed generation and fixed sentences: the database's own
+    // message, which can name rows and values, is not sent, and the error
+    // is logged by its class only (the stored keys are in the
+    // [GeneratedNotSaved] line).
+    if (err?.generatedSaveFailed) {
+      const { GENERATED_SAVE_FAILED, GENERATED_SAVE_FAILED_ERROR, GENERATED_SAVE_FAILED_MESSAGE, errorClassOf } = require('../../services/sceneGenerationService');
+      console.error(`[VenueGen] generated, the save failed (${errorClassOf(err)})`);
+      return res.status(500).json({
+        success: false, outcome: 'failed', code: GENERATED_SAVE_FAILED, error: GENERATED_SAVE_FAILED_ERROR, message: GENERATED_SAVE_FAILED_MESSAGE,
+      });
     }
     console.error('[VenueGen] Error:', err);
     return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, outcome: 'failed', error: err.message });

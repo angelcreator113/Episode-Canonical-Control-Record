@@ -66,6 +66,8 @@ const { placeLockFixtures, waitForLockWait } = require('../helpers/placeLockFixt
 const { sequelize } = models;
 const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE, PLACE_FINALIZE_OUTCOMES: O } = placeLock;
 const { PlaceFinalizeRefusal, GENERATED_NOT_SAVED_MESSAGE } = sceneGen;
+const fs = require('fs');
+const path = require('path');
 
 const shouldSkip =
   !process.env.DATABASE_URL ||
@@ -78,6 +80,26 @@ const DELETED_MESSAGE = 'This event was deleted. Nothing was started or linked.'
 /** The 409 a generation answers when its picture was made and not saved. */
 const notSaved = (code, error) => ({ success: false, outcome: 'generated_not_saved', code, error, message: GENERATED_NOT_SAVED_MESSAGE });
 const EARLY_LOCKED = { success: false, code: PLACE_LOCKED_CODE, error: PLACE_LOCKED_MESSAGE };
+/** The 500 a generation answers when its picture was made and stored and the save then failed for another reason. */
+const SAVE_FAILED = {
+  success: false,
+  outcome: 'failed',
+  code: 'GENERATED_SAVE_FAILED',
+  error: 'The image was generated and stored, but saving it failed. Nothing was saved.',
+  message: 'The image was generated and stored, but saving it failed. Generating it again costs again.',
+};
+// What a database error carries and an answer must not: SQL, a constraint's text, a stack, a URL, a signature.
+const LEAK = /INSERT|UPDATE|SELECT|violates|constraint|relation|\bat .*\.js|https?:|X-Amz|\?|secret/i;
+/** An error as the database driver throws one: its message, SQL and parameters name rows, values and a signed URL. */
+const databaseError = () => Object.assign(
+  new Error('insert or update on table "scene_angles" violates foreign key constraint "scene_angles_scene_set_id_fkey" https://secret.example/x.jpg?X-Amz-Signature=secret'),
+  {
+    name: 'SequelizeForeignKeyConstraintError',
+    original: { code: '23503', detail: 'Key (scene_set_id)=(secret) is not present' },
+    sql: 'INSERT INTO "scene_angles" ("id","still_image_url") VALUES ($1,$2)',
+    parameters: ['id', 'https://secret.example/x.jpg?X-Amz-Signature=secret'],
+  });
+const DELAY = sceneGen.PLACE_FINALIZE_RETRY_DELAY_MS;
 
 // Filled per test: what a failing test must not leave open (transactions, gates, latches).
 const open = [];
@@ -103,6 +125,7 @@ const send = (req) => req.then((res) => res);
   let trace = null;
   let guardEventsAtStart = 0;
   let usageLog = null;
+  let pause = null; // the finalizer's pause between tries, watched (it really waits unless a case answers for it)
   const usageLogIds = [];
   const saved = {};
 
@@ -265,6 +288,7 @@ const send = (req) => req.then((res) => res);
     // this file logs are removed at the end, so the database's day of spend
     // is not left higher for the suites that run on the default budget.
     usageLog = jest.spyOn(models.AIUsageLog, 'create');
+    pause = jest.spyOn(placeLock.finalizePlaceWrite.retryPause, 'sleep');
   });
   afterEach(async () => {
     for (const result of usageLog?.mock.results || []) {
@@ -548,6 +572,7 @@ const send = (req) => req.then((res) => res);
       const attempts = [...trace.byTransaction().values()].filter((recs) => recs.some((r) => linkedRead.test(r.sql || '') || r.kind === 'begin'));
       expect(trace.records.filter((r) => r.kind === 'insert' && r.table === 'scene_sets')).toHaveLength(1);
       expect(attempts.filter((recs) => recs.at(-1).kind === 'rollback')).toHaveLength(2);
+      expect(pause).not.toHaveBeenCalled(); // a changed link is tried again at once
       // The three draft episodes whose event this is now have it as their Event location.
       const located = await rows("SELECT episode_id FROM scene_set_episodes WHERE scene_set_id = :id AND role = 'event' AND deleted_at IS NULL", { id: res.body.data.scene_set_id });
       expect(located).toHaveLength(3);
@@ -574,6 +599,7 @@ const send = (req) => req.then((res) => res);
       expect(await eventRow(ev)).toEqual(event);
       expect(await snapshot()).toEqual(before);
       expect(orphanLines()).toEqual([expect.stringMatching(/outcome=PLACE_FINALIZE_RETRY_EXHAUSTED attempts=3/)]);
+      expect(pause).not.toHaveBeenCalled();
     });
 
     test('a lock conflict inside the save, after the set was inserted: that attempt is rolled back whole, the next writes the same rows once', async () => {
@@ -596,42 +622,75 @@ const send = (req) => req.then((res) => res);
       expect(ids).toEqual([res.body.data.scene_set_id, res.body.data.scene_set_id]);
       expect(falCalls()).toHaveLength(2);
       expect(puts()).toHaveLength(2);
+      // One pause, of the generation paths' length, between the two tries.
+      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(DELAY).toBe(250);
     });
 
-    test('the second angle insert fails for another reason: everything is rolled back, the route answers its 500 "failed", the provider was called once per image', async () => {
-      const from = await withBase('Broken hall');
-      const { ep, ev } = await primary({ set: from });
-      await place(ep, from);
-      const before = await snapshot();
-      const event = await eventRow(ev);
-      const realCreate = models.SceneAngle.create.bind(models.SceneAngle);
-      jest.spyOn(models.SceneAngle, 'create')
-        .mockImplementationOnce((...args) => realCreate(...args))
-        .mockImplementationOnce(async () => { throw new Error('angle insert failed'); });
-      const res = await generate(ev, { force: true });
-      expect(res.status).toBe(500);
-      expect(res.body).toEqual({ success: false, outcome: 'failed', error: 'angle insert failed' });
-      expect(await eventRow(ev)).toEqual(event);
-      expect(await snapshot()).toEqual(before);
-      expect(falCalls()).toHaveLength(2);
-      expect(deletes()).toHaveLength(0);
-      // The stored pictures are still named in the log.
-      expect(orphanLines()).toEqual([expect.stringContaining('outcome=SAVE_FAILED')]);
-    });
+    // D2 (Evoni, 2026-11-23): a required write failing for a reason that is
+    // no lock conflict and no refusal. The picture is generated and stored;
+    // the save is rolled back whole; the answer is the route's 500 "failed"
+    // with a code of its own and fixed sentences.
+    describe.each([
+      ['the second angle insert', () => {
+        const realCreate = models.SceneAngle.create.bind(models.SceneAngle);
+        jest.spyOn(models.SceneAngle, 'create')
+          .mockImplementationOnce((...args) => realCreate(...args))
+          .mockImplementationOnce(async () => { throw databaseError(); });
+      }],
+      ['the event\'s move to the new set', () => {
+        const realQuery = sequelize.query.bind(sequelize);
+        jest.spyOn(sequelize, 'query').mockImplementation((sql, options) => {
+          if (options?.transaction && /^UPDATE world_events SET scene_set_id/.test(String(sql))) return Promise.reject(databaseError());
+          return realQuery(sql, options);
+        });
+      }],
+      ['the episode\'s Event location (the sync)', () => {
+        const sync = require('../../src/services/eventPlaceSync');
+        jest.spyOn(sync, 'syncEpisodeEventLocation').mockImplementationOnce(async () => { throw databaseError(); });
+      }],
+    ])('the save failing at %s', (_name, breakIt) => {
+      test('500 "failed" with GENERATED_SAVE_FAILED, never "scene set created"; everything rolled back; the stored keys and the error\'s class logged; nothing of the error in the answer', async () => {
+        const from = await withBase('Broken hall');
+        const { ep, ev } = await primary({ set: from });
+        await place(ep, from);
+        const before = await snapshot();
+        const event = await eventRow(ev);
+        breakIt();
+        const res = await generate(ev, { force: true });
 
-    test('the sync failing inside the save rolls the set, its angles and the event link back too', async () => {
-      const from = await withBase('Sync hall');
-      const { ep, ev } = await primary({ set: from });
-      await place(ep, from);
-      const before = await snapshot();
-      const event = await eventRow(ev);
-      const sync = require('../../src/services/eventPlaceSync');
-      jest.spyOn(sync, 'syncEpisodeEventLocation').mockImplementationOnce(async () => { throw new Error('sync failed'); });
-      const res = await generate(ev, { force: true });
-      expect(res.status).toBe(500);
-      expect(res.body).toEqual({ success: false, outcome: 'failed', error: 'sync failed' });
-      expect(await eventRow(ev)).toEqual(event);
-      expect(await snapshot()).toEqual(before);
+        expect(res.status).toBe(500);
+        expect(res.body).toEqual(SAVE_FAILED);
+        expect(res.body.outcome).not.toBe('generated');
+        expect(res.body.data).toBeUndefined();
+        expect(JSON.stringify(res.body)).not.toMatch(LEAK);
+        // Rolled back whole: no set, no angle, the event and the episode's rows as they were.
+        expect(await eventRow(ev)).toEqual(event);
+        expect(await snapshot()).toEqual(before);
+        // Paid once, stored, nothing deleted.
+        expect(falCalls()).toHaveLength(2);
+        expect(puts()).toHaveLength(2);
+        expect(deletes()).toHaveLength(0);
+        expect(pause).not.toHaveBeenCalled(); // not tried again
+      });
+
+      test('the log: one line with the stored keys, the event, SAVE_FAILED, the error\'s class and the cost; no SQL, message, URL or signature in any error line', async () => {
+        const { ev } = await primary({ set: await withBase('Logged hall') });
+        breakIt();
+        const res = await generate(ev, { force: true });
+        expect(res.status).toBe(500);
+        const lines = orphanLines();
+        expect(lines).toHaveLength(1);
+        for (const key of puts()) expect(lines[0]).toContain(key);
+        expect(lines[0]).toContain(`event=${ev}`);
+        expect(lines[0]).toContain('outcome=SAVE_FAILED');
+        expect(lines[0]).toContain('error=SequelizeForeignKeyConstraintError/23503');
+        expect(lines[0]).toMatch(/cost=\$[0-9.]+ estimate=\$[0-9.]+ usage_log_ids=\d+,\d+/);
+        expect(lines[0]).toContain('nothing was deleted from storage');
+        const logged = console.error.mock.calls.map((call) => call.map(String).join(' '));
+        expect(logged).toContain('[VenueGen] generated, the save failed (SequelizeForeignKeyConstraintError/23503)');
+        for (const line of logged) expect(line).not.toMatch(/INSERT|violates|https?:|X-Amz|\?|secret/);
+      });
     });
 
     test('no provider key: 503 as before; the provider failing: 500 "failed" as before', async () => {
@@ -831,6 +890,7 @@ const send = (req) => req.then((res) => res);
       let rolledBack = 0;
       const g = gateOn((rec) => Boolean(rec.txId) && rec.txId !== holder.id && rec.kind === 'rollback' && (rolledBack += 1) === 3);
       const t = trace;
+      pause.mockImplementation(async () => {}); // counted, not waited for
       const started = Date.now();
       hold.release();
       await g.reached; // the third and last attempt is rolled back
@@ -848,6 +908,73 @@ const send = (req) => req.then((res) => res);
       expect(puts()).toHaveLength(1);
       expect(await setRow(set)).toMatchObject({ generation_status: 'pending', base_still_url: null });
       expect(orphanLines()).toEqual([expect.stringMatching(/outcome=PLACE_FINALIZE_RETRY_EXHAUSTED attempts=3/)]);
+      expect(pause.mock.calls).toEqual([[DELAY], [DELAY]]); // two pauses between three tries, none after the last
+    });
+
+    test('the set row held when the save begins and let go during the pause (a transient lock): saved on the second try, after one pause with no transaction open; the provider and storage used once', async () => {
+      const set = await noBase('Transient bare hall');
+      const { ev } = await primary({ set });
+      const hold = holdGeneration();
+      const pending = send(generate(ev));
+      await hold.reached;
+      const holder = await holdTransaction();
+      const [[me]] = await sequelize.query('SELECT pg_backend_pid() AS pid', { transaction: holder });
+      await sequelize.query('SELECT id FROM scene_sets WHERE id = :set FOR UPDATE', { replacements: { set }, transaction: holder });
+      const t = tracing();
+      const seen = [];
+      pause.mockImplementation(async (ms) => {
+        const open = await rows(
+          `SELECT pid FROM pg_stat_activity
+            WHERE datname = current_database() AND pid NOT IN (pg_backend_pid(), :holder) AND state LIKE 'idle in transaction%'`, { holder: me.pid });
+        const ends = [...t.byTransaction().entries()].filter(([id]) => id !== holder.id).map(([, recs]) => recs.at(-1).kind);
+        seen.push({ ms, open, ends });
+        await holder.rollback();
+      });
+      hold.release();
+      const res = await pending;
+      expect(res.status).toBe(200);
+      expect(seen).toEqual([{ ms: DELAY, open: [], ends: ['rollback'] }]);
+      expect(t.records.filter((r) => r.error === '55P03')).toHaveLength(1);
+      expect(falCalls()).toHaveLength(1);
+      expect(puts()).toHaveLength(1);
+      expect(await setRow(set)).toMatchObject({ generation_status: 'complete', base_still_url: res.body.data.venue_image_url });
+    });
+
+    test('the final write failing for another reason: 500 "failed" with GENERATED_SAVE_FAILED; the set marked failed as a failed final write always was, with a fixed reason; no image column written; nothing of the error in the answer or the log', async () => {
+      const set = await noBase('Save failed bare hall');
+      const { ep, ev } = await primary({ set });
+      await place(ep, set);
+      const start = await setRow(set);
+      const before = without(await snapshot(), set);
+      const event = await eventRow(ev);
+      const realUpdate = models.SceneSet.update.bind(models.SceneSet);
+      jest.spyOn(models.SceneSet, 'update').mockImplementation((values, options) => {
+        if (values && 'base_still_url' in values) return Promise.reject(databaseError());
+        return realUpdate(values, options);
+      });
+      const res = await generate(ev);
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual(SAVE_FAILED);
+      expect(JSON.stringify(res.body)).not.toMatch(LEAK);
+      const row = await setRow(set);
+      expect(row.generation_status).toBe('failed');
+      expect(imagesOf(row)).toEqual(imagesOf(start));
+      expect(row.base_generation.last_error).toBe(SAVE_FAILED.message);
+      expect(Date.parse(row.base_generation.failed_at)).toBeGreaterThan(Date.now() - 60000);
+      expect(await eventRow(ev)).toEqual(event);
+      expect(without(await snapshot(), set)).toEqual(before);
+      expect(falCalls()).toHaveLength(1);
+      expect(puts()).toHaveLength(1);
+      expect(deletes()).toHaveLength(0);
+      expect(pause).not.toHaveBeenCalled();
+      const lines = orphanLines();
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain(`storage_keys=${puts()[0]}`);
+      expect(lines[0]).toContain(`event=${ev} set=${set} outcome=SAVE_FAILED`);
+      expect(lines[0]).toContain('error=SequelizeForeignKeyConstraintError/23503');
+      const logged = console.error.mock.calls.map((call) => call.map(String).join(' '));
+      expect(logged).toContain('[VenueGen] generated, the save failed (SequelizeForeignKeyConstraintError/23503)');
+      for (const line of logged) expect(line).not.toMatch(/INSERT|violates|https?:|X-Amz|\?|secret/);
     });
 
     test('the set row held on attempts 1 and 2 and free for attempt 3: saved; the provider and storage used once', async () => {
@@ -860,6 +987,7 @@ const send = (req) => req.then((res) => res);
       await sequelize.query('SELECT id FROM scene_sets WHERE id = :set FOR UPDATE', { replacements: { set }, transaction: holder });
       let rolledBack = 0;
       const g = gateOn((rec) => Boolean(rec.txId) && rec.txId !== holder.id && rec.kind === 'rollback' && (rolledBack += 1) === 2);
+      pause.mockImplementation(async () => {});
       hold.release();
       await g.reached; // attempt 2 is rolled back
       await holder.rollback();
@@ -1007,6 +1135,7 @@ const send = (req) => req.then((res) => res);
       expect(res.status).toBe(200);
       expect(trace.records.filter((r) => r.error === '40P01')).toEqual([]);
       expect(trace.records.filter((r) => r.error === '55P03')).toHaveLength(1); // NOWAIT, at once
+      expect(pause.mock.calls).toEqual([[DELAY]]); // then the pause, and the version is through
       expect(await setRow(set)).toMatchObject({ version_of_set_id: everyday, generation_status: 'complete', base_still_url: res.body.data.venue_image_url });
       expect((await eventRow(ev)).scene_set_id).toBe(set);
       expect(falCalls()).toHaveLength(1);
@@ -1197,6 +1326,24 @@ const send = (req) => req.then((res) => res);
   });
 
   // ══ Last: nothing left the process ═════════════════════════════════════
+  describe('what the source still says', () => {
+    const src = (file) => fs.readFileSync(path.join(__dirname, '..', '..', 'src', file), 'utf8');
+    test('generate-venue: requireAuth, then authorize([\'ADMIN\']), then the rate limiter; the early Place check before the key, the marker and anything paid', () => {
+      const route = src('routes/worldEvents/venue.js');
+      expect(route).toContain("router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {");
+      const handler = route.slice(route.indexOf("events/:eventId/generate-venue', requireAuth"));
+      const early = handler.indexOf('if (await isPlaceLocked(models.sequelize, event.id))');
+      expect(early).toBeGreaterThan(0);
+      for (const later of ['generateBaseScene(', 'process.env.FAL_KEY', 'generateVenueImages(event']) expect(handler.indexOf(later)).toBeGreaterThan(early);
+    });
+    test('the two generation paths delete nothing from storage on a refusal or a failed save, and both ask the finalizer for the same pause', () => {
+      const venue = src('services/venueGenerationService.js');
+      expect(venue).not.toMatch(/DeleteObjectCommand|deleteOld/);
+      expect(venue).toContain('retryDelayMs: PLACE_FINALIZE_RETRY_DELAY_MS');
+      expect(src('routes/worldEvents/venue.js')).toContain('retryDelayMs: sceneGenService.PLACE_FINALIZE_RETRY_DELAY_MS');
+    });
+  });
+
   describe('the network guard', () => {
     test('no external network attempt in this file', () => {
       const mine = networkGuard.getState().events.slice(guardEventsAtStart);
