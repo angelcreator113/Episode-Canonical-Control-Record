@@ -55,7 +55,7 @@ describe('contractAngleRows', () => {
 
   beforeAll(async () => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-spec-angles', email: 'user@specangles.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-spec-angles', email: 'user@specangles.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO scene_sets (id, name, scene_type, generation_status, scene_spec, created_at, updated_at)
       VALUES (:id, 'Spec angles set', 'HOME_BASE', 'complete', :spec::jsonb, NOW(), NOW())`,

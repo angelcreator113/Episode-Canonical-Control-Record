@@ -14,7 +14,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { requireAuth } = require('../../middleware/auth');
+const { requireAuth, authorize } = require('../../middleware/auth');
 const { aiRateLimiter } = require('../../middleware/aiRateLimiter');
 const { isBudgetError } = require('../../services/imageCostService');
 const { startedEpisodeFor } = require('../../services/episodeTaskCopyService');
@@ -81,7 +81,19 @@ router.post('/world/:showId/events/:eventId/venue-brief', requireAuth, async (re
 // none. overrides: the "Your override" lines confirmed on the brief (S2, S5).
 // The response's outcome says what happened: generated, already_available or
 // failed.
-router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, aiRateLimiter, async (req, res) => {
+//
+// An ADMIN's (Evoni, 2026-11-22; P2b): it is paid, it stores images, and its
+// new-venue branch moves the event to a new scene set. authorize sits before
+// the rate limiter, so nothing below runs for anyone else.
+//
+// The Place lock (utils/placeLock, L13) holds here too (Evoni, 2026-11-22):
+// on an event whose episode is accepted nothing is generated. A new venue,
+// `force` or not, and the missing base of the set the event already has are
+// both refused with the lock's 409, for an admin as for anyone, before the
+// provider key is looked for and before anything is generated, stored,
+// created or changed. Only "already available" is answered as before, on a
+// locked event too: it generates and writes nothing.
+router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, authorize(['ADMIN']), aiRateLimiter, async (req, res) => {
   try {
     const { showId, eventId } = req.params;
     const force = req.body?.force === true;
@@ -113,6 +125,16 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, aiRate
         message: `Venue images already available for "${event.name}": nothing generated`,
       });
     }
+
+    // From here something is generated: the missing base of the attached
+    // set, or a new venue the event is moved to. One check for both, with the
+    // same lock and the same answer as the event edit's and the scene-set
+    // link's.
+    const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../../utils/placeLock');
+    if (await isPlaceLocked(models.sequelize, event.id)) {
+      return res.status(409).json({ success: false, code: PLACE_LOCKED_CODE, error: PLACE_LOCKED_MESSAGE });
+    }
+
     if (attached) {
       const sceneGenService = require('../../services/sceneGenerationService');
       await sceneGenService.generateBaseScene(attached, models, { overrides: briefOverrides.value || {}, eventId: event.id });
@@ -126,6 +148,7 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, aiRate
       });
     }
 
+    // A new venue is made and the event is moved to it.
     if (typeof event.canon_consequences === 'string') {
       try { event.canon_consequences = JSON.parse(event.canon_consequences); } catch { event.canon_consequences = {}; }
     }

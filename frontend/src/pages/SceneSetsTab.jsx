@@ -173,7 +173,7 @@ export function DeleteSetDialog({ set, uses, sets, onDone, onCancel }) {
       onDone?.();
     } catch (err) {
       console.error('[SceneSets] delete failed:', err);
-      setError(err.response?.data?.error || 'Could not delete the scene set');
+      setError(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not delete the scene set');
       setBusy(false);
     }
   };
@@ -221,7 +221,7 @@ export function SetShowSelect({ set, shows, onSaved, onError }) {
     } catch (err) {
       console.error('[SceneSets] show save failed:', err);
       setValue(prev);
-      onError?.(err.response?.data?.error || 'Could not change the show');
+      onError?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not change the show');
     }
     setSaving(false);
   };
@@ -268,7 +268,7 @@ export function SetWorldLocationSelect({ set, onSaved, onError }) {
     } catch (err) {
       console.error('[SceneSets] world location save failed:', err);
       setValue(prev);
-      onError?.(err.response?.data?.error || 'Could not change the World Location');
+      onError?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not change the World Location');
     }
     setSaving(false);
   };
@@ -286,7 +286,7 @@ export function SetWorldLocationSelect({ set, onSaved, onError }) {
       await save(loc.id);
     } catch (err) {
       console.error('[SceneSets] world location create failed:', err);
-      onError?.(err.response?.data?.error || err.message || 'Could not make the World Location');
+      onError?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || err.message || 'Could not make the World Location');
       setSaving(false);
     }
   };
@@ -342,7 +342,7 @@ export function DescriptionReview({ set, onResolved, onError }) {
       onResolved?.(r.data?.data || null);
     } catch (err) {
       console.error('[SceneSets] description review failed:', err);
-      onError?.(err.response?.data?.error || 'Could not update the description');
+      onError?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not update the description');
     }
     setBusy(false);
   };
@@ -692,7 +692,7 @@ function ImageLightbox({ images: initialImages, initialIndex, onClose, onDeleteA
                 else onPromoteError?.(r.data?.error || 'Could not change the main background');
               } catch (err) {
                 console.error('[SceneSets] promote failed:', err);
-                onPromoteError?.(err.response?.data?.error || 'Could not change the main background');
+                onPromoteError?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not change the main background');
               }
             }} title="Make this view the set's main background">
               <ImageIcon size={14} /> Make main background
@@ -1074,7 +1074,7 @@ export function ApprovedBaseRow({ set, onToast = () => {}, onRefresh = () => {} 
       onRefresh();
     } catch (err) {
       console.error('[SceneSets] approved base change failed:', err);
-      onToast(err.response?.data?.error || err.message || 'Failed', 'error');
+      onToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || err.message || 'Failed', 'error');
     } finally {
       setBusy(false);
     }
@@ -1369,7 +1369,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
       onRefresh?.();
     } catch (err) {
       console.error('[SceneSets] rename failed:', err);
-      if (onToast) onToast(err.response?.data?.error || 'Failed to rename', 'error');
+      if (onToast) onToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Failed to rename', 'error');
     }
     setSavingName(false);
     setEditingName(false);
@@ -1394,7 +1394,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
       }
     } catch (err) {
       console.error('[SceneSets] video failed:', err);
-      showToast(err.response?.data?.error || 'Video failed', 'error');
+      showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Video failed', 'error');
     } finally {
       setVideoBusy(prev => { const next = { ...prev }; delete next[angle.id]; return next; });
     }
@@ -1410,7 +1410,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
       if (onRefresh) await onRefresh();
     } catch (err) {
       console.error('[SceneSets] updateAngleApi failed:', err);
-      if (onToast) onToast(err?.response?.data?.error || 'Rename failed', 'error');
+      if (onToast) onToast(sceneAdminOnlyMessage(err) || err?.response?.data?.error || 'Rename failed', 'error');
     }
     setEditingAngleId(null);
   };
@@ -1443,7 +1443,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
       setSelectedSuggestions((json.data || []).map((_, i) => i));
     } catch (err) {
       console.error('[SceneSets] suggestAnglesApi failed:', err);
-      if (onToast) onToast(err.response?.data?.error || 'Failed to get AI suggestions', 'error');
+      if (onToast) onToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Failed to get AI suggestions', 'error');
       setSuggestions([]);
     }
     setLoadingSuggestions(false);
@@ -1490,7 +1490,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
     } catch (err) {
       // Said, not silent: the spinner stopping alone said nothing.
       console.error('[SceneSets] AI camera direction failed:', err);
-      showToast(err.response?.data?.error || 'Could not suggest a camera direction', 'error');
+      showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not suggest a camera direction', 'error');
     }
     setAiAssistLoading(false);
   };
@@ -1817,7 +1817,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               if (d.refined) setDescDraft(d.refined);
                             } catch (err) {
                               console.error('[SceneSets] description refine failed:', err);
-                              showToast(err.response?.data?.error || 'Refine failed', 'error');
+                              showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Refine failed', 'error');
                             }
                             setDescRefining(false);
                           }}>
@@ -1836,7 +1836,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               onRefresh?.();
                             } catch (err) {
                               console.error('[SceneSets] description save failed:', err);
-                              showToast(err.response?.data?.error || 'Save failed', 'error');
+                              showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Save failed', 'error');
                             } finally {
                               setSavingDesc(false);
                             }
@@ -1881,11 +1881,11 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Analysis</div>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" onClick={async () => {
-                          try { const r = await getComparisonApi(set.id); setComparison(r.data); } catch (err) { console.error('[SceneSets] getComparisonApi failed:', err); showToast(err.response?.data?.error || 'Comparison failed', 'error'); }
+                          try { const r = await getComparisonApi(set.id); setComparison(r.data); } catch (err) { console.error('[SceneSets] getComparisonApi failed:', err); showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Comparison failed', 'error'); }
                         }}><Eye size={11} /> Side-by-Side Compare</button>
 
                         <button className="scene-sets-btn-generate" onClick={async () => {
-                          try { const r = await getWardrobeMatchApi(set.id); setWardrobeMatch(r.data); } catch (err) { console.error('[SceneSets] getWardrobeMatchApi failed:', err); showToast(err.response?.data?.error || 'Wardrobe match failed', 'error'); }
+                          try { const r = await getWardrobeMatchApi(set.id); setWardrobeMatch(r.data); } catch (err) { console.error('[SceneSets] getWardrobeMatchApi failed:', err); showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Wardrobe match failed', 'error'); }
                         }}><Heart size={11} /> Wardrobe Match</button>
                       </div>
                     </div>
@@ -1920,7 +1920,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                 // Not saved: the saved value shows again.
                                 console.error('[SceneSets] time of day save failed:', err);
                                 setLocalTimeOfDay(prev);
-                                showToast(err.response?.data?.error || 'Time of day did not save', 'error');
+                                showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Time of day did not save', 'error');
                               }
                             }}
                             className="scene-sets-select-sm"
@@ -1947,7 +1947,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               } catch (err) {
                                 console.error('[SceneSets] season save failed:', err);
                                 setLocalSeason(prev);
-                                showToast(err.response?.data?.error || 'Season did not save', 'error');
+                                showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Season did not save', 'error');
                               }
                             }}
                             className="scene-sets-select-sm"
@@ -1986,7 +1986,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                 } catch (err) {
                                   console.error('[SceneSets] room properties save failed:', err);
                                   setLocalRoomProps(prev);
-                                  showToast(err.response?.data?.error || `${label} did not save`, 'error');
+                                  showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || `${label} did not save`, 'error');
                                 }
                               }}
                               className="scene-sets-select-sm"
@@ -2048,7 +2048,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                   const r = await generateMoodVariantsApi(set.id, { moods: [m.key] });
                                   const d = r.data;
                                   if (d.success) { showToast(`${m.label} created`); onRefresh?.(); } else showToast(d.error || 'No variant was made', 'error');
-                                } catch (e) { console.error('[SceneSets] mood variant failed:', e); showToast(e.response?.data?.error || e.message, 'error'); }
+                                } catch (e) { console.error('[SceneSets] mood variant failed:', e); showToast(sceneAdminOnlyMessage(e) || e.response?.data?.error || e.message, 'error'); }
                                 setToolsAction(null);
                               }}>
                               {toolsAction === `mood_${m.key}` ? <Loader size={10} className="spin" /> : m.label}
@@ -2271,7 +2271,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                 if (onRefresh) await onRefresh();
                               } catch (e) {
                                 console.error('[SceneSets] create angles from spec failed:', e);
-                                showToast(e.response?.data?.error || e.message, 'error');
+                                showToast(sceneAdminOnlyMessage(e) || e.response?.data?.error || e.message, 'error');
                                 if (onRefresh) await onRefresh();
                               }
                               setSeeding(false);
@@ -2379,7 +2379,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                               // The new angles show now, not after a reload (audit, 2026-10-15).
                               onRefresh?.();
                             } else showToast(d.error || 'Failed', 'error');
-                          } catch (e) { console.error('[SceneSets] suggestAnglesFromImageApi failed:', e); showToast(e.response?.data?.error || e.message, 'error'); }
+                          } catch (e) { console.error('[SceneSets] suggestAnglesFromImageApi failed:', e); showToast(sceneAdminOnlyMessage(e) || e.response?.data?.error || e.message, 'error'); }
                           setSeeding(false);
                         }}>
                           {seeding ? <Loader size={11} className="spin" /> : <Plus size={11} />} Suggest More
@@ -2489,7 +2489,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                       else showToast(d.error, 'error');
                                     } catch (err) {
                                       console.error('[SceneSets] promote failed:', err);
-                                      showToast(err.response?.data?.error || 'Could not change the main background', 'error');
+                                      showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not change the main background', 'error');
                                     }
                                   }}
                                 >
@@ -2776,7 +2776,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button className="scene-sets-btn-generate" disabled={toolsAction === 'locking_style'} onClick={async () => {
                           setToolsAction('locking_style');
-                          try { const r = await lockSceneStyleApi(set.id); const d = r.data; if (d.success) showToast(`Style locked: ${d.data.design_style || 'done'}`); } catch (e) { console.error('[SceneSets] lockSceneStyleApi failed:', e); showToast(e.response?.data?.error || e.message, 'error'); } finally { setToolsAction(null); }
+                          try { const r = await lockSceneStyleApi(set.id); const d = r.data; if (d.success) showToast(`Style locked: ${d.data.design_style || 'done'}`); } catch (e) { console.error('[SceneSets] lockSceneStyleApi failed:', e); showToast(sceneAdminOnlyMessage(e) || e.response?.data?.error || e.message, 'error'); } finally { setToolsAction(null); }
                         }}><Lock size={11} /> {toolsAction === 'locking_style' ? 'Analyzing...' : 'Lock Style DNA'}</button>
                       </div>
                       {set.visual_language?.locked && (
@@ -2801,7 +2801,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                             const r = await learnSceneLocationApi(set.id);
                             const d = r.data;
                             if (d.success) showToast(d.message || 'Location learned');
-                          } catch (e) { console.error('[SceneSets] learnSceneLocationApi failed:', e); showToast(e.response?.data?.error || e.message, 'error'); }
+                          } catch (e) { console.error('[SceneSets] learnSceneLocationApi failed:', e); showToast(sceneAdminOnlyMessage(e) || e.response?.data?.error || e.message, 'error'); }
                           setToolsAction(null);
                         }}>
                           <Sparkles size={11} /> {toolsAction === 'learning' ? 'Teaching...' : 'Teach Show Brain'}
@@ -2838,7 +2838,7 @@ const SceneSetCard = memo(function SceneSetCard({ set, focused = false, focusZon
                                   const r = await generateMoodVariantsApi(set.id, { moods: [m.key] });
                                   const d = r.data;
                                   if (d.success) { showToast(`${m.label} variant created`); onRefresh?.(); } else showToast(d.error || 'No variant was made', 'error');
-                                } catch (e) { console.error('[SceneSets] mood variant failed:', e); showToast(e.response?.data?.error || e.message, 'error'); }
+                                } catch (e) { console.error('[SceneSets] mood variant failed:', e); showToast(sceneAdminOnlyMessage(e) || e.response?.data?.error || e.message, 'error'); }
                                 setToolsAction(null);
                               }}
                               title={m.desc}
@@ -3326,7 +3326,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       showToast(`${set.name} is now the default ${key === 'closet_set_id' ? 'closet' : 'home'}`);
     } catch (err) {
       console.error('[SceneSetsTab] make default failed:', err);
-      showToast(err.response?.data?.error || 'Could not save the default', 'error');
+      showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not save the default', 'error');
     }
   }, []);
 
@@ -3470,7 +3470,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         const res = await generateBaseImageApi(set.id, withEvent({ overrides }, eventId));
         json = res.data;
       } catch (err) {
-        throw new Error(err.response?.data?.error || 'Generation failed');
+        throw new Error(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Generation failed');
       }
 
       if (json.data?.jobId) {
@@ -3503,7 +3503,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         const res = await generateBaseImageApi(set.id, withEvent({ force: true, overrides }, eventId));
         json = res.data;
       } catch (err) {
-        throw new Error(err.response?.data?.error || 'Regeneration failed');
+        throw new Error(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Regeneration failed');
       }
 
       if (json.data?.jobId) {
@@ -3535,7 +3535,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       fetchSets();
     } catch (err) {
       console.error('[SceneSets] handleUpdatePrompt failed:', err);
-      showToast('Failed to update prompt', 'error');
+      showToast(sceneAdminOnlyMessage(err) || 'Failed to update prompt', 'error');
     }
   };
 
@@ -3558,7 +3558,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       try {
         await uploadBaseImageApi(set.id, formData);
       } catch (err) {
-        throw new Error(err.response?.data?.error || 'Upload failed');
+        throw new Error(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Upload failed');
       }
       await fetchSets();
       showToast('Base image replaced');
@@ -3588,7 +3588,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         const res = await generateAngleApi(set.id, angle.id, { overrides });
         json = res.data;
       } catch (err) {
-        throw new Error(err.response?.data?.error || `Generation failed (${err.response?.status || 'unknown'})`);
+        throw new Error(sceneAdminOnlyMessage(err) || err.response?.data?.error || `Generation failed (${err.response?.status || 'unknown'})`);
       }
 
       // Refresh to show angle-level spinner in filmstrip
@@ -3719,7 +3719,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       fetchSets();
     } catch (err) {
       console.error('[SceneSets] runGenerateAll failed:', err);
-      showToast(err?.response?.data?.error || err?.message || 'Generation failed', 'error');
+      showToast(sceneAdminOnlyMessage(err) || err?.response?.data?.error || err?.message || 'Generation failed', 'error');
     } finally {
       setTimeout(() => { if (alive.current) stopGenerating(set.id); }, 3000);
     }
@@ -3811,7 +3811,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         const res = await createSceneSetApi(createPayload);
         json = res.data;
       } catch (err) {
-        throw new Error(err.response?.data?.error || 'Failed to create location');
+        throw new Error(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Failed to create location');
       }
 
       // Save room properties if set (stored in visual_language JSONB)
@@ -3882,7 +3882,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       fetchSets();
     } catch (err) {
       console.error('[SceneSets] handleSetCoverAngle failed:', err);
-      showToast('Failed to set cover image', 'error');
+      showToast(sceneAdminOnlyMessage(err) || 'Failed to set cover image', 'error');
     }
   };
 
@@ -3916,7 +3916,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       fetchSets();
     } catch (err) {
       console.error('[SceneSets] angle delete failed:', err);
-      showToast(err.response?.data?.error || 'Failed to delete angle', 'error');
+      showToast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Failed to delete angle', 'error');
     }
   };
 
@@ -3945,7 +3945,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         const res = await createAngleApi(set.id, apiData);
         newAngle = res.data?.data;
       } catch (err) {
-        throw new Error(err.response?.data?.error || `Server error (${err.response?.status || 'unknown'})`);
+        throw new Error(sceneAdminOnlyMessage(err) || err.response?.data?.error || `Server error (${err.response?.status || 'unknown'})`);
       }
 
       if (_imageFile && newAngle?.id) {
@@ -3957,7 +3957,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
           showToast(`Added angle "${angleData.angle_label}" with uploaded image`);
         } catch (err) {
           console.error('[SceneSets] angle image upload failed:', err);
-          showToast(`Angle created but image upload failed${err.response?.data?.error ? `: ${err.response.data.error}` : ''}`, 'error');
+          showToast(sceneAdminOnlyMessage(err) || `Angle created but image upload failed${err.response?.data?.error ? `: ${err.response.data.error}` : ''}`, 'error');
         }
       } else {
         showToast(`Added angle "${angleData.angle_label}"`);
@@ -4022,7 +4022,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       try {
         await uploadAngleApi(set.id, angleId, formData);
       } catch (err) {
-        throw new Error(err.response?.data?.error || `Upload failed (${err.response?.status || 'unknown'})`);
+        throw new Error(sceneAdminOnlyMessage(err) || err.response?.data?.error || `Upload failed (${err.response?.status || 'unknown'})`);
       }
       showToast('Angle image uploaded');
       await fetchSets();
@@ -4045,7 +4045,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         );
         json = res.data;
       } catch (err) {
-        throw new Error(err.response?.data?.error || 'Cascade regeneration failed');
+        throw new Error(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Cascade regeneration failed');
       }
       onSaved?.();
       showToast('Cascade regeneration queued...');
@@ -4089,7 +4089,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
       fetchSets();
     } catch (err) {
       console.error('[SceneSets] handleReorderAngle failed:', err);
-      showToast('Failed to reorder angles', 'error');
+      showToast(sceneAdminOnlyMessage(err) || 'Failed to reorder angles', 'error');
     }
   };
 

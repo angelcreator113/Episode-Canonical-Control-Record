@@ -67,6 +67,7 @@ function mockProviders() {
 
 (shouldSkip ? describe.skip : describe)('The Scene Brief, shown before generating (S2)', () => {
   let token;
+  let adminToken;
   const ids = { show: uuid(), otherShow: uuid(), location: uuid(), parent: uuid(), event: uuid(), foreignEvent: uuid() };
   const createdSetIds = [];
   const saved = {};
@@ -99,6 +100,11 @@ function mockProviders() {
     await migration.up(sequelize.getQueryInterface(), Sequelize);
     token = TokenService.generateTokenPair({
       id: 'test-user-scene-brief-s2', email: 'user@scene-brief-s2.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+    }).accessToken;
+    // The generation routes are an ADMIN's (P2b, 2026-11-22); the brief stays
+    // any signed-in account's, and is still asked for with the editor's token.
+    adminToken = TokenService.generateTokenPair({
+      id: 'test-user-scene-brief-s2-admin', email: 'admin-user@scene-brief-s2.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     for (const [id, name] of [[ids.show, 'Brief show'], [ids.otherShow, 'Other show']]) {
       await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:id, :name, :slug, NOW(), NOW())`,
@@ -159,8 +165,9 @@ function mockProviders() {
     return set;
   }
 
-  const auth = (r) => r.set('Authorization', `Bearer ${token}`);
-  const brief = (setId, body = {}) => auth(request(app).post(`/api/v1/scene-sets/${setId}/brief`)).send(body);
+  const auth = (r) => r.set('Authorization', `Bearer ${adminToken}`);
+  const asEditor = (r) => r.set('Authorization', `Bearer ${token}`);
+  const brief = (setId, body = {}) => asEditor(request(app).post(`/api/v1/scene-sets/${setId}/brief`)).send(body);
   const line = (b, key) => b.lines.find((l) => l.key === key);
 
   async function waitForBase(setId) {

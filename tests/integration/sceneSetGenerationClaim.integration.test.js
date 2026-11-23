@@ -56,7 +56,7 @@ const shouldSkip =
       ADD COLUMN IF NOT EXISTS enhanced_still_url text,
       ADD COLUMN IF NOT EXISTS enhanced_video_url text`);
     token = TokenService.generateTokenPair({
-      id: 'test-user-generation-claim', email: 'user@generation-claim.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-generation-claim', email: 'user@generation-claim.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
   });
 

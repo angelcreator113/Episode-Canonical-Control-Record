@@ -43,6 +43,7 @@ const GUIDE = { architecture: 'Victorian iron-and-glass conservatory', materials
 
 (shouldSkip ? describe.skip : describe)('Venue images for an event with a scene set attached (F1)', () => {
   let token;
+  let adminToken;
   const ids = { show: uuid(), location: uuid(), event: uuid(), noVenueEvent: uuid() };
   const saved = {};
 
@@ -72,6 +73,11 @@ const GUIDE = { architecture: 'Victorian iron-and-glass conservatory', materials
       ADD COLUMN IF NOT EXISTS enhanced_video_url text`);
     token = TokenService.generateTokenPair({
       id: 'test-user-venue-attached-f1', email: 'user@venue-attached-f1.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+    }).accessToken;
+    // The generation routes are an ADMIN's (P2b, 2026-11-22); the brief stays
+    // any signed-in account's, and is still asked for with the editor's token.
+    adminToken = TokenService.generateTokenPair({
+      id: 'test-user-venue-attached-f1-admin', email: 'admin-user@venue-attached-f1.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     await run(`INSERT INTO shows (id, name, slug, created_at, updated_at) VALUES (:show, :name, :slug, NOW(), NOW())`,
       { show: ids.show, name: `F1 show ${ids.show.slice(0, 8)}`, slug: `f1-${ids.show.slice(0, 8)}` });
@@ -132,8 +138,9 @@ const GUIDE = { architecture: 'Victorian iron-and-glass conservatory', materials
     await sequelize.close();
   });
 
-  const auth = (r) => r.set('Authorization', `Bearer ${token}`);
-  const venueBrief = (eventId, body = {}) => auth(request(app).post(`/api/v1/world/${ids.show}/events/${eventId}/venue-brief`)).send(body);
+  const auth = (r) => r.set('Authorization', `Bearer ${adminToken}`);
+  const asEditor = (r) => r.set('Authorization', `Bearer ${token}`);
+  const venueBrief = (eventId, body = {}) => asEditor(request(app).post(`/api/v1/world/${ids.show}/events/${eventId}/venue-brief`)).send(body);
   const generate = (eventId, body = {}) => auth(request(app).post(`/api/v1/world/${ids.show}/events/${eventId}/generate-venue`)).send(body);
   const falCalls = () => axios.post.mock.calls.filter(([u]) => u.startsWith('https://fal.run/'));
   const eventSet = async () => (await run('SELECT scene_set_id FROM world_events WHERE id = :event', ids))[0][0].scene_set_id;

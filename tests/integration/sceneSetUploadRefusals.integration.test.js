@@ -23,7 +23,7 @@ const shouldSkip =
 
   beforeAll(() => {
     token = TokenService.generateTokenPair({
-      id: 'test-user-upload-refusals', email: 'user@upload-refusals.dev', name: 'Editor', groups: ['USER', 'EDITOR'], role: 'USER',
+      id: 'test-user-upload-refusals', email: 'user@upload-refusals.dev', name: 'Admin', groups: ['ADMIN'], role: 'ADMIN',
     }).accessToken;
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });

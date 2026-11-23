@@ -7,6 +7,7 @@
 import { useRef, useState } from 'react';
 import { Upload, X, Building2 } from 'lucide-react';
 import api from '../../services/api';
+import { sceneAdminOnlyMessage } from '../../utils/authGroups';
 import './VenuePhoto.css';
 
 export default function VenuePhoto({ set, onToast, onSaved }) {
@@ -25,7 +26,7 @@ export default function VenuePhoto({ set, onToast, onSaved }) {
       onSaved?.();
     } catch (err) {
       console.error('[VenuePhoto] upload failed:', err);
-      onToast?.(err.response?.data?.error || 'The venue photo did not upload', 'error');
+      onToast?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'The venue photo did not upload', 'error');
     } finally { setBusy(false); }
   };
   const remove = async () => {
@@ -36,7 +37,7 @@ export default function VenuePhoto({ set, onToast, onSaved }) {
       onSaved?.();
     } catch (err) {
       console.error('[VenuePhoto] remove failed:', err);
-      onToast?.(err.response?.data?.error || 'The venue photo was not removed', 'error');
+      onToast?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'The venue photo was not removed', 'error');
     } finally { setBusy(false); }
   };
 

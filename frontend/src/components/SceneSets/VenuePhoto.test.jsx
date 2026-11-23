@@ -45,4 +45,31 @@ describe('VenuePhoto', () => {
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/api/v1/scene-sets/set-1/venue-photo'));
     expect(onSaved).toHaveBeenCalled();
   });
+
+  // P2b (Evoni, 2026-11-22): the venue photo routes are an admin's. The
+  // server's refusal reads "Forbidden"; the page says who can do it.
+  const adminOnly = { response: { status: 403, data: { error: 'Forbidden', message: 'User must be in one of these groups: ADMIN', code: 'AUTH_GROUP_REQUIRED' } } };
+
+  test('an upload the server kept for an admin says so, and the set is not read again', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.mocked(api.post).mockRejectedValue(adminOnly);
+    const onSaved = vi.fn();
+    const onToast = vi.fn();
+    render(<VenuePhoto set={{ id: 'set-1', world_location_id: 'loc-1' }} onSaved={onSaved} onToast={onToast} />);
+    fireEvent.change(screen.getByTestId('venue-photo-input-set-1'), { target: { files: [new File(['x'], 'street.jpg', { type: 'image/jpeg' })] } });
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Only an admin can change scenes, sets or footage.', 'error'));
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  test('a removal the server kept for an admin says so; any other failure keeps its own words', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onToast = vi.fn();
+    render(<VenuePhoto set={{ id: 'set-1', world_location_id: 'loc-1', venue_photo_url: 'https://x/street.jpg' }} onToast={onToast} />);
+    vi.mocked(api.delete).mockRejectedValueOnce(adminOnly);
+    fireEvent.click(screen.getByTestId('venue-photo-remove-set-1'));
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('Only an admin can change scenes, sets or footage.', 'error'));
+    vi.mocked(api.delete).mockRejectedValueOnce({ response: { status: 409, data: { error: 'The photo is in use' } } });
+    fireEvent.click(screen.getByTestId('venue-photo-remove-set-1'));
+    await waitFor(() => expect(onToast).toHaveBeenCalledWith('The photo is in use', 'error'));
+  });
 });

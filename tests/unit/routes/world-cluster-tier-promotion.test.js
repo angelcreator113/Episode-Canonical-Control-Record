@@ -232,10 +232,11 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     });
 
     // S5 (Task #2395) — venue generation (two image calls) gains
-    // aiRateLimiter; it was requireAuth only.
-    test('POST /events/:eventId/generate-venue uses requireAuth + aiRateLimiter (S5)', () => {
+    // aiRateLimiter; it was requireAuth only. An ADMIN's since 2026-11-22
+    // (Evoni; P2b): authorize(['ADMIN']) sits between the two.
+    test('POST /events/:eventId/generate-venue is an ADMIN\'s (S5, P2b; requireAuth + authorize + aiRateLimiter)', () => {
       expect(src).toMatch(
-        /router\.post\(['"]\/world\/:showId\/events\/:eventId\/generate-venue['"],\s*requireAuth,\s*aiRateLimiter,/,
+        /router\.post\(['"]\/world\/:showId\/events\/:eventId\/generate-venue['"],\s*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/,
       );
     });
 
@@ -275,11 +276,12 @@ describe('Step 3 CP3 — World cluster mixed Tier 1+3+4 disposition', () => {
     // 21 with reroll-invitation-text and reroll-invitation-background (2026-10-24).
     // 22 with documents/:type/lines/:index/redraft (2026-10-24).
     // 23 with fill-missing (flow.js, 2026-10-25).
-    // Four of the 23 carry authorize(['ADMIN']) between the two (P1, 2026-11-22).
+    // Four of the 23 carry authorize(['ADMIN']) between the two (P1, 2026-11-22);
+    // five with generate-venue (P2b, 2026-11-22).
     test('all 23 AI handlers use uniform requireAuth + aiRateLimiter pattern', () => {
       const aiPattern = /router\.post\([^)]*requireAuth,\s*(?:authorize\(\['ADMIN'\]\),\s*)?aiRateLimiter,/g;
       const adminAi = src.match(/router\.post\([^)]*requireAuth,\s*authorize\(\['ADMIN'\]\),\s*aiRateLimiter,/g) || [];
-      expect(adminAi.length).toBe(4);
+      expect(adminAi.length).toBe(5);
       const matches = src.match(aiPattern) || [];
       expect(matches.length).toBe(23);
     });

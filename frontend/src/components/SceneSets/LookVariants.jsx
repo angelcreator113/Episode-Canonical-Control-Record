@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader, Sparkles, Upload, X } from 'lucide-react';
 import api from '../../services/api';
+import { sceneAdminOnlyMessage } from '../../utils/authGroups';
 import './LookVariants.css';
 
 // While a slot generates, the row refreshes every pollMs; the server ends a
@@ -90,7 +91,7 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS, refresh
       setConfirm({ kind, value: slot.value, label: slot.label, estimate: res.data?.data?.estimate || null });
     } catch (err) {
       console.error('[LookVariants] estimate failed:', err);
-      onToast?.(err.response?.data?.error || 'Could not prepare this variant', 'error');
+      onToast?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not prepare this variant', 'error');
     } finally {
       setBusy(null);
     }
@@ -105,7 +106,7 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS, refresh
       await load();
     } catch (err) {
       console.error('[LookVariants] generate failed:', err);
-      onToast?.(err.response?.data?.error || 'Could not generate this variant', 'error');
+      onToast?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not generate this variant', 'error');
     } finally {
       setBusy(null);
     }
@@ -128,7 +129,7 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS, refresh
       onToast?.('Uploaded');
     } catch (err) {
       console.error('[LookVariants] upload failed:', err);
-      onToast?.(err.response?.data?.error || 'Could not upload this variant', 'error');
+      onToast?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not upload this variant', 'error');
     } finally {
       setBusy(null);
     }
@@ -143,7 +144,7 @@ export default function LookVariants({ setId, onToast, pollMs = POLL_MS, refresh
       await load();
     } catch (err) {
       console.error('[LookVariants] remove failed:', err);
-      onToast?.(err.response?.data?.error || 'Could not remove this variant', 'error');
+      onToast?.(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not remove this variant', 'error');
     } finally {
       setBusy(null);
     }

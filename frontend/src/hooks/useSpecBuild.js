@@ -6,6 +6,7 @@
  * until the next attempt, and nothing fires after the card is gone.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { sceneAdminOnlyMessage } from '../utils/authGroups';
 
 export const specBuiltText = (spec, force) =>
   `Scene spec ${force ? 'rebuilt' : 'built'}: ${spec?.objects?.length || 0} objects · ${spec?.zones?.length || 0} zones · ${spec?.camera_contracts?.length || 0} camera contracts`;
@@ -41,7 +42,7 @@ export default function useSpecBuild({ request, onToast, onRefresh }) {
       }
       return d;
     } catch (e) {
-      const msg = e?.response?.data?.error || e?.message || 'Failed';
+      const msg = sceneAdminOnlyMessage(e) || e?.response?.data?.error || e?.message || 'Failed';
       if (alive.current) { setStatus('error'); setError(msg); onToast?.(msg, 'error'); }
       return { success: false, error: msg };
     } finally {
