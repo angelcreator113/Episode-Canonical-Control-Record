@@ -178,7 +178,34 @@ async function dressedAngleBrief(sequelize, args) {
   };
 }
 
-async function upsertRow(sequelize, { lookId, angleId, status, imageUrl = null, source, brief = null, estimate = null }) {
+/**
+ * The Place lock on a dressed angle (Generation B2; Evoni, 2026-11-23): a
+ * dressed angle is the episode's room at its event's place, so it is not
+ * made or replaced once the event's Place is locked. Asked before the claim,
+ * the provider and an upload's storage write; asked again, under the locks,
+ * when the row is saved (finalizePlace).
+ */
+async function assertPlaceOpen(sequelize, event) {
+  const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
+  if (event && await isPlaceLocked(sequelize, event.id)) throw new DressedAngleError(PLACE_LOCKED_MESSAGE, 409, PLACE_LOCKED_CODE);
+}
+
+/** For the upload route, before it stores the file: the episode's event, when it has one, is not locked. */
+async function assertDressedUploadOpen(sequelize, { episodeId }) {
+  await assertPlaceOpen(sequelize, await episodeEvent(sequelize, episodeId));
+}
+
+/** finalizePlaceWrite with the generation paths' pause between tries that lost to a lock (B1). */
+function finalizePlace(sequelize, event, work) {
+  const { finalizePlaceWrite } = require('../utils/placeLock');
+  const { PLACE_FINALIZE_RETRY_DELAY_MS } = require('./sceneGenerationService');
+  return finalizePlaceWrite(sequelize, event.id, { sourceSetId: event.scene_set_id ?? null, work, retryDelayMs: PLACE_FINALIZE_RETRY_DELAY_MS });
+}
+
+const UPLOAD_NOT_ATTACHED = 'The file was stored, but it was not attached. Nothing was changed.';
+const UPLOAD_SAVE_FAILED = 'The file was stored, but attaching it failed. Nothing was changed.';
+
+async function upsertRow(sequelize, { lookId, angleId, status, imageUrl = null, source, brief = null, estimate = null, transaction = null }) {
   const generating = status === 'generating';
   // A run claims the row: it does not replace a run still going (a double
   // click paid twice), and the row keeps its current image, source, brief
@@ -198,7 +225,7 @@ async function upsertRow(sequelize, { lookId, angleId, status, imageUrl = null, 
      ON CONFLICT (look_id, scene_angle_id) WHERE deleted_at IS NULL
      ${onConflict}
      RETURNING id, updated_at::text AS claimed_at`,
-    { replacements: { lookId, angleId, status, imageUrl, source, brief: brief ? JSON.stringify(brief) : null, estimate } });
+    { replacements: { lookId, angleId, status, imageUrl, source, brief: brief ? JSON.stringify(brief) : null, estimate }, ...(transaction ? { transaction } : {}) });
   if (!row) throw new DressedAngleError('This dressed angle is already being generated. Wait for it to finish.', 409, 'ANGLE_GENERATING');
   return row;
 }
@@ -216,6 +243,8 @@ const OWN_ANGLE_RUN = `id = :id AND status = 'generating' AND updated_at = CAST(
 async function startDressedAngle(sequelize, args) {
   if (!process.env.FAL_KEY) throw new DressedAngleError('A dressed angle uses Flux Kontext, which needs FAL_KEY, which is not configured.', 503, 'PROVIDER_NOT_CONFIGURED');
   const plan = await planDressedAngle(sequelize, args);
+  // Before the claim and before anything is paid for.
+  await assertPlaceOpen(sequelize, plan.event);
   const claim = await upsertRow(sequelize, {
     lookId: plan.look.id, angleId: plan.angle.id, status: 'generating', source: 'generated',
     brief: plan.brief, estimate: plan.estimate?.usd ?? null,
@@ -223,29 +252,74 @@ async function startDressedAngle(sequelize, args) {
   const rowId = claim.id;
   const run = async () => {
     const sceneGen = require('./sceneGenerationService');
+    // This run's row keeps its previous image, with the reason beside it: never left generating.
+    const notKept = (reason) => sequelize.query(
+      `UPDATE scene_set_look_angles SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE ${OWN_ANGLE_RUN}`,
+      { replacements: { id: rowId, claimedAt: claim.claimed_at, error: String(reason).slice(0, 500) } });
+    let out;
     try {
-      const out = await sceneGen.generateDressedStill(plan.set, plan.prompt, plan.look.image_url, { suffix: `look-angle-${rowId}` });
-      // Only this run's row: an upload since is kept (audit, 2026-10-15).
-      await sequelize.query(
-        `UPDATE scene_set_look_angles SET status = 'complete', image_url = :url, source = 'generated', brief = CAST(:brief AS jsonb),
-                cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
-          WHERE ${OWN_ANGLE_RUN}`,
-        { replacements: { id: rowId, claimedAt: claim.claimed_at, url: out.stillUrl, cost: out.cost, brief: JSON.stringify(plan.brief) } });
+      out = await sceneGen.generateDressedStill(plan.set, plan.prompt, plan.look.image_url, { suffix: `look-angle-${rowId}` });
     } catch (err) {
       console.error(`[DressedAngle] ${plan.angle.angle_name || plan.angle.angle_label} on "${plan.set.name}" failed:`, err.message);
-      await sequelize.query(
-        `UPDATE scene_set_look_angles SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE ${OWN_ANGLE_RUN}`,
-        { replacements: { id: rowId, claimedAt: claim.claimed_at, error: String(err.message || err).slice(0, 500) } });
+      await notKept(err.message || err);
+      return;
+    }
+    // The picture is made and stored; its row is saved through the Place
+    // finalizer. Whatever that answers, the provider is not called again.
+    const orphan = (code, attempts, errorClass = null) => sceneGen.generatedNotSavedLine({
+      keys: [sceneGen.storageKeyOf(out.stillUrl)], eventId: plan.event.id, setId: plan.set.id, code, attempts, costUsd: out.cost, usageLogIds: out.usageLogIds, errorClass,
+    });
+    let saved;
+    try {
+      saved = await finalizePlace(sequelize, plan.event, async ({ transaction }) => {
+        // Only this run's row: an upload since is kept (audit, 2026-10-15).
+        await sequelize.query(
+          `UPDATE scene_set_look_angles SET status = 'complete', image_url = :url, source = 'generated', brief = CAST(:brief AS jsonb),
+                  cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
+            WHERE ${OWN_ANGLE_RUN}`,
+          { replacements: { id: rowId, claimedAt: claim.claimed_at, url: out.stillUrl, cost: out.cost, brief: JSON.stringify(plan.brief) }, transaction });
+      });
+    } catch (err) {
+      console.error(orphan('SAVE_FAILED', null, sceneGen.errorClassOf(err)));
+      await notKept(sceneGen.GENERATED_SAVE_FAILED_MESSAGE);
+      return;
+    }
+    if (saved.outcome !== 'OK') {
+      console.error(orphan(saved.code, saved.attempts));
+      await notKept(`${saved.message} ${sceneGen.GENERATED_NOT_SAVED_MESSAGE}`);
     }
   };
-  return { result: { id: rowId, status: 'generating', look_id: plan.look.id, angle_id: plan.angle.id }, run };
+  const guarded = async () => {
+    try {
+      await run();
+    } catch (err) {
+      console.error(`[DressedAngle] ${rowId} could not be finished (${require('./sceneGenerationService').errorClassOf(err)})`);
+    }
+  };
+  return { result: { id: rowId, status: 'generating', look_id: plan.look.id, angle_id: plan.angle.id }, run: guarded };
 }
 
 /** "Upload image" on a beat at the look's set: the image is the dressed angle. */
 async function saveUploadedDressedAngle(sequelize, { episodeId, angleId, imageUrl }) {
-  const { angle, look } = await resolveTarget(sequelize, { episodeId, angleId });
-  const { id } = await upsertRow(sequelize, { lookId: look.id, angleId: angle.id, status: 'complete', imageUrl, source: 'uploaded' });
-  return { id, status: 'complete', image_url: imageUrl, look_id: look.id, angle_id: angle.id };
+  const { angle, look, event, set } = await resolveTarget(sequelize, { episodeId, angleId });
+  const { storageKeyOf, errorClassOf } = require('./sceneGenerationService');
+  const stored = `storage_key=${storageKeyOf(imageUrl) || 'unknown'} event=${event.id} set=${set.id}`;
+  // The file is already stored (the route's job). Its row is saved through
+  // the Place finalizer; a refusal says the file was stored and not attached.
+  let saved;
+  try {
+    saved = await finalizePlace(sequelize, event, ({ transaction }) => upsertRow(sequelize, {
+      lookId: look.id, angleId: angle.id, status: 'complete', imageUrl, source: 'uploaded', transaction,
+    }));
+  } catch (err) {
+    console.error(`[DressedAngle] an uploaded angle was stored and not attached: ${stored} outcome=SAVE_FAILED error=${errorClassOf(err)}; nothing was deleted from storage`);
+    throw new Error(UPLOAD_SAVE_FAILED);
+  }
+  if (saved.outcome !== 'OK') {
+    console.error(`[DressedAngle] an uploaded angle was stored and not attached: ${stored} outcome=${saved.code} attempts=${saved.attempts}; nothing was deleted from storage`);
+    throw new DressedAngleError(`${saved.message} ${UPLOAD_NOT_ATTACHED}`, 409, saved.code);
+  }
+  return { id: saved.value.id, status: 'complete', image_url: imageUrl, look_id: look.id, angle_id: angle.id };
 }
 
 module.exports = {
@@ -256,4 +330,5 @@ module.exports = {
   dressedAngleBrief,
   startDressedAngle,
   saveUploadedDressedAngle,
+  assertDressedUploadOpen,
 };

@@ -603,7 +603,7 @@ router.post('/:episodeId/dressed-angles/:angleId/upload', ...dressedIds, require
   try {
     const file = [...(req.files?.images || []), ...(req.files?.image || [])][0];
     if (!file) return res.status(400).json({ success: false, error: 'No image file provided' });
-    const { saveUploadedDressedAngle, episodeLooks } = require('../services/dressedAngleService');
+    const { saveUploadedDressedAngle, episodeLooks, assertDressedUploadOpen } = require('../services/dressedAngleService');
     const [[angle]] = await models.sequelize.query(
       'SELECT id, scene_set_id FROM scene_angles WHERE id = :id AND deleted_at IS NULL',
       { replacements: { id: req.params.angleId } });
@@ -612,6 +612,8 @@ router.post('/:episodeId/dressed-angles/:angleId/upload', ...dressedIds, require
     if (!look) {
       return res.status(409).json({ success: false, error: "This episode's event has no finished look on this set; the plain angle is used", code: 'NO_LOOK' });
     }
+    // The Place lock, before the file is stored (Generation B2): 409 PLACE_LOCKED.
+    await assertDressedUploadOpen(models.sequelize, { episodeId: req.params.episodeId });
     const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
     const bucket = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
     const region = process.env.AWS_REGION || 'us-east-1';

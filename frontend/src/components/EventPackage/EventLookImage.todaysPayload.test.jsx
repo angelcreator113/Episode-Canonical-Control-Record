@@ -2,12 +2,14 @@
  * Generation B1, D3 (Evoni, 2026-11-23): "Ensure B1 does not introduce a
  * regression into the current Event look panel."
  *
- * The look read today sends scene_set as { id, name, base_still_url,
- * generation_status, error }, with `error` only when the set is failed, and
- * no failed_at or generated_at (that read is B2's). With that payload the
- * panel renders what it rendered before B1, for a base generating, failed
- * with its reason, complete, and absent. This file imports nothing B1 added,
- * so it runs the same against the component as it was before B1.
+ * Before Generation B2 the look read sent scene_set as { id, name,
+ * base_still_url, generation_status, error }, with `error` only when the set
+ * was failed, and no failed_at or generated_at. With that payload the panel
+ * renders what it rendered before B1, for a base generating, failed with
+ * its reason, complete, and absent. Since B2 the read also sends not_saved,
+ * failed_at and generated_at (EventLookImage.notSaved.test.jsx); a payload
+ * without them, as an older server or a cached answer gives, still renders
+ * this way. This file imports nothing B1 added.
  */
 import React from 'react';
 import { vi, describe, beforeEach, test, expect } from 'vitest';
@@ -22,7 +24,7 @@ import api from '../../services/api';
 import EventLookImage from './EventLookImage';
 
 const BASE = '/api/v1/world/show-1/events/ev-1/look';
-// Exactly the fields venueLookImageService.eventLook sends for the set.
+// The fields venueLookImageService.eventLook sent for the set before B2.
 const set = (fields) => ({ id: 'set-1', name: 'Glasshouse Hall', base_still_url: null, generation_status: 'pending', error: null, ...fields });
 const payload = (sceneSet) => ({ scene_set: sceneSet, approved_base: null, look: null, venue_changed: false, editable: true });
 
@@ -38,7 +40,7 @@ const renderIt = () => {
 };
 const shown = (id) => screen.queryByTestId(id);
 
-describe("EventLookImage with today's look read", () => {
+describe('EventLookImage with the look read as it was before B2 (no not_saved, failed_at or generated_at)', () => {
   beforeEach(() => {
     Object.values(api).forEach((fn) => fn?.mockReset?.());
     vi.mocked(api.get).mockImplementation(async (url) => (url === BASE ? { data: { success: true, data: lookState } } : { data: {} }));
@@ -81,7 +83,7 @@ describe("EventLookImage with today's look read", () => {
     expect(onToast).toHaveBeenCalledTimes(1);
   });
 
-  test('a complete set that carries an error text but no failed_at (nothing today sends one): still no error line', async () => {
+  test('a complete set that carries an error text but no failed_at: still no error line', async () => {
     lookState = payload(set({ base_still_url: 'https://x/base.jpg', generation_status: 'complete', error: 'an old reason' }));
     renderIt();
     expect(await screen.findByTestId('event-look-awaiting')).toBeTruthy();
