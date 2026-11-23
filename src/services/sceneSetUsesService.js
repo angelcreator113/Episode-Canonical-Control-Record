@@ -239,18 +239,40 @@ async function removedSetsForEpisode(sequelize, episodeId) {
  * set. Returns how many links were dropped.
  */
 /**
- * Events held at a set whose Place is locked (their episode is accepted):
- * deleting the set, or moving its uses, would change a locked place
- * (seventh audit). [{ id, name }].
+ * Events held at a set whose Place is locked (an episode they are linked to
+ * is accepted, utils/placeLock): deleting the set, or moving its uses, would
+ * change a locked place (seventh audit). [{ id, name }]. Reads inside the
+ * caller's transaction when one is given (Foundation A).
  */
-async function lockedEventsAt(sequelize, setId) {
+async function lockedEventsAt(sequelize, setId, { transaction } = {}) {
   const [events] = await sequelize.query(
     'SELECT id, name FROM world_events WHERE scene_set_id = :setId AND deleted_at IS NULL ORDER BY name',
-    { replacements: { setId } });
+    { replacements: { setId }, transaction });
   const { isPlaceLocked } = require('../utils/placeLock');
   const locked = [];
-  for (const e of events) if (await isPlaceLocked(sequelize, e.id)) locked.push(e);
+  for (const e of events) if (await isPlaceLocked(sequelize, e.id, { transaction })) locked.push(e);
   return locked;
+}
+
+/**
+ * The accepted live episodes that use a set: as an episode location
+ * (scene_set_episodes), on a plan beat (scene_plans) or on a scene row
+ * (scenes); live rows only (Foundation A). [{ id, episode_number, title }],
+ * by episode number. A read, with no caller yet: it locks nothing, so it
+ * says what was true when it ran.
+ */
+async function acceptedEpisodeUses(sequelize, setId, { transaction } = {}) {
+  if (!setId) return [];
+  const [rows] = await sequelize.query(
+    `SELECT e.id, e.episode_number, e.title
+       FROM episodes e
+      WHERE e.deleted_at IS NULL AND e.evaluation_status = 'accepted'
+        AND (e.id IN (SELECT x.episode_id FROM scene_set_episodes x WHERE x.scene_set_id = :setId AND x.deleted_at IS NULL)
+             OR e.id IN (SELECT x.episode_id FROM scene_plans x WHERE x.scene_set_id = :setId AND x.deleted_at IS NULL)
+             OR e.id IN (SELECT x.episode_id FROM scenes x WHERE x.scene_set_id = :setId AND x.deleted_at IS NULL))
+      ORDER BY e.episode_number NULLS LAST, e.id`,
+    { replacements: { setId }, transaction });
+  return (rows || []).map((r) => ({ id: r.id, episode_number: r.episode_number ?? null, title: r.title ?? null }));
 }
 
 /** A deleted set's event versions read as everyday again (as the FK's SET NULL would on a hard delete). */
@@ -297,5 +319,6 @@ module.exports = {
   moveRemovedSetsForEpisode,
   dropRemovedSetLinks,
   lockedEventsAt,
+  acceptedEpisodeUses,
   releaseVersions,
 };

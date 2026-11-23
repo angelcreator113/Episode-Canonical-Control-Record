@@ -231,6 +231,10 @@ async function loadEventPayload(models, { showId, eventId, row = null }) {
         id: lockEpisode.id,
         episode_number: lockEpisode.episode_number ?? null,
         title: lockEpisode.title ?? null,
+        // Foundation A: the page locks the guest controls on this episode's
+        // acceptance alone, as it always has, now that placeLocked is true
+        // in more states (any linked episode accepted).
+        evaluation_status: lockEpisode.evaluation_status ?? null,
       };
     } catch (lockErr) {
       console.error('[WorldEvents] terms lock lookup failed:', lockErr.message);
@@ -238,7 +242,8 @@ async function loadEventPayload(models, { showId, eventId, row = null }) {
     }
   })();
 
-  // L13 (§8(hh)): the Place stays editable until the episode is accepted.
+  // L13 (§8(hh)): the Place stays editable until an episode the event is
+  // linked to is accepted (any of them: utils/placeLock, Foundation A).
   const placeLockedP = (async () => {
     try {
       return await require('../../utils/placeLock').isPlaceLocked(models.sequelize, event.id);

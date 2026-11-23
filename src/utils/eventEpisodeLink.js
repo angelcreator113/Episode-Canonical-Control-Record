@@ -19,8 +19,12 @@ const EVENT_EPISODE_CONFLICT_CODE = 'EVENT_ALREADY_HAS_EPISODE';
 
 /**
  * Returns the live episode an event is linked to, or null.
+ * `withEvaluationStatus` adds the episode's evaluation_status to the row
+ * (Foundation A: the event read reports it for the terms-lock episode).
+ * It is off by default, so Start readiness and the Start conflict, which
+ * pass this row on as it is, answer exactly as before.
  */
-async function findLiveLinkedEpisode(sequelize, eventId, { transaction } = {}) {
+async function findLiveLinkedEpisode(sequelize, eventId, { transaction, withEvaluationStatus = false } = {}) {
   const [eventRows] = await sequelize.query(
     `SELECT used_in_episode_id FROM world_events WHERE id = :eventId LIMIT 1`,
     { replacements: { eventId }, transaction }
@@ -29,10 +33,38 @@ async function findLiveLinkedEpisode(sequelize, eventId, { transaction } = {}) {
   if (!linkedId) return null;
 
   const [episodeRows] = await sequelize.query(
-    'SELECT id, title, episode_number, show_id FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1',
+    `SELECT id, title, episode_number, show_id${withEvaluationStatus ? ', evaluation_status' : ''} FROM episodes WHERE id = :episodeId AND deleted_at IS NULL LIMIT 1`,
     { replacements: { episodeId: linkedId }, transaction }
   );
   return episodeRows?.[0] || null;
+}
+
+/**
+ * Every live episode an event is canonically linked to (Foundation A, the
+ * strict Place lock; Evoni, 2026-11-23): [{ id, evaluation_status }] in id
+ * order.
+ *
+ *   - the live episode the event is stamped on (world_events.
+ *     used_in_episode_id): a non-primary event of its episode has only this;
+ *   - UNION every live episode with a live brief naming the event
+ *     (episode_briefs.event_id): the primary event, and both parts of a
+ *     two-part special (Part 2's brief copies event_id).
+ *
+ * A soft-deleted episode, and a soft-deleted brief, link nothing. Every
+ * live brief counts, not only the newest one of an episode. Read without a
+ * lock; pass the caller's transaction to read inside it.
+ */
+async function linkedLiveEpisodes(sequelize, eventId, { transaction } = {}) {
+  if (!eventId) return [];
+  const [rows] = await sequelize.query(
+    `SELECT e.id, e.evaluation_status
+       FROM episodes e
+      WHERE e.deleted_at IS NULL
+        AND (e.id = (SELECT w.used_in_episode_id FROM world_events w WHERE w.id = :eventId)
+             OR e.id IN (SELECT b.episode_id FROM episode_briefs b WHERE b.event_id = :eventId AND b.deleted_at IS NULL))
+      ORDER BY e.id`,
+    { replacements: { eventId }, transaction });
+  return rows || [];
 }
 
 function eventEpisodeConflictMessage(episode) {
@@ -150,6 +182,7 @@ module.exports = {
   eventDeletedBody,
   lockLiveEvent,
   findLiveLinkedEpisode,
+  linkedLiveEpisodes,
   eventEpisodeConflictMessage,
   eventEpisodeConflictError,
   eventEpisodeConflictBody,
