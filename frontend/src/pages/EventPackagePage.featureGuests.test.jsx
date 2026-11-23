@@ -29,6 +29,7 @@ const eventWith = (list, extra = {}) => ({
 
 let stored;
 let usedInEpisode;
+let termsLockedBy;
 let placeLocked;
 
 const renderPage = (path = '/shows/show-1/events/ev-1') => render(
@@ -40,10 +41,11 @@ const renderPage = (path = '/shows/show-1/events/ev-1') => render(
 beforeEach(() => {
   Object.values(api).forEach((fn) => fn?.mockReset?.());
   usedInEpisode = null;
+  termsLockedBy = null;
   placeLocked = false;
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url === EVENT_URL) {
-      return { data: { success: true, event: stored, sourceProfile: null, startedFromProfile: null, sceneSet: null, venueLocation: null, invitationAsset: null, usedInEpisode, placeLocked } };
+      return { data: { success: true, event: stored, sourceProfile: null, startedFromProfile: null, sceneSet: null, venueLocation: null, invitationAsset: null, usedInEpisode, termsLockedBy, placeLocked } };
     }
     return { data: { success: true, deliverables: [], locked: false } };
   });
@@ -95,7 +97,8 @@ describe('feature a guest by clicking their name', () => {
 
   test('after Start Episode, a draft episode can still feature a guest', async () => {
     stored = eventWith(guests([1]), { used_in_episode_id: 'ep-9' });
-    usedInEpisode = { id: 'ep-9', episode_number: 4, title: 'Velour' };
+    usedInEpisode = { id: 'ep-9', episode_number: 4, title: 'Velour', evaluation_status: 'pending' };
+    termsLockedBy = { id: 'ep-9', episode_number: 4, title: 'Velour', evaluation_status: 'pending' };
     renderPage();
     const list = await openList();
     expect(screen.queryByTestId('guest-list-locked')).toBeNull();
@@ -106,7 +109,8 @@ describe('feature a guest by clicking their name', () => {
 
   test("the episode's link lands on People with the guest list open", async () => {
     stored = eventWith(guests(), { used_in_episode_id: 'ep-9' });
-    usedInEpisode = { id: 'ep-9', episode_number: 4, title: 'Velour' };
+    usedInEpisode = { id: 'ep-9', episode_number: 4, title: 'Velour', evaluation_status: 'pending' };
+    termsLockedBy = { id: 'ep-9', episode_number: 4, title: 'Velour', evaluation_status: 'pending' };
     renderPage('/shows/show-1/events/ev-1#epp-sec-people');
     await screen.findByText('Hide Full Guest List (7)');
     expect(within(document.getElementById('epp-guest-list')).getAllByRole('button').length).toBeGreaterThan(0);
@@ -114,7 +118,8 @@ describe('feature a guest by clicking their name', () => {
 
   test('once the episode is accepted, the names are plain text and say featured attendees are locked', async () => {
     stored = eventWith(guests([1]), { used_in_episode_id: 'ep-9' });
-    usedInEpisode = { id: 'ep-9', episode_number: 4, title: 'Velour' };
+    usedInEpisode = { id: 'ep-9', episode_number: 4, title: 'Velour', evaluation_status: 'accepted' };
+    termsLockedBy = { id: 'ep-9', episode_number: 4, title: 'Velour', evaluation_status: 'accepted' };
     placeLocked = true;
     renderPage();
     const list = await openList();
@@ -122,6 +127,69 @@ describe('feature a guest by clicking their name', () => {
     expect(list.textContent).toContain('guest2');
     expect(list.textContent).toContain('Featured');
     expect(screen.getByTestId('guest-list-locked').textContent).toBe('Featured attendees are locked: Episode 4 is accepted.');
+  });
+});
+
+// Foundation A (Evoni, 2026-11-23): the Place locks when ANY linked episode
+// is accepted, so the server's placeLocked is true in three states where it
+// was false. "Do not automatically lock featured-guest editing merely
+// because the Place is locked": the guest controls follow the terms-lock
+// episode (termsLockedBy) alone, exactly as they did when placeLocked was
+// that episode's acceptance.
+describe('the guest controls do not follow the wider Place lock', () => {
+  const accepted = (id, n, title) => ({ id, episode_number: n, title, evaluation_status: 'accepted' });
+  const draft = (id, n, title) => ({ id, episode_number: n, title, evaluation_status: 'pending' });
+  // Each: what the event read answers in that state. The terms-lock
+  // episode is a draft in all three, so the guests were editable before.
+  const NEW_STATES = [
+    ['a two-part special, Part 1 accepted and Part 2 (the newest brief) a draft',
+      { stamp: 'ep-1', usedInEpisode: accepted('ep-1', 4, 'Velour, Part 1'), termsLockedBy: draft('ep-2', 5, 'Velour, Part 2') }],
+    ["stamped on an accepted episode while a draft's brief names the event",
+      { stamp: 'ep-1', usedInEpisode: accepted('ep-1', 4, 'Velour'), termsLockedBy: draft('ep-2', 5, 'Afterparty') }],
+    ["an older brief's episode accepted, the newest brief's a draft, and no stamp",
+      { stamp: null, usedInEpisode: null, termsLockedBy: draft('ep-2', 5, 'Afterparty') }],
+  ];
+
+  test.each(NEW_STATES)('%s: the Place is locked, a guest can still be featured', async (_name, state) => {
+    stored = eventWith(guests([1]), state.stamp ? { used_in_episode_id: state.stamp } : {});
+    usedInEpisode = state.usedInEpisode;
+    termsLockedBy = state.termsLockedBy;
+    placeLocked = true;
+    renderPage();
+    const list = await openList();
+    // The Place: no scene set choice.
+    expect(screen.getByTestId('place-scene-set')).toBeTruthy();
+    expect(screen.queryByTestId('place-choose-scene-set')).toBeNull();
+    // The guests: as before.
+    expect(screen.queryByTestId('guest-list-locked')).toBeNull();
+    fireEvent.click(within(list).getByRole('button', { name: /guest4/ }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect(savedGuests(0).map((g) => g.featured)).toEqual([false, true, false, true, false, false, false]);
+  });
+
+  test('the terms-lock episode accepted locks the guests whatever the stamped episode says', async () => {
+    stored = eventWith(guests([1]), { used_in_episode_id: 'ep-1' });
+    usedInEpisode = draft('ep-1', 4, 'Velour');
+    termsLockedBy = accepted('ep-2', 5, 'Afterparty');
+    placeLocked = true;
+    renderPage();
+    const list = await openList();
+    expect(within(list).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.getByTestId('guest-list-locked').textContent).toBe('Featured attendees are locked: Episode 5 is accepted.');
+    expect(screen.queryByTestId('place-choose-scene-set')).toBeNull();
+  });
+
+  test('a stamp on a deleted accepted episode locks nothing (no terms-lock episode), as before', async () => {
+    stored = eventWith(guests([1]), { used_in_episode_id: 'ep-gone' });
+    // The read returns the stamped row even when it is soft-deleted.
+    usedInEpisode = accepted('ep-gone', 4, 'Velour');
+    termsLockedBy = null;
+    placeLocked = false;
+    renderPage();
+    const list = await openList();
+    expect(screen.queryByTestId('guest-list-locked')).toBeNull();
+    expect(within(list).getByRole('button', { name: /guest4/ })).toBeTruthy();
+    expect(screen.getByTestId('place-choose-scene-set')).toBeTruthy();
   });
 });
 

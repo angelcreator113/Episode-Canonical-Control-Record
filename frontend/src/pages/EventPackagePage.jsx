@@ -248,7 +248,12 @@ function EventPackageBody({ pkg }) {
   // featured guest" after Start Episode, while the episode asked for them):
   // they only steer the script, so like the scene set (L13) they stay
   // editable until the episode is accepted. Who is invited stays locked.
-  const castLocked = used && !!placeLocked;
+  // "The episode" is the terms-lock episode alone (termsLockedBy), as it
+  // was before the Place lock began to count every linked episode
+  // (Foundation A; Evoni, 2026-11-23: "Do not automatically lock
+  // featured-guest editing merely because the Place is locked."). So
+  // placeLocked locks the Place section only.
+  const castLocked = used && termsLockedBy?.evaluation_status === 'accepted';
   // The deal's deliverable and cost rows (EventTermsSection's
   // onPriceInputsChange) hold the price gate too, once they have loaded.
   const readiness = computeEventPackageReadiness(event, { suggest: !used, venueLocation, ...(priceInputs ? { prices: priceInputs } : {}) });

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../services/api';
+import { adminOnlyMessage } from '../utils/authGroups';
 
 const API = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -10,6 +11,10 @@ export const createPropertyApi = (payload) =>
   apiClient.post(`${API}/properties`, payload).then((r) => r.data);
 export const addPropertyRoomApi = (propertyId, payload) =>
   apiClient.post(`${API}/properties/${propertyId}/rooms`, payload).then((r) => r.data);
+
+// Shown when the server kept a property or room write for an admin (a 403
+// with AUTH_GROUP_REQUIRED). Display only: the server is the guard.
+export const PROPERTY_ADMIN_ONLY_MESSAGE = 'Only an admin can add or change properties and rooms.';
 
 const STYLE_PRESETS = [
   { id: 'modern-glam', label: 'Modern Glam', desc: 'Brushed gold, marble, velvet, crystal — feminine luxury', palette: ['#F5E6E0', '#E8D5E0', '#C9A96E', '#F7F0EA', '#9B7CB6'] },
@@ -60,7 +65,7 @@ export default function PropertyManager() {
       const d = await createPropertyApi(newProp);
       if (d.success) { flash(`Property "${newProp.name}" created!`); setNewProp({ name: '', property_type: 'penthouse', style_preset_id: 'modern-glam', description: '' }); loadProperties(); }
       else flash(d.error || 'Failed', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) { flash(adminOnlyMessage(e, PROPERTY_ADMIN_ONLY_MESSAGE) || e.message, 'error'); }
     setCreating(false);
   };
 
@@ -70,7 +75,7 @@ export default function PropertyManager() {
       const d = await addPropertyRoomApi(propertyId, newRoom);
       if (d.success) { flash(`Room "${newRoom.name}" added!`); setNewRoom({ name: '', template_id: '' }); setAddingRoom(null); loadProperties(); }
       else flash(d.error || 'Failed', 'error');
-    } catch (e) { flash(e.message, 'error'); }
+    } catch (e) { flash(adminOnlyMessage(e, PROPERTY_ADMIN_ONLY_MESSAGE) || e.message, 'error'); }
   };
 
   const selectedPreset = STYLE_PRESETS.find(p => p.id === newProp.style_preset_id);

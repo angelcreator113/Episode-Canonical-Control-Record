@@ -43,7 +43,6 @@ const ALLOWED = {
   'src/app.js': [1, 'sequelize.sync() only with ENABLE_DB_SYNC=true, a danger switch never set in production (F-App-1 plan §9.3)'],
   'src/models/index.js': [1, 'the sync() helper; nothing calls it'],
   'src/server.js': [5, 'one-time repair of the legacy shows unique constraints, only while shows_name_key/shows_slug_key exist; needs table ownership, not CREATE on public (inventory §3, separate decision)'],
-  'src/controllers/sceneController.js': [2, 'drops and re-creates idx_scenes_episode_scene_number around scene renumbering; needs table ownership, not CREATE on public (inventory §3, separate fix)'],
 };
 
 describe('no runtime DDL in the application', () => {
@@ -61,6 +60,16 @@ describe('no runtime DDL in the application', () => {
 
   test('the listed exceptions hold no more DDL than recorded', () => {
     for (const [f, [max]] of Object.entries(ALLOWED)) expect([f, (found[f] || []).length <= max]).toEqual([f, true]);
+  });
+
+  // Evoni, 2026-11-22: the scene delete took idx_scenes_episode_scene_number
+  // away and put it back around its renumbering (inventory D9). It no longer
+  // does; the file is not an exception any more.
+  test('sceneController changes no schema: the scene delete renumbers without touching the index', () => {
+    expect(ALLOWED['src/controllers/sceneController.js']).toBeUndefined();
+    expect(found['src/controllers/sceneController.js'] || []).toEqual([]);
+    const src = code(fs.readFileSync(path.join(ROOT, 'src/controllers/sceneController.js'), 'utf8'));
+    expect(src).not.toMatch(/idx_scenes_episode_scene_number/);
   });
 
   test('the nine former table-creation sites are gone, and their tables come from migrations', () => {

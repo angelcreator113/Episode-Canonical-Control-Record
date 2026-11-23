@@ -18,6 +18,11 @@ import FeedViewContent from './feed/FeedViews';
 import { isOrganizedByProfile } from '../utils/eventOrganizer';
 import { openAuthedEventStream } from '../utils/authedEventStream';
 import { showIdFromPath, rememberedShowId } from '../utils/activeShow';
+import { adminOnlyMessage } from '../utils/authGroups';
+
+// What the page shows when the server kept Feed generation or the automation
+// settings for an admin (403 AUTH_GROUP_REQUIRED). Display only.
+const FEED_ADMIN_ONLY_MESSAGE = 'Only an admin can generate Feed creators or change the Feed automation settings.';
 
 // Local Spinner — avoid named import that fails during code-splitting
 function Spinner() {
@@ -625,7 +630,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
     try{
       await updateSchedulerConfig(updates);
       await loadAutoStatus();
-    }catch(err){showToast('Config update failed: '+(err.response?.data?.error||err.message),'error');}
+    }catch(err){showToast(adminOnlyMessage(err,FEED_ADMIN_ONLY_MESSAGE)||'Config update failed: '+(err.response?.data?.error||err.message),'error');}
   };
 
   // ── Auto-Generate (background job — continues even if you leave the page) ──
@@ -637,7 +642,7 @@ export default function SocialProfileGenerator({ embedded=false, worldTag, defau
       // Track via the existing bulk-job SSE infrastructure (activeJob bar handles all progress)
       startJobPolling(data.job_id, autoGenCount);
       showToast(`Auto-generating ${autoGenCount} profile(s) in background — you can leave this page`,'success');
-    }catch(err){setError(err.response?.data?.error||err.message||'Failed to start auto-generation');}
+    }catch(err){setError(adminOnlyMessage(err,FEED_ADMIN_ONLY_MESSAGE)||err.response?.data?.error||err.message||'Failed to start auto-generation');}
     finally{setAutoGenRunning(false);}
   };
 
