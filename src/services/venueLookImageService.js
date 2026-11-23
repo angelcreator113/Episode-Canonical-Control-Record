@@ -243,6 +243,9 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
         await sceneGen.generateBaseScene(instance, models, { eventId: null, environmentEventId: event.id, overrides: overrides.value || {} });
       } catch (err) {
         console.error(`[VenueLookImage] base for "${set.name}" failed:`, err.message);
+        // Generated and not saved (Generation B1): generateBaseScene put the
+        // set's status back and kept the reason; it is not marked failed.
+        if (err instanceof sceneGen.PlaceFinalizeRefusal) return;
         await markBaseFailed(models.sequelize, set.id, err.message || String(err));
       }
     };

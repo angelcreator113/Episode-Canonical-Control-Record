@@ -21,6 +21,10 @@ const { startedEpisodeFor } = require('../../services/episodeTaskCopyService');
 const { loadScopedEvent } = require('../../utils/eventScope');
 const { getModels } = require('./helpers');
 
+// The outcome of a picture that was generated and then not saved
+// (sceneGenerationService.PlaceFinalizeRefusal carries the same word).
+const GENERATED_NOT_SAVED = 'generated_not_saved';
+
 // POST /world/:showId/events/:eventId/venue-brief — the Scene Briefs a venue
 // generation would send (S2, S5), read-only: the interior (the set's base)
 // and the exterior, for this event at its venue World Location, with the
@@ -79,8 +83,9 @@ router.post('/world/:showId/events/:eventId/venue-brief', requireAuth, async (re
 // "already available", or its missing base is generated for this event from
 // the brief venue-brief showed (S2, S3). A set that no longer exists reads as
 // none. overrides: the "Your override" lines confirmed on the brief (S2, S5).
-// The response's outcome says what happened: generated, already_available or
-// failed.
+// The response's outcome says what happened: generated, already_available,
+// failed, or generated_not_saved (409: the picture was made and stored, and
+// the save was then refused; see the catch below).
 //
 // An ADMIN's (Evoni, 2026-11-22; P2b): it is paid, it stores images, and its
 // new-venue branch moves the event to a new scene set. authorize sits before
@@ -137,7 +142,16 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, author
 
     if (attached) {
       const sceneGenService = require('../../services/sceneGenerationService');
-      await sceneGenService.generateBaseScene(attached, models, { overrides: briefOverrides.value || {}, eventId: event.id });
+      // The base is saved through the Place finalizer (Generation B1): only
+      // while the Place is still not locked and the event is still at this set.
+      const { finalizePlaceWrite } = require('../../utils/placeLock');
+      await sceneGenService.generateBaseScene(attached, models, {
+        overrides: briefOverrides.value || {},
+        eventId: event.id,
+        finalize: (work) => finalizePlaceWrite(models.sequelize, event.id, {
+          sourceSetId: attached.id, work, retryDelayMs: sceneGenService.PLACE_FINALIZE_RETRY_DELAY_MS,
+        }),
+      });
       await attached.reload();
       if (!attached.base_still_url) throw new Error(`No base image was stored for "${attached.name}"`);
       return res.json({
@@ -168,6 +182,29 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, author
       message: `Venue images generated for "${event.name}" — scene set created`,
     });
   } catch (err) {
+    // Generated, stored, and then not saved (Generation B1): the Place
+    // locked, the event's set changed, the event was deleted or every try
+    // lost a lock wait while the picture was being made. Not a failure of
+    // the generation, and never the 500 below: `code` and `error` are the
+    // refusal's own (the Place lock's are the same as the early check's).
+    if (err?.outcome === GENERATED_NOT_SAVED) {
+      console.error(`[VenueGen] generated, not saved (${err.code}):`, err.message);
+      return res.status(409).json({ success: false, outcome: GENERATED_NOT_SAVED, code: err.code, error: err.message, message: err.detail });
+    }
+    // Generated and stored, and then the save failed for another reason (a
+    // database error that is no lock conflict and no refusal; Evoni,
+    // 2026-11-23). Still this route's 500 "failed", with a code that tells
+    // it from a failed generation and fixed sentences: the database's own
+    // message, which can name rows and values, is not sent, and the error
+    // is logged by its class only (the stored keys are in the
+    // [GeneratedNotSaved] line).
+    if (err?.generatedSaveFailed) {
+      const { GENERATED_SAVE_FAILED, GENERATED_SAVE_FAILED_ERROR, GENERATED_SAVE_FAILED_MESSAGE, errorClassOf } = require('../../services/sceneGenerationService');
+      console.error(`[VenueGen] generated, the save failed (${errorClassOf(err)})`);
+      return res.status(500).json({
+        success: false, outcome: 'failed', code: GENERATED_SAVE_FAILED, error: GENERATED_SAVE_FAILED_ERROR, message: GENERATED_SAVE_FAILED_MESSAGE,
+      });
+    }
     console.error('[VenueGen] Error:', err);
     return res.status(isBudgetError(err) ? 429 : 500).json({ success: false, outcome: 'failed', error: err.message });
   }

@@ -407,6 +407,52 @@ export async function waitForJob(jobId, { intervalMs = 5000, maxPolls = 72, slee
   }
   return { status: 'failed', error: 'Still running after 6 minutes; the video will show on the card when it is ready' };
 }
+/**
+ * A base run that made a picture and did not save it (the event's Place
+ * locked meanwhile, or the base was approved meanwhile): the server puts
+ * the set's status back to what it was and keeps the reason in
+ * base_generation.last_error with failed_at. Returns that sentence when it
+ * is newer than the set's last saved base (generated or uploaded), else
+ * null. A set that is generating or failed says so through its status.
+ */
+export function baseNotSavedReason(set) {
+  const g = set?.base_generation;
+  if (!g || !g.last_error || !g.failed_at) return null;
+  if (set.generation_status === 'generating' || set.generation_status === 'failed') return null;
+  const failedAt = Date.parse(g.failed_at);
+  if (Number.isNaN(failedAt)) return null;
+  const savedAt = Math.max(Date.parse(g.generated_at) || 0, Date.parse(g.uploaded_at) || 0);
+  return failedAt > savedAt ? String(g.last_error) : null;
+}
+
+/**
+ * Waits on a set's base generation: { status, error? }, status one of
+ * completed, failed, not_saved (with the recorded reason), timeout or
+ * cancelled (alive() turned false: the page was left).
+ */
+export async function waitForBase(setId, { intervalMs = 4000, maxPolls = 30, alive = () => true, sleep = (ms) => new Promise(r => setTimeout(r, ms)) } = {}) {
+  for (let i = 0; i < maxPolls; i++) {
+    await sleep(intervalMs);
+    if (!alive()) return { status: 'cancelled' };
+    try {
+      const set = (await getSceneSetApi(setId)).data?.data;
+      // Before the status: a run that was not saved leaves the set
+      // 'complete' with its old picture, which is not a new base.
+      const notSaved = baseNotSavedReason(set);
+      if (notSaved) return { status: 'not_saved', error: notSaved };
+      if (set?.generation_status === 'complete') return { status: 'completed' };
+      if (set?.generation_status === 'failed') return { status: 'failed' };
+    } catch (err) { console.error('[SceneSets] getSceneSetApi failed:', err); /* retry */ }
+  }
+  return { status: 'timeout' };
+}
+
+/** The toast for how a base run ended: [text, kind]. */
+export function baseRunToast(end, { done, failed }) {
+  if (end?.status === 'completed') return [done];
+  if (end?.status === 'not_saved') return [end.error, 'error'];
+  return [failed, 'error'];
+}
 export const getGenerationCheckApi = () => apiClient.get(`${API_BASE}/scene-sets/generation-check`);
 
 // Spec / refinement
@@ -3395,19 +3441,7 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
     return { status: 'timeout', error: 'Polling timed out' };
   }, []);
 
-  const pollSetStatus = useCallback(async (setId, field = 'generation_status', maxPolls = 30) => {
-    for (let i = 0; i < maxPolls; i++) {
-      await new Promise(r => setTimeout(r, 4000));
-      if (!alive.current) return 'cancelled';
-      try {
-        const r = await getSceneSetApi(setId);
-        const d = r.data;
-        if (d.data?.[field] === 'complete') return 'completed';
-        if (d.data?.[field] === 'failed') return 'failed';
-      } catch (err) { console.error('[SceneSets] getSceneSetApi failed:', err); /* retry */ }
-    }
-    return 'timeout';
-  }, []);
+  const pollSetStatus = useCallback((setId) => waitForBase(setId, { alive: () => alive.current }), []);
 
   // S2 (Evoni, 2026-09-30): "The Scene Brief is shown before any paid
   // generation". Every paid scene-set generation below first opens
@@ -3481,10 +3515,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         else showToast(job.error || 'Base generation failed', 'error');
       } else {
         showToast('Generating base — this may take 30-60s...');
-        const status = await pollSetStatus(set.id);
-        if (status === 'cancelled') return; // the page was left
-        if (status === 'completed') showToast(`Base generated for "${set.name}"`);
-        else showToast('Base generation failed or timed out', 'error');
+        const end = await pollSetStatus(set.id);
+        if (end.status === 'cancelled') return; // the page was left
+        showToast(...baseRunToast(end, { done: `Base generated for "${set.name}"`, failed: 'Base generation failed or timed out' }));
       }
       await fetchSets();
     } catch (err) {
@@ -3514,10 +3547,9 @@ export default function SceneSetsTab({ showId: pageShowId = null } = {}) {
         else showToast(job.error || 'Regeneration failed', 'error');
       } else {
         showToast('Regenerating base — this may take 30-60s...');
-        const status = await pollSetStatus(set.id);
-        if (status === 'cancelled') return; // the page was left
-        if (status === 'completed') showToast('Base image regenerated!');
-        else showToast('Regeneration failed or timed out', 'error');
+        const end = await pollSetStatus(set.id);
+        if (end.status === 'cancelled') return; // the page was left
+        showToast(...baseRunToast(end, { done: 'Base image regenerated!', failed: 'Regeneration failed or timed out' }));
       }
       await fetchSets();
     } catch (err) {

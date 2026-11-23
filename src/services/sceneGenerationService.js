@@ -914,6 +914,151 @@ function briefDb(models) {
   return models?.sequelize || models?.SceneSet?.sequelize || models?.SceneAngle?.sequelize || null;
 }
 
+// ─── GENERATED, NOT SAVED (Generation B1; Evoni, 2026-11-23) ─────────────────
+//
+// A picture is paid for and stored before its rows are written. When the
+// short transaction that writes them is refused (the event's Place locked
+// meanwhile, its set changed, the event deleted, or every try lost a lock
+// wait), nothing is written, the stored picture is left where it is, and the
+// caller is told with this error. It is not a failure of the generation:
+// nothing marks the set failed for it.
+
+const GENERATED_NOT_SAVED = 'generated_not_saved';
+const GENERATED_NOT_SAVED_MESSAGE = 'The image was generated but it was not saved. Generating it again costs again.';
+
+// The pause the generation paths ask the Place finalizer for between tries
+// that lost to a lock (utils/placeLock retryDelayMs; Evoni, 2026-11-23).
+// The rows it can lose to are held by single short transactions
+// (makeEventVersion, makeEveryday, approveBase): a quarter of a second
+// outlasts them, and three tries add at most half a second.
+const PLACE_FINALIZE_RETRY_DELAY_MS = 250;
+
+// The save failing for another reason (a database error that is no lock
+// conflict and no refusal): the picture is generated and stored, the save
+// is rolled back whole. Still a failure (the route's 500), told apart from
+// a failed generation by this code. The answer carries these fixed
+// sentences, never the database's own message.
+const GENERATED_SAVE_FAILED = 'GENERATED_SAVE_FAILED';
+const GENERATED_SAVE_FAILED_ERROR = 'The image was generated and stored, but saving it failed. Nothing was saved.';
+const GENERATED_SAVE_FAILED_MESSAGE = 'The image was generated and stored, but saving it failed. Generating it again costs again.';
+
+/** An error's class for a log line: its name and its SQLSTATE or code. Never its message, SQL or parameters. */
+function errorClassOf(err) {
+  const name = String(err?.name || 'Error').replace(/[^\w.-]/g, '');
+  const code = String(err?.original?.code || err?.parent?.code || err?.code || '').replace(/[^\w.-]/g, '');
+  return code ? `${name}/${code}` : name;
+}
+
+/** Marks an error as "generated and stored, the save failed"; the same error is thrown on, so its other catchers see what they did. */
+function markSaveFailed(err) {
+  if (err && typeof err === 'object') {
+    Object.defineProperty(err, 'generatedSaveFailed', { value: true, enumerable: false, configurable: true });
+  }
+  return err;
+}
+
+/** Thrown when a generated picture was not saved: .code is the finalizer's outcome code. */
+class PlaceFinalizeRefusal extends Error {
+  constructor(result = {}) {
+    super(result.message || 'This could not be saved. Nothing was saved.');
+    this.name = 'PlaceFinalizeRefusal';
+    this.code = result.code || result.outcome || 'NOT_SAVED';
+    this.status = 409;
+    this.outcome = GENERATED_NOT_SAVED;
+    this.detail = GENERATED_NOT_SAVED_MESSAGE;
+    this.attempts = result.attempts ?? null;
+  }
+}
+
+/** A stored object's key from its URL: no host, and never a query string. */
+function storageKeyOf(url) {
+  const text = String(url || '').split(/[?#]/)[0];
+  const marker = '.amazonaws.com/';
+  const at = text.indexOf(marker);
+  if (at === -1) return null;
+  const raw = text.slice(at + marker.length);
+  try {
+    return decodeURIComponent(raw) || null;
+  } catch (err) {
+    console.warn('[SceneGen] a stored object key could not be decoded:', err.message);
+    return raw || null;
+  }
+}
+
+/**
+ * The one line logged for a picture that was generated and not saved: the
+ * stored object keys (never a URL), the event, the set, the outcome and what
+ * is known of the cost. Nothing deletes those objects: the line is how they
+ * are found.
+ */
+function generatedNotSavedLine({ keys = [], eventId = null, setId = null, code, attempts = null, costUsd = null, estimateUsd = null, usageLogIds = [], errorClass = null } = {}) {
+  const stored = (keys || []).filter(Boolean);
+  const cost = typeof costUsd === 'number' ? `$${costUsd}` : 'unknown';
+  const estimate = typeof estimateUsd === 'number' ? `$${estimateUsd}` : 'unknown';
+  return '[GeneratedNotSaved] an image was generated and not saved:'
+    + ` storage_keys=${stored.length ? stored.join(',') : 'none (no bucket is configured: nothing was stored)'}`
+    + ` event=${eventId || 'none'} set=${setId || 'none'} outcome=${code || 'unknown'} attempts=${attempts ?? 'n/a'}`
+    + ` cost=${cost} estimate=${estimate} usage_log_ids=${(usageLogIds || []).length ? usageLogIds.join(',') : 'none'}`
+    + (errorClass ? ` error=${errorClass}` : '')
+    + '; nothing was deleted from storage';
+}
+
+const RESTORABLE_STATUSES = Object.freeze(['pending', 'complete', 'failed']);
+
+/**
+ * The status a base run puts back when its picture is not saved: the set's
+ * own before the run, or, when the row given is already marked generating
+ * (the caller's claim), complete with a base and pending without (the rule
+ * the cascade route uses). Never generating, never uncertain.
+ */
+function priorBaseStatus(sceneSet, given) {
+  if (RESTORABLE_STATUSES.includes(given)) return given;
+  const own = sceneSet?.generation_status;
+  if (RESTORABLE_STATUSES.includes(own)) return own;
+  return sceneSet?.base_still_url ? 'complete' : 'pending';
+}
+
+/** The reason alone, in base_generation.last_error with failed_at; the status is not touched. Never throws. */
+async function recordBaseLastError(db, setId, reason) {
+  try {
+    await db.query(
+      `UPDATE scene_sets SET base_generation = COALESCE(base_generation, '{}'::jsonb)
+              || jsonb_build_object('last_error', CAST(:reason AS text), 'failed_at', NOW()), updated_at = NOW()
+        WHERE id = :id`,
+      { replacements: { id: setId, reason: String(reason || 'not saved').slice(0, 500) } });
+  } catch (err) {
+    console.error(`[SceneGen] set ${setId}: the reason its picture was not saved could not be recorded:`, err.message);
+  }
+}
+
+/**
+ * A base run that made a picture and did not save it: the set goes back to
+ * the status it had (one statement, only while it is still generating), and
+ * the reason is kept where a failed base keeps its own
+ * (base_generation.last_error and failed_at, the keys
+ * venueLookImageService.markBaseFailed writes), without marking it failed.
+ * No image column is written.
+ */
+async function restoreBaseAfterRefusal(db, setId, prior, reason) {
+  const replacements = { id: setId, prior, reason: String(reason || 'not saved').slice(0, 500) };
+  const lastError = `base_generation = COALESCE(base_generation, '{}'::jsonb)
+              || jsonb_build_object('last_error', CAST(:reason AS text), 'failed_at', NOW())`;
+  try {
+    const [restored] = await db.query(
+      `UPDATE scene_sets SET generation_status = :prior, ${lastError}, updated_at = NOW()
+        WHERE id = :id AND generation_status = 'generating' RETURNING id`,
+      { replacements });
+    if (Array.isArray(restored) && restored.length) return true;
+    // No longer generating (another writer moved it on): its status is
+    // left as it is; the reason is still kept.
+    await recordBaseLastError(db, setId, replacements.reason);
+    return false;
+  } catch (err) {
+    console.error(`[SceneGen] set ${setId}: its status could not be put back after an unsaved picture:`, err.message);
+    return false;
+  }
+}
+
 /**
  * Generate a scene set's base still with the set's model choice
  * (scene_sets.base_model, else the default — resolveBaseModel; Task #2396).
@@ -928,6 +1073,17 @@ function briefDb(models) {
  * options.brief: a Scene Brief already built (the base-model comparison
  *   draws a source set's brief onto its copies, §8(dd)); used as given, in
  *   'full' mode only.
+ * options.finalize (Generation B1): async (work) => { outcome, code,
+ *   message, attempts }, how the picture's row is saved once it is made and
+ *   stored. `work({ transaction })` is the short database work (the set row
+ *   locked, the approved-base check, the final write): it may be run more
+ *   than once, and does nothing else. Not given: one plain transaction.
+ *   generate-venue gives utils/placeLock finalizePlaceWrite, so the base is
+ *   saved only while the event's Place is not locked. An outcome other than
+ *   'OK' saves nothing: the set goes back to options.priorStatus (not
+ *   given: priorBaseStatus), the reason is kept in
+ *   base_generation.last_error, the stored picture is left and logged, and
+ *   a PlaceFinalizeRefusal is thrown. The provider is never called again.
  *
  * The prompt is the set's Scene Brief (S1); the brief is kept on
  * base_generation.brief.
@@ -949,9 +1105,14 @@ async function generateBaseScene(sceneSet, models, options = {}) {
     overrides: options.overrides || sceneSet.base_generation?.brief?.overrides || {},
   });
   const prompt = briefToPrompt(brief);
+  const db = briefDb(models);
+  const priorStatus = priorBaseStatus(sceneSet, options.priorStatus);
 
+  // The marker before the paid call: generation_status alone, in one
+  // statement (the database guards read it). The prompt is written with the
+  // picture, in the final write.
   await SceneSet.update(
-    { generation_status: 'generating', base_runway_prompt: prompt },
+    { generation_status: 'generating' },
     { where: { id: sceneSet.id } }
   );
 
@@ -970,17 +1131,6 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       ? await generateDressedStill(sceneSet, prompt, brief.approved_base.image_url)
       : await generateBaseStill(sceneSet, prompt, modelKey);
     const lockedSeed = null;
-
-    // S6: the base may have been approved while the picture was being made
-    // (a claim gone stale). The approved base stays; the new picture is not
-    // kept and the old one is not deleted.
-    const lateRefusal = await baseReplaceRefusal(briefDb(models), sceneSet.id);
-    if (lateRefusal) {
-      console.warn(`[SceneGen] ${sceneSet.name}: base approved during generation; new still not kept (${stillUrl})`);
-      await SceneSet.update({ generation_status: 'complete' }, { where: { id: sceneSet.id } });
-      throw new ApprovedBaseError({ ...lateRefusal, error: `${lateRefusal.error} It was approved while the new picture was being made, so the new picture was not kept.` });
-    }
-
 
     console.log(`[SceneGen] Still complete (${modelKey}); cost ${cost == null ? 'unpriced' : `$${cost}`}`);
 
@@ -1005,14 +1155,85 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       generated_at: new Date().toISOString(),
       brief,
     };
-    await SceneSet.update({
+    const finalWrite = {
+      base_runway_prompt: prompt,
       base_runway_seed: lockedSeed,
       base_still_url: stillUrl,
       generation_status: 'complete',
       generation_cost: typeof cost === 'number' ? Math.round((previousCost + cost) * 1e4) / 1e4 : previousCost,
       base_generation: baseGeneration,
-    }, { where: { id: sceneSet.id } });
-    await repointBaseAngles(briefDb(models), sceneSet.id, sceneSet.base_still_url, stillUrl);
+    };
+
+    // The save (Generation B1). Everything above is made before it; it is
+    // database work only, in the transaction it is given, so it can be
+    // rolled back and run again without paying again.
+    //
+    // The set row is locked first. Under a caller's finalize other rows are
+    // already held (the Place finalizer: the episodes, then the event row),
+    // and makeEventVersion / makeEveryday hold a set row and then wait for
+    // the event row: waiting for the set row here would close that circle.
+    // So the lock is NOWAIT there: a held set row is a lock conflict
+    // (55P03), which the finalizer rolls back and tries again. Alone,
+    // nothing else is held, and it waits as the UPDATE always did.
+    const guarded = typeof options.finalize === 'function';
+    const work = async ({ transaction } = {}) => {
+      const inTx = transaction ? { transaction } : {};
+      if (transaction) {
+        await db.query(
+          `SELECT id FROM scene_sets WHERE id = :id FOR NO KEY UPDATE${guarded ? ' NOWAIT' : ''}`,
+          { replacements: { id: sceneSet.id }, transaction });
+      }
+      // S6: the base may have been approved while the picture was being
+      // made (a claim gone stale). The approved base stays; the new picture
+      // is not kept and the old one is not deleted.
+      const lateRefusal = await baseReplaceRefusal(db, sceneSet.id, inTx);
+      if (lateRefusal) {
+        throw new ApprovedBaseError({ ...lateRefusal, error: `${lateRefusal.error} It was approved while the new picture was being made, so the new picture was not kept.` });
+      }
+      await SceneSet.update(finalWrite, { where: { id: sceneSet.id }, ...inTx });
+    };
+    const finalize = guarded
+      ? options.finalize
+      : async (run) => {
+        if (typeof db?.transaction === 'function') await db.transaction((transaction) => run({ transaction }));
+        else await run();
+        return { outcome: 'OK', code: 'OK' };
+      };
+    const orphan = (code, attempts, errorClass = null) => generatedNotSavedLine({
+      errorClass,
+      keys: [storageKeyOf(stillUrl)],
+      eventId: brief?.event_id || options.eventId || options.environmentEventId || null,
+      setId: sceneSet.id,
+      code,
+      attempts,
+      costUsd: cost,
+      estimateUsd: estimate.usd,
+      usageLogIds,
+    });
+    let saved;
+    try {
+      saved = await finalize(work);
+    } catch (saveErr) {
+      if (saveErr instanceof ApprovedBaseError) {
+        console.warn(`[SceneGen] ${sceneSet.name}: base approved during generation; new still not kept (${stillUrl})`);
+        await restoreBaseAfterRefusal(db, sceneSet.id, priorStatus, saveErr.message);
+      } else {
+        // The save failed for another reason: rolled back whole. The set is
+        // marked failed below, as a failed final write always was; the
+        // reason kept on it is a fixed sentence, not the database's.
+        console.error(orphan('SAVE_FAILED', null, errorClassOf(saveErr)));
+        await recordBaseLastError(db, sceneSet.id, GENERATED_SAVE_FAILED_MESSAGE);
+        markSaveFailed(saveErr);
+      }
+      throw saveErr;
+    }
+    if (saved?.outcome !== 'OK') {
+      const refusal = new PlaceFinalizeRefusal(saved || {});
+      await restoreBaseAfterRefusal(db, sceneSet.id, priorStatus, `${refusal.message} ${refusal.detail}`);
+      console.error(orphan(refusal.code, refusal.attempts));
+      throw refusal;
+    }
+    await repointBaseAngles(db, sceneSet.id, sceneSet.base_still_url, stillUrl);
     // Clean up old base still from S3 (best-effort), unless something
     // still shows it; after the new base is saved, so a failed save never
     // leaves the set pointing at a deleted file.
@@ -1075,9 +1296,10 @@ Return ONLY JSON.` },
 
     return { success: true, stillUrl, videoUrl: null, seed: lockedSeed, model: modelKey, cost };
   } catch (err) {
-    // A run refused because the base was approved meanwhile leaves the set
-    // complete with its approved base, not failed.
-    if (!(err instanceof ApprovedBaseError)) {
+    // A run refused because the base was approved meanwhile, or whose
+    // picture was made and not saved (PlaceFinalizeRefusal), is not a failed
+    // generation: the set already has its earlier status back.
+    if (!(err instanceof ApprovedBaseError) && !(err instanceof PlaceFinalizeRefusal)) {
       await SceneSet.update({ generation_status: 'failed' }, { where: { id: sceneSet.id } });
     }
     throw err;
@@ -2659,6 +2881,18 @@ module.exports = {
   briefDb,
   buildVideoPrompt,
   generateBaseScene,
+  PlaceFinalizeRefusal,
+  GENERATED_NOT_SAVED,
+  GENERATED_NOT_SAVED_MESSAGE,
+  GENERATED_SAVE_FAILED,
+  GENERATED_SAVE_FAILED_ERROR,
+  GENERATED_SAVE_FAILED_MESSAGE,
+  PLACE_FINALIZE_RETRY_DELAY_MS,
+  errorClassOf,
+  markSaveFailed,
+  generatedNotSavedLine,
+  storageKeyOf,
+  priorBaseStatus,
   analyzeBaseImage,
   mergeVisualLanguage,
   checkAngleConsistency,
