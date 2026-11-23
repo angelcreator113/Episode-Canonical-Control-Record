@@ -865,6 +865,9 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       expect(step).toMatchObject({ status: 'failed', code: INCOMPLETE });
       if (pattern) expect(step.reason).toMatch(pattern);
       noDatabaseText(step);
+      // The route's sentence is the step's reason (every beat exists here), not "0 beats missing ()".
+      expect(res.body.code).toBe('SETUP_INCOMPLETE');
+      expect(res.body.error).toBe(step.reason);
       expect(await stepOf(ep)).toEqual(step);
       return step;
     };
@@ -872,6 +875,8 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       const res = await resume(ep);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+      expect(res.body.error).toBeUndefined();
+      expect(res.body.code).toBeUndefined();
       expect(res.body.data.setup_status.complete).toBe(true);
       expect(res.body.data.setup_status.steps.locations).toEqual({ status: 'complete', count });
       expect((await episodeRow(ep)).setup_status.complete).toBe(true);

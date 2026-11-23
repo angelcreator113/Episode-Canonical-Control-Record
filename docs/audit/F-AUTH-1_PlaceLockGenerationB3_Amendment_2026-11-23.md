@@ -3,7 +3,7 @@
 
 **Document version**
 
-v1.1 (v1.0 was this file at `974ae498`, on the same unmerged branch, before Evoni's correction of the same day; "Her correction" in §2, step 7 of Start Episode in §4, §4a, §8 and the test lists of §9 are what changed). This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
+v1.2 (v1.0 was this file at `974ae498`, on the same unmerged branch, before Evoni's correction of the same day; v1.1, at `c1beba92`, added "Her correction" in §2, step 7 of Start Episode in §4, §4a, and changed §8 and the test lists of §9; v1.2 adds her second correction: §2, §4b, §8 and §9). This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
 - The FD tail, XK tail and PE tail are unchanged.
 - No earlier register file is edited, and no banner is added to one.
 
@@ -57,6 +57,10 @@ v1.0 of this change let "Resume setup" call a failed locations step done as soon
 3. The step is cleared only when (A) every recorded role has a live location, with a conservative fallback for a step recorded without roles (home, and the event when the event has a set); (B) when the episode's event has a set, the episode's Event location is that set; (C) every live beat that names a set names an appropriate live location, by its role where the existing data gives one.
 4. Otherwise the step stays failed and the setup incomplete, with a fixed sentence for what is missing and a meaningful code. The original write is not run again; no beat, set, link or saved scene is moved, made or rewritten; accepted episodes' data is not altered.
 5. Start's answer, its replay, the checklist and Resume setup's answer agree.
+
+## Her second correction (RULED, 2026-11-23)
+
+One minimal correction to the Resume setup route's sentence (§4b), as given to this work: when the setup is incomplete and the locations step is failed, the message is that step's recorded reason, from what `resumeEpisodeSetup` already returns, with no new query or calculation; a setup with beats genuinely missing keeps its sentence exactly; no raw database text in the message; the status and `success: false` unchanged. The checklist component and `EpisodeBookSteps.test.jsx` are deferred and not changed. No new endpoint, status store, readiness calculation or automatic repair.
 
 # §3. What was verified before the code was written (MEASURED)
 
@@ -132,6 +136,26 @@ The route (`src/routes/episodes.js`, `PUT /:episodeId/locations`) is not changed
 
 **Agreement (MEASURED, one test).** Start's 201 (`setup_complete: false`, `data.setup_status.complete: false`), its replay (which reads the episode's record), `episodes.setup_status` (what the checklist reads) and Resume setup's answer (`success: false`, `data.setup_status.complete: false`) say incomplete while the step is failed; after the corrections and a passing check all four say complete. Corrections alone, before Resume setup is chosen, change nothing: the record is updated by the check.
 
+## §4b. Resume setup's sentence for an incomplete setup (the second correction)
+
+**The defect (MEASURED at `c1beba92`).** `POST /api/v1/episode-brief/:episodeId/setup/resume` (`src/routes/episodeBriefRoutes.js`) built its `error` from the scene-plan step alone. With every beat present and the locations step failed it answered `error: "Setup is still incomplete: 0 beats missing ()"`.
+
+**The change (`setupIncompleteError`, in that route file; nothing else).** From the result `resumeEpisodeSetup` returns, with no query and nothing worked out:
+
+| Setup | `error` |
+|---|---|
+| complete | none; the body is `{ success: true, data }` as before |
+| beats missing, locations step not failed | `Setup is still incomplete: N beat(s) missing (…)`, exactly as before |
+| no beat missing, locations step failed | the step's recorded `reason` |
+| beats missing and locations step failed | the beats sentence as before, then `. ` and the step's reason |
+| incomplete for another step only (the season slot) | the beats sentence as before ("0 beats missing ()"): not in this correction |
+
+The status stays 200, `success: false` and the top-level `code: 'SETUP_INCOMPLETE'` stay (the checklist reads `error`; no reader of the top-level code was found). The step's own code is where it was: `data.setup_status.steps.locations.code`.
+
+**A step with no `code`.** Before B3 a failed locations step was `{ status: 'failed', reason: <the error's own message> }`, with no code. Every reason B3 records comes with a code and is a fixed sentence. So a failed step with no code (or a coded one with no reason) is not echoed: the message is "The episode's locations were not saved. Set them in the episode's Locations, then choose Resume setup." Such a step normally leaves `resumeEpisodeSetup` already replaced by the check's coded step (§4a); it reaches the route as it was only when the check could not be read.
+
+**What Resume setup never does (restated).** It moves no beat, reassigns no set and changes no locked or user-chosen beat. For a failed locations step it reads and records.
+
 ## Frontend
 
 `useStartEpisode.js`: `shownEventSet` (`:18`) takes the server's `event_scene_set_id`, or the proposal's event entry when a server does not send it; it is fixed when the step is confirmed (`:66`), so choosing another set in the step does not change what is sent. The Start body gains `event_scene_set_id`. A 409 is shown with the server's sentence by the existing error handling, and the steps stay open. A 201 whose locations step failed shows "The episode was started, but its locations were not saved: <reason>" and opens the episode, whose checklist shows the step. `EpisodeLocationsStep.jsx` is not changed.
@@ -166,9 +190,10 @@ Both paths: the episode(s) `FOR SHARE` in id order, the event row `FOR UPDATE`, 
 - **A failed locations step is cleared only by Resume setup's check** (§4a), and only when chosen: correcting the episode does not update the record by itself.
 - **The fallback for a step without `roles`** asks for home and, when the event has a set, the event; nothing else Start was asked for is known. No step without `roles` was written by a merged version: v1.0 was not merged.
 - **Stale beats are named, not repaired.** Each is moved in the beat editor; there is no bulk move.
-- **An accepted episode whose step is failed and whose locations or beats do not pass cannot be corrected**: its Locations save is refused (`EPISODE_ACCEPTED`). The step stays failed.
-- **Resume setup's route sentence is about beats.** `POST /api/v1/episode-brief/:episodeId/setup/resume` (`src/routes/episodeBriefRoutes.js`, not changed here) answers an incomplete setup with `success: false`, `code: 'SETUP_INCOMPLETE'` and "Setup is still incomplete: N beats missing (…)", built from the scene-plan step; when only the locations step is failed that reads "0 beats missing ()". The step's own reason is in `data.setup_status`.
-- **The checklist alert reads the episode it was given.** `EpisodeProductionChecklist.jsx` (not changed here) shows `episode.setup_status` as loaded with the page, and its Resume toast shows the route's sentence; the step's new reason, or its clearing, shows when the episode is loaded again.
+- **An accepted episode whose step is failed and whose locations or beats do not pass cannot be corrected here**: its Locations save is refused (`EPISODE_ACCEPTED`). The step stays failed. It needs the separately controlled recovery workflow, which is not implemented in this change.
+- **Resume setup's route sentence** now says a failed locations step's reason (§4b). A setup incomplete for another step only (the season slot) still reads "0 beats missing ()".
+- **The checklist alert reads the episode it was given.** `EpisodeProductionChecklist.jsx` (not changed; deferred) shows `episode.setup_status` as loaded with the page; its Resume toast shows the route's sentence, which is now the step's reason. The alert's own text, or its clearing, changes when the episode is loaded again.
+- **CI, a factual note.** On head `c1beba92` the CI "Frontend Tests" job failed once on `EpisodeBookSteps.test.jsx`, a file this change does not touch, and passed when run again. The cause is not confirmed. That file is not changed here.
 - **The Start toast is shown as the page opens the episode.** The lasting indication is the episode's checklist.
 - **The second path's exhaustion code is `RETRY`**, not `PLACE_FINALIZE_RETRY_EXHAUSTED`: it is not a Place finalization (§4, 5).
 - **`PUT …/locations` still answers an unexpected error with a 500 carrying the error's message**, as at the basis; this change adds no such path and does not alter that one.
@@ -200,18 +225,18 @@ On a private, migrated local PostgreSQL test database, through the real app, aga
 - An accepted episode: the episode row (but `setup_status`), its links, beats, scenes and the show's events equal before and after.
 - Start, its replay, the record and Resume setup agree, before and after.
 
-Also run on that database, unchanged and passing: `placeLockGenerationB1` (56), `placeLockGenerationB2` (69), `placeLockFinalizer` (52), `placeLockStrict` (53), `eventPlaceSync` (6), `startEpisodeHomeSet` (1), `startEpisodeOfferDecision` (49), `regenerateEpisodeSafe` (2), `p1PlanAdmin` (85); and, before the correction only, `dealTermsDraft` (7) and `p2aSceneAdmin` (335). The unit directory: 744 suites.
+Also run on that database, unchanged and passing: `placeLockGenerationB1` (56), `placeLockGenerationB2` (69), `placeLockFinalizer` (52), `placeLockStrict` (53), `eventPlaceSync` (6), `startEpisodeHomeSet` (1), `startEpisodeOfferDecision` (49), `regenerateEpisodeSafe` (2), `p1PlanAdmin` (85); and, before the correction only, `dealTermsDraft` (7) and `p2aSceneAdmin` (335). The unit directory: 745 suites.
 
-Unit: new `tests/unit/services/episodeLocationsService.startLocations.test.js` (13 cases): `applyStartLocations` (every statement takes the finalizer's transaction; a failure is logged and does not throw; a refusal; no locations) and `locationsStepGaps` rule by rule.
+Unit: new `tests/unit/routes/episodeBriefSetupResume.test.js` (8 cases; `resumeEpisodeSetup` mocked): the rows of §4b's table, a step with a finalizer's code, a step with no code (a fixed sentence, nothing of its reason), and the 404. Four of them fail at `c1beba92`. The Resume cases of the integration file also assert the route's `error` is the step's reason. New `tests/unit/services/episodeLocationsService.startLocations.test.js` (13 cases): `applyStartLocations` (every statement takes the finalizer's transaction; a failure is logged and does not throw; a refusal; no locations) and `locationsStepGaps` rule by rule.
 
-Frontend (Vitest): new `useStartEpisode.test.jsx` (the field sent with the value the step was shown, though another set is chosen in the step; `null` sent; a 409 `STALE_SOURCE_SET` shown with the server's sentence, nothing opened, the steps kept; a failed locations step said with its reason and the episode opened). `EpisodeProductionChecklist.setup.test.jsx` gains one case (the failed step shown with its reason; Resume setup answered as still incomplete is shown as not finished, never as resumed).
+Frontend (Vitest): new `useStartEpisode.test.jsx` (the field sent with the value the step was shown, though another set is chosen in the step; `null` sent; a 409 `STALE_SOURCE_SET` shown with the server's sentence, nothing opened, the steps kept; a failed locations step said with its reason and the episode opened). `EpisodeProductionChecklist.setup.test.jsx` gains one case (the failed step shown with its reason; Resume setup answered as still incomplete is shown with the route's sentence, never as resumed; with §4b its mocked sentence is the step's reason).
 
 **Existing tests changed:**
 - `tests/unit/services/episodeGeneratorService.startTransaction.test.js`: two cases pinned the old post-commit `applyLocations` call and the logged failure; they are replaced by three (the call to `applyStartLocations` after the commit; the 400 and the 409; a failed step making the setup incomplete). Two of their assertions could not stay there, since the write is no longer in that function: that the locations are written in a transaction of their own, and that a failure is logged. Both are asserted in the new unit file above.
 - `EventPackagePage.startEpisode.test.jsx` (2 assertions) and `EventPackagePage.moneyWarnings.test.jsx` (2): the pinned Start body gains `event_scene_set_id: null`.
 - By reading, not run (they send DDL): the Start helpers of `episodeLocations`, `l14Zones` and `plannerAngles` send `event_scene_set_id` with their locations.
 
-**Not run locally, by the rule that a local run sends no DDL** (CI runs them): `episodeLocations`, `l14Zones`, `plannerAngles`, `termsPricingFixes`, `startRegenerateLocks`, `lockOrderMatrix`, `lockOrderTrace`, `setupResume`, `episodeLockSafety`, `beatPlanChosen`. Apart from the three helpers above, none was found by reading to assert something this change alters (INFERRED from reading, not run). `setupResume` and `plannerAngles` call Resume setup on episodes whose locations step is not failed (absent, or complete), which the correction does not touch.
+**Not run locally, by the rule that a local run sends no DDL** (CI runs them): `episodeLocations`, `l14Zones`, `plannerAngles`, `termsPricingFixes`, `startRegenerateLocks`, `lockOrderMatrix`, `lockOrderTrace`, `setupResume`, `episodeLockSafety`, `beatPlanChosen`. Apart from the three helpers above, none was found by reading to assert something this change alters (INFERRED from reading, not run). `setupResume` and `plannerAngles` call Resume setup on episodes whose locations step is not failed (absent, or complete), which the corrections do not touch; `setupResume` asserts no sentence of an incomplete answer.
 
 ---
 
