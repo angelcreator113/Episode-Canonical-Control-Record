@@ -222,7 +222,7 @@ describe('generateEpisodeFromEvent — transactional Start (Task #1906)', () => 
     // transaction is the finalizer's, inside applyStartLocations.
     expect(log.transactions).toHaveLength(2);
     expect(apply).toHaveBeenCalledTimes(1);
-    expect(apply.mock.calls[0][1]).toEqual({ episodeId: 'ep-new', eventId: 'ev-1', sourceSetId: EVENT.scene_set_id ?? null, locations: LOCATIONS });
+    expect(apply.mock.calls[0][1]).toEqual({ episodeId: 'ep-new', eventId: 'ev-1', showId: 'show-1', sourceSetId: EVENT.scene_set_id ?? null, locations: LOCATIONS });
     expect(models.Episode.create.mock.calls[0][1]).toEqual({ transaction: log.transactions[0] });
     expect(result.setup_status.steps.locations).toEqual({ status: 'complete', count: 2 });
   });

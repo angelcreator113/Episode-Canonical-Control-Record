@@ -364,8 +364,22 @@ async function saveEpisodeLocations(sequelize, { showId, episodeId, locations: b
  * roles: the locations Start tried to save, as [{ role, name }] (name for an
  * extra, which is how an extra is told from another). Resume setup reads it
  * to know which locations the episode was meant to have (checkLocationsStep).
+ *
+ * The sets are checked again inside the finalizer's transaction, after
+ * their rows are locked (assertUsable, as the Locations save does): Start
+ * checked them before it created anything, and a set removed from Scene
+ * Sets since then is a soft delete, so its row is still there and every
+ * foreign key still passes. A set that is gone, or is another show's, by
+ * then: nothing is written (the whole transaction is rolled back) and the
+ * step is failed with that check's own code and sentence (which names a
+ * role or a set's name, never an id or the database's text). It is not a
+ * lock conflict and is not tried again.
+ * What this does not do: the key-share lock on a set's row does not stop a
+ * removal, which is a plain update of deleted_at. A removal that has not
+ * committed when the check reads, or that comes after it, is not seen (the
+ * delete route's side of this is held work, C2).
  */
-async function applyStartLocations(sequelize, { episodeId, eventId, sourceSetId, locations }) {
+async function applyStartLocations(sequelize, { episodeId, eventId, showId, sourceSetId, locations }) {
   if (!locations.length) return { status: 'complete', count: 0 };
   const roles = locations.map((l) => ({ role: l.role, name: l.role === 'extra' ? (l.name || null) : null }));
   const { finalizePlaceWrite, PLACE_FINALIZE_OUTCOMES } = require('../utils/placeLock');
@@ -376,6 +390,7 @@ async function applyStartLocations(sequelize, { episodeId, eventId, sourceSetId,
       retryDelayMs: PLACE_FINALIZE_RETRY_DELAY_MS,
       work: async ({ transaction }) => {
         await lockSetRows(sequelize, locations, transaction);
+        await assertUsable(sequelize, showId, locations, transaction);
         await applyLocations(sequelize, { episodeId, locations, transaction });
       },
     });
@@ -383,6 +398,11 @@ async function applyStartLocations(sequelize, { episodeId, eventId, sourceSetId,
     console.error(`[EpisodeLocations] Start's locations were not saved for episode ${episodeId}: event=${eventId} outcome=${saved.code} attempts=${saved.attempts}`);
     return { status: 'failed', code: saved.code, reason: `${saved.message} The episode's locations were not saved: set them in the episode's Locations.`, roles };
   } catch (err) {
+    if (err instanceof EpisodeLocationsError) {
+      // A set no longer usable (assertUsable): its own code and sentence.
+      console.error(`[EpisodeLocations] Start's locations were not saved for episode ${episodeId}: event=${eventId} outcome=${err.code}`);
+      return { status: 'failed', code: err.code, reason: `${err.message}. The episode's locations were not saved: set them in the episode's Locations.`, roles };
+    }
     console.error(`[EpisodeLocations] Start's locations were not saved for episode ${episodeId}: event=${eventId} outcome=SAVE_FAILED error=${errorClassOf(err)}`);
     return { status: 'failed', code: 'SAVE_FAILED', reason: "The episode's locations could not be saved. Set them in the episode's Locations.", roles };
   }

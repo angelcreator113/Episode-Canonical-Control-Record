@@ -1064,6 +1064,230 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
     });
   });
 
+  // ══ A set removed from Scene Sets around Start's locations write ═══════
+  // Removing a scene set is a soft delete (DELETE /api/v1/scene-sets/:id:
+  // UPDATE scene_sets SET deleted_at): the row stays and every foreign key
+  // still passes. Start's locations write checks its sets again inside the
+  // finalizer's transaction, after locking their rows. The removals here are
+  // the real route (confirm_orphan=true where the set is in use, as the
+  // page's "delete anyway" sends). Each ordering's outcome is what was
+  // observed; the last two are NOT prevented by this change and are written
+  // down as they are.
+  describe('a scene set removed from Scene Sets around Start\'s locations write', () => {
+    const startable = (setId = w.a) => mkEvent(show, { set: setId });
+    const remove = (id, confirm = true) => asAdmin(request(app).delete(`/api/v1/scene-sets/${id}${confirm ? '?confirm_orphan=true' : ''}`)).send({});
+    const resume = (ep) => asAdmin(request(app).post(`/api/v1/episode-brief/${ep}/setup/resume`)).send({});
+    const removedAt = async (id) => (await rows('SELECT deleted_at FROM scene_sets WHERE id = :id', { id }))[0].deleted_at;
+    const NOT_SAVED = "The episode's locations were not saved: set them in the episode's Locations.";
+    /**
+     * What a locations write writes, for the whole show: every link, each
+     * event's set, each beat's set and angle. (Start's later steps write
+     * other columns of its beats, which is why this is not the full snapshot.)
+     */
+    const placeState = async () => ({
+      links: await rows('SELECT l.id, l.scene_set_id, l.episode_id, l.role, l.role_name, l.sort_order, l.deleted_at FROM scene_set_episodes l JOIN episodes e ON e.id = l.episode_id WHERE e.show_id = :show ORDER BY l.id', { show }),
+      events: await rows('SELECT id, scene_set_id, deleted_at FROM world_events WHERE show_id = :show ORDER BY id', { show }),
+      beats: await rows('SELECT p.id, p.beat_number, p.scene_set_id, p.angle_label, p.locked, p.chosen_by_user, p.deleted_at FROM scene_plans p JOIN episodes e ON e.id = p.episode_id WHERE e.show_id = :show ORDER BY p.id', { show }),
+      sets: await rows('SELECT id, deleted_at IS NOT NULL AS removed, version_of_set_id FROM scene_sets WHERE show_id = :show ORDER BY id', { show }),
+    });
+    /** Start's locations write holding the event row, its beats already made, before it locks its set rows. */
+    const savingLocations = () => {
+      let plansMade = false;
+      return gateOn((rec) => {
+        if (!rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans') plansMade = true;
+        return plansMade && Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'world_events';
+      });
+    };
+    /** Start past its commit and its beats, stopped before its locations write locks a set; `during` runs there. */
+    async function startWith(locations, during, { key = null } = {}) {
+      const ev = await startable();
+      const gate = savingLocations();
+      const req = asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`));
+      if (key) req.set('Idempotency-Key', key);
+      const pending = send(req.send({ draft_script: false, locations, event_scene_set_id: w.a }));
+      await gate.reached;
+      const ep = await episodeOf(ev);
+      const before = await during({ ev, ep });
+      gate.open();
+      const res = await pending;
+      return { ev, ep, res, before };
+    }
+
+    test('the event\'s set removed after Start\'s commit and before its locations write: nothing written by the write, a failed step with the check\'s code, not tried again; the Start, its replay and Resume say incomplete', async () => {
+      const key = `genb3-${fx.uuid()}`;
+      const locations = [loc('event', w.a), loc('home', w.home)];
+      const { ev, ep, res, before } = await startWith(locations, async () => {
+        const gone = await remove(w.a);
+        expect(gone.status).toBe(200);
+        expect(await removedAt(w.a)).not.toBeNull();
+        return placeState();
+      }, { key });
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.setup_complete).toBe(false);
+      const step = res.body.data.setup_status.steps.locations;
+      expect(step).toEqual({
+        status: 'failed', code: 'SCENE_SET_NOT_FOUND', reason: `The event scene set no longer exists. ${NOT_SAVED}`,
+        roles: [{ role: 'event', name: null }, { role: 'home', name: null }],
+      });
+      expect(res.body.message).toMatch(/Its locations were not saved: The event scene set no longer exists\./);
+      // The write left nothing: no link, the event and every beat as they were when the removal committed.
+      expect(before.beats).toHaveLength(14);
+      expect(await placeState()).toEqual(before);
+      expect(await links(ep)).toEqual([]);
+      expect(pause).not.toHaveBeenCalled();
+      expect(lockErrors(trace.records)).toEqual([]);
+      const finalizations = [...trace.byTransaction().values()].filter((t) => t.some((r) => r.kind === 'lock' && r.table === 'scene_sets'));
+      expect(finalizations).toHaveLength(1); // one try
+      trace.uninstall();
+      trace = null;
+
+      const replay = await asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`)).set('Idempotency-Key', key)
+        .send({ draft_script: false, locations, event_scene_set_id: w.a });
+      expect(replay.status).toBe(200);
+      expect(replay.body).toMatchObject({ replayed: true, setup_complete: false });
+      expect(replay.body.data.setup_status.steps.locations).toEqual(step);
+      const resumed = await resume(ep);
+      expect(resumed.body.success).toBe(false);
+      expect(resumed.body.data.setup_status.steps.locations).toMatchObject({ status: 'failed', code: 'LOCATIONS_INCOMPLETE' });
+      expect(resumed.body.data.setup_status.steps.locations.reason).toMatch(/Missing: Event, Home\./);
+    });
+
+    test.each([
+      ['home', () => [loc('event', w.a), loc('home', w.home2)], () => w.home2, 'home'],
+      ['closet', () => [loc('event', w.a), loc('home', w.home), loc('closet', w.closet)], () => w.closet, 'closet'],
+      ['extra', () => [loc('event', w.a), loc('home', w.home), loc('extra', w.b, 'Car')], () => w.b, 'extra'],
+    ])('a removed %s set (not the event\'s) among Start\'s locations: the same refusal, and nothing partial (no link at all, the event not written)', async (_name, locationsOf, setOf, role) => {
+      const { ep, res, before } = await startWith(locationsOf(), async () => {
+        expect((await remove(setOf())).status).toBe(200);
+        return placeState();
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.setup_complete).toBe(false);
+      expect(res.body.data.setup_status.steps.locations).toMatchObject({
+        status: 'failed', code: 'SCENE_SET_NOT_FOUND', reason: `The ${role} scene set no longer exists. ${NOT_SAVED}`,
+      });
+      expect(await placeState()).toEqual(before);
+      expect(await links(ep)).toEqual([]);
+      expect(pause).not.toHaveBeenCalled();
+    });
+
+    test('removed before Start entirely: with locations naming it, Start is refused as before (404 SCENE_SET_NOT_FOUND, nothing created); with none sent, the removed set is left out of the episode\'s locations', async () => {
+      const ev = await startable();
+      expect((await remove(w.a)).status).toBe(200);
+      const before = await snapshot();
+      const res = await start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a });
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ success: false, code: 'SCENE_SET_NOT_FOUND', error: 'The event scene set no longer exists' });
+      expect(await snapshot()).toEqual(before);
+      expect(await episodeOf(ev)).toBeNull();
+
+      const plain = await start(ev, {});
+      expect(plain.status).toBe(201);
+      const ep = plain.body.data.episode.id;
+      expect((await links(ep)).map((l) => l.role)).toEqual(['home']);
+      expect((await links(ep)).some((l) => l.scene_set_id === w.a)).toBe(false);
+      expect(plain.body.data.setup_status.steps.locations.status).toBe('complete');
+    });
+
+    test('Start\'s locations write first, then the removal: the route says the set is in use (409 SET_IN_USE); "delete anyway" removes it and leaves the episode\'s uses on the removed set, as that route always has', async () => {
+      const ev = await startable();
+      const res = await start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a });
+      expect(res.status).toBe(201);
+      expect(res.body.setup_complete).toBe(true);
+      const ep = res.body.data.episode.id;
+      const refused = await remove(w.a, false);
+      expect(refused.status).toBe(409);
+      expect(refused.body.code).toBe('SET_IN_USE');
+      expect(await removedAt(w.a)).toBeNull();
+      const anyway = await remove(w.a);
+      expect(anyway.status).toBe(200);
+      expect(await removedAt(w.a)).not.toBeNull();
+      // What "delete anyway" leaves (existing behaviour, not this change's): the link, the event and the beats still name it.
+      expect((await rows('SELECT role FROM scene_set_episodes WHERE episode_id = :ep AND scene_set_id = :a AND deleted_at IS NULL', { ep, a: w.a }))).toEqual([{ role: 'event' }]);
+      expect((await eventRow(ev)).scene_set_id).toBe(w.a);
+    });
+
+    test('KNOWN REMAINING RACE (the delete route\'s side, held work C2) [real lock]: a removal in flight (its UPDATE done, not committed) while Start runs: FOR KEY SHARE NOWAIT does not conflict with it, the check still reads the set as live, the locations are saved, and when the removal commits the episode\'s link, its event and its beats are on a removed set', async () => {
+      const ev = await startable();
+      // The real route, stopped just after its soft delete ran inside its transaction (the set row is updated and not committed).
+      const softDeleted = gateOn((rec, sql) => Boolean(rec.txId) && /^UPDATE "scene_sets" SET "deleted_at"/.test(sql));
+      const removal = send(remove(w.a));
+      await softDeleted.reached;
+      expect(await removedAt(w.a)).toBeNull(); // not committed: every other session still reads it live
+
+      const res = await start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a });
+      expect(res.status).toBe(201);
+      expect(res.body.setup_complete).toBe(true);
+      expect(res.body.data.setup_status.steps.locations).toEqual({ status: 'complete', count: 2 });
+      // No lock conflict and no wait: a key-share lock and a plain update's lock do not conflict.
+      expect(lockErrors(trace.records)).toEqual([]);
+      expect(pause).not.toHaveBeenCalled();
+      const ep = res.body.data.episode.id;
+
+      softDeleted.open();
+      const removed = await removal;
+      expect(removed.status).toBe(200);
+      expect(await removedAt(w.a)).not.toBeNull();
+      // The outcome this change does not prevent: references on a removed set.
+      expect((await rows('SELECT role FROM scene_set_episodes WHERE episode_id = :ep AND scene_set_id = :a AND deleted_at IS NULL', { ep, a: w.a }))).toEqual([{ role: 'event' }]);
+      expect((await eventRow(ev)).scene_set_id).toBe(w.a);
+      const atRemoved = await rows('SELECT beat_number FROM scene_plans WHERE episode_id = :ep AND scene_set_id = :a AND deleted_at IS NULL ORDER BY beat_number', { ep, a: w.a });
+      expect(atRemoved.map((b) => b.beat_number)).toEqual([10, 11, 12]);
+      expect((await episodeRow(ep)).setup_status.complete).toBe(true);
+    });
+
+    test('KNOWN REMAINING RACE (C2) [real lock]: the removal committing after the write has checked its sets, before the write commits: the write is not blocked and commits; the references are on a removed set', async () => {
+      const ev = await startable();
+      // Start's locations write stopped after its check read the sets as live (its first link written, not committed).
+      const checked = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'insert' && rec.table === 'scene_set_episodes');
+      const pending = send(start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a }));
+      await checked.reached;
+      const ep = await episodeOf(ev);
+      // The removal is not blocked by the write's key-share lock on the set's row: it commits now.
+      const removed = await remove(w.a);
+      expect(removed.status).toBe(200);
+      expect(await removedAt(w.a)).not.toBeNull();
+      checked.open();
+      const res = await pending;
+      expect(res.status).toBe(201);
+      expect(res.body.data.setup_status.steps.locations).toEqual({ status: 'complete', count: 2 });
+      expect(lockErrors(trace.records)).toEqual([]);
+      expect((await rows('SELECT role FROM scene_set_episodes WHERE episode_id = :ep AND scene_set_id = :a AND deleted_at IS NULL', { ep, a: w.a }))).toEqual([{ role: 'event' }]);
+      expect((await eventRow(ev)).scene_set_id).toBe(w.a);
+    });
+
+    test('a valid Start and its replay are as they were: the sets checked in the write\'s transaction, after their rows are locked and before the first write', async () => {
+      const ev = await startable();
+      const key = `genb3-${fx.uuid()}`;
+      const body = { draft_script: false, locations: [loc('event', w.a), loc('home', w.home), loc('closet', w.closet), loc('extra', w.b, 'Car')], event_scene_set_id: w.a };
+      const t = tracing();
+      const res = await asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`)).set('Idempotency-Key', key).send(body);
+      expect(res.status).toBe(201);
+      expect(res.body.setup_complete).toBe(true);
+      expect(res.body.data.setup_status.steps.locations).toEqual({ status: 'complete', count: 4 });
+      const ep = res.body.data.episode.id;
+      expect((await links(ep)).map((l) => [l.role, l.scene_set_id, l.role_name])).toEqual([['event', w.a, null], ['home', w.home, null], ['closet', w.closet, null], ['extra', w.b, 'Car']]);
+      const link = t.records.find((r) => r.kind === 'insert' && r.table === 'scene_set_episodes');
+      const write = t.records.filter((r) => r.txId === link.txId);
+      const lockAt = write.findIndex((r) => r.kind === 'lock' && r.table === 'scene_sets');
+      const checkAt = write.findIndex((r, i) => i > lockAt && r.kind === 'other' && /^SELECT s\.id, s\.name, s\.show_id, s\.scene_type/.test(r.sql));
+      const firstWrite = write.findIndex((r) => r.kind === 'insert' || r.kind === 'write');
+      expect(lockAt).toBeGreaterThan(-1);
+      expect(checkAt).toBeGreaterThan(lockAt);
+      expect(firstWrite).toBeGreaterThan(checkAt);
+      trace.uninstall();
+      trace = null;
+
+      const before = await snapshot();
+      const replay = await asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`)).set('Idempotency-Key', key).send(body);
+      expect(replay.status).toBe(200);
+      expect(replay.body).toMatchObject({ replayed: true, setup_complete: true });
+      expect(replay.body.data.episode.id).toBe(ep);
+      expect(await snapshot()).toEqual(before);
+    });
+  });
+
   describe('the network guard', () => {
     test('no external network attempt in this file', () => {
       const mine = networkGuard.getState().events.slice(guardEventsAtStart);

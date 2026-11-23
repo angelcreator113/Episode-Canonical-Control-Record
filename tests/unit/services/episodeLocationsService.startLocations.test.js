@@ -38,13 +38,16 @@ describe('applyStartLocations', () => {
 
   test('the locations are written in a transaction of their own, the finalizer\'s: every statement takes it', async () => {
     const transaction = { id: 'finalizer-transaction' };
-    const query = jest.fn(async () => [[], 0]);
+    // The sets read as live and this show's (assertUsable's read); every other statement returns nothing.
+    const query = jest.fn(async (sql) => (/FROM scene_sets s/.test(String(sql))
+      ? [LOCATIONS.map((l) => ({ id: l.scene_set_id, name: l.scene_set_id, show_id: 'show-1' })), 0]
+      : [[], 0]));
     const finalize = jest.spyOn(placeLock, 'finalizePlaceWrite').mockImplementation(async (_sequelize, _eventId, { work }) => {
       await work({ transaction, event: { id: 'ev-1' } });
       return { outcome: placeLock.PLACE_FINALIZE_OUTCOMES.OK, value: undefined };
     });
 
-    const step = await applyStartLocations({ query }, { episodeId: 'ep-new', eventId: 'ev-1', sourceSetId: 'set-venue', locations: LOCATIONS });
+    const step = await applyStartLocations({ query }, { episodeId: 'ep-new', eventId: 'ev-1', showId: 'show-1', sourceSetId: 'set-venue', locations: LOCATIONS });
 
     expect(step).toEqual({ status: 'complete', count: 3 });
     expect(finalize).toHaveBeenCalledTimes(1);
@@ -52,8 +55,9 @@ describe('applyStartLocations', () => {
     expect(finalize.mock.calls[0][2]).toMatchObject({ sourceSetId: 'set-venue', retryDelayMs: 250, work: expect.any(Function) });
     expect(query.mock.calls.length).toBeGreaterThan(3);
     for (const [, options] of query.mock.calls) expect(options.transaction).toBe(transaction);
-    // The set rows first, then the links.
+    // The set rows first, then the check that they are live, then the links.
     expect(String(query.mock.calls[0][0])).toMatch(/FROM scene_sets WHERE id IN \(:ids\) ORDER BY id FOR KEY SHARE NOWAIT/);
+    expect(String(query.mock.calls[1][0])).toMatch(/FROM scene_sets s\s+WHERE s\.id IN \(:ids\) AND s\.deleted_at IS NULL/);
     expect(query.mock.calls.some(([sql]) => /INSERT INTO scene_set_episodes/.test(String(sql)))).toBe(true);
   });
 
@@ -67,6 +71,38 @@ describe('applyStartLocations', () => {
     });
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining("Start's locations were not saved for episode ep-new"));
     expect(JSON.stringify(step)).not.toMatch(/link boom/);
+  });
+
+  test('a set that is gone when the write checks it (soft-deleted since Start chose it): nothing is written, and the step is failed with the check\'s code and sentence', async () => {
+    const transaction = { id: 'finalizer-transaction' };
+    // The home set is no longer live: the check's read does not return it.
+    const query = jest.fn(async (sql) => (/FROM scene_sets s/.test(String(sql))
+      ? [[{ id: 'set-venue', name: 'Venue', show_id: 'show-1' }, { id: 'set-car', name: 'Car', show_id: 'show-1' }], 0]
+      : [[], 0]));
+    const finalize = jest.spyOn(placeLock, 'finalizePlaceWrite').mockImplementation(async (_s, _e, { work }) => {
+      await work({ transaction, event: { id: 'ev-1' } }); // throws: the finalizer rolls back and rethrows
+      return { outcome: placeLock.PLACE_FINALIZE_OUTCOMES.OK };
+    });
+
+    const step = await applyStartLocations({ query }, { episodeId: 'ep-new', eventId: 'ev-1', showId: 'show-1', sourceSetId: 'set-venue', locations: LOCATIONS });
+
+    expect(step).toEqual({
+      status: 'failed', code: 'SCENE_SET_NOT_FOUND',
+      reason: "The home scene set no longer exists. The episode's locations were not saved: set them in the episode's Locations.", roles: ROLES,
+    });
+    expect(finalize).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls.some(([sql]) => /INSERT INTO|UPDATE /.test(String(sql)))).toBe(false);
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('outcome=SCENE_SET_NOT_FOUND'));
+  });
+
+  test('another show\'s home set by then: refused with that sentence (the set\'s name, no id)', async () => {
+    const query = jest.fn(async (sql) => (/FROM scene_sets s/.test(String(sql))
+      ? [LOCATIONS.map((l) => ({ id: l.scene_set_id, name: l.role === 'home' ? 'Loft' : l.scene_set_id, show_id: l.role === 'home' ? 'show-2' : 'show-1' })), 0]
+      : [[], 0]));
+    jest.spyOn(placeLock, 'finalizePlaceWrite').mockImplementation(async (_s, _e, { work }) => { await work({ transaction: {}, event: {} }); return { outcome: 'OK' }; });
+    const step = await applyStartLocations({ query }, { episodeId: 'ep-new', eventId: 'ev-1', showId: 'show-1', sourceSetId: 'set-venue', locations: LOCATIONS });
+    expect(step).toMatchObject({ status: 'failed', code: 'EPISODE_LOCATIONS_INVALID', reason: '"Loft" belongs to another show. The episode\'s locations were not saved: set them in the episode\'s Locations.' });
+    expect(JSON.stringify(step)).not.toMatch(/set-home|show-2/);
   });
 
   test('a refusal of the finalizer is a failed step with its code, its text and the roles', async () => {

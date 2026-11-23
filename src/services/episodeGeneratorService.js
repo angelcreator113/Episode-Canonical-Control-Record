@@ -1057,7 +1057,7 @@ Return ONLY JSON.` }],
   // reason (never the database's message): the newer choice is not written
   // over, and the Start does not report its setup as complete.
   setupSteps.locations = await require('./episodeLocationsService').applyStartLocations(models.sequelize, {
-    episodeId: episode.id, eventId, sourceSetId: lockedEventSetId, locations,
+    episodeId: episode.id, eventId, showId, sourceSetId: lockedEventSetId, locations,
   });
   // What the setup did (audit STATE-01): the episode stays visibly
   // incomplete until Resume setup repairs it.
