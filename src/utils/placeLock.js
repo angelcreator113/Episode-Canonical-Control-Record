@@ -152,8 +152,12 @@ async function attemptPlaceFinalize(sequelize, eventId, { sourceSetId, work, loc
  *                scene_set_id }. EVERY statement in `work` must be given
  *                this transaction (the app has no CLS: a statement without
  *                it runs on another connection, outside the locks, and may
- *                wait on this very transaction). `work` does database
- *                writes only; nothing slow, nothing paid.
+ *                wait on this very transaction). `work` may run more than
+ *                once (once per attempt), so it does rollback-safe database
+ *                work only: no paid generation, no storage write, no
+ *                notification and no other irreversible side effect inside
+ *                it (Evoni, 2026-11-23). Nothing slow either: the locks are
+ *                held while it runs.
  *   maxAttempts  attempts in all (3). A lock conflict (Postgres 40P01 or
  *                55P03, or a RetryableConflictError) and a link that
  *                changed are tried again, every check repeated; `work` is

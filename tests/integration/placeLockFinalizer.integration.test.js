@@ -291,7 +291,12 @@ const settle = (promise) => promise.then(
         sourceSetId: setA,
         work: async (ctx) => {
           n += 1;
-          if (n === 1) { await first.work(ctx); throw new RetryableConflictError(); }
+          if (n === 1) {
+            await first.work(ctx);
+            // A second write only attempt 1 makes: after the retry it must be gone.
+            await sequelize.query('UPDATE world_events SET host = :host WHERE id = :id', { replacements: { host: 'Attempt one only', id: ev }, transaction: ctx.transaction });
+            throw new RetryableConflictError();
+          }
           return second.work(ctx);
         },
       });
@@ -299,6 +304,9 @@ const settle = (promise) => promise.then(
       expect(n).toBe(2);
       expect(first.calls[0].transaction.finished).toBe('rollback');
       expect(await venueName(ev)).toBe('Second try');
+      // No trace of attempt 1: its own column is as it was (work may run more
+      // than once, so it must be rollback-safe database work only).
+      expect((await eventRow(ev)).host).toBeNull();
     });
 
     test('it makes no network or provider call (the network guard records no attempt)', async () => {
@@ -314,6 +322,139 @@ const settle = (promise) => promise.then(
       const mine = state.events.slice(before);
       expect(mine.filter((e) => e.type === 'attempt')).toEqual([]);
       expect(mockAnthropic).not.toHaveBeenCalled(); // no completion has run yet in this file
+    });
+  });
+
+  describe('the mixed linked row shape and the inconsistent brief/stamp combination', () => {
+    /** The rule before Foundation A, as utils/placeLock had it on main. */
+    async function oldRule(eventId) {
+      let episodeId = (await findTermsLockEpisode(sequelize, eventId))?.id || null;
+      if (!episodeId) episodeId = (await eventRow(eventId))?.used_in_episode_id || null;
+      if (!episodeId) return false;
+      const [live] = await rows('SELECT evaluation_status FROM episodes WHERE id = :episodeId AND deleted_at IS NULL', { episodeId });
+      return live?.evaluation_status === 'accepted';
+    }
+    /**
+     * Genuinely inconsistent: episode E's live Brief names P, P is not
+     * stamped on E, and S is stamped on E (episodeLinkState
+     * 'primary_link_missing' with a stray). No current workflow leaves it.
+     */
+    async function inconsistent() {
+      const e = await mkEpisode(show);
+      const p = await mkEvent(show, { set: setA, name: 'Primary by Brief' });
+      await mkBrief(show, e, p);
+      const s = await mkEvent(show, { stamp: e, set: setB, name: 'Stray by stamp' });
+      return { e, p, s };
+    }
+    const eventsState = async (ids) => JSON.stringify(await rows(
+      'SELECT id, status, scene_set_id, used_in_episode_id, updated_at FROM world_events WHERE id IN (:ids) ORDER BY id', { ids }));
+    /** Each transaction that locked an episode: that lock, its classes in order, how it ended. */
+    const lockedBy = (t) => [...t.byTransaction().values()]
+      .filter((recs) => recs.some((r) => r.kind === 'lock' && r.table === 'episodes'))
+      .map((recs) => ({
+        episodes: recs.find((r) => r.kind === 'lock' && r.table === 'episodes'),
+        sequence: lockTrace.classSequence(recs),
+        end: recs[recs.length - 1].kind,
+      }));
+
+    test('genuinely inconsistent: a real completion is refused exactly as before (409 EPISODE_EVENT_LINK_INCONSISTENT); nothing is accepted, booked or changed', async () => {
+      const { e, p, s } = await inconsistent();
+      const before = await eventsState([p, s]);
+      const sName = (await eventRow(s)).name;
+      const refused = await settle(completeEpisode(e, show, sequelize));
+      expect(refused.ok).toBe(false);
+      const err = refused.error;
+      expect(err.name).toBe('SecondaryEventError');
+      expect(err.status).toBe(409);
+      expect(err.statusCode).toBe(409);
+      expect(err.code).toBe('EPISODE_EVENT_LINK_INCONSISTENT');
+      expect(err.message).toBe(
+        `This episode's events do not agree: its brief names one event while that event is not linked to it (also linked: "${sName}"). `
+        + 'The episode cannot be completed until that is repaired. Restore the link of the event its brief names, or remove the other event from the episode, first. Nothing was changed.');
+      expect(err.details).toEqual({
+        episode_id: e, link_state: 'primary_link_missing', primary_event_id: p, events: [{ id: s, name: sName, obligations: [] }],
+      });
+      expect(err.toJSON()).toEqual({ success: false, error: err.message, code: 'EPISODE_EVENT_LINK_INCONSISTENT', ...err.details });
+      // Nothing was changed.
+      expect(await evaluationOf(e)).toBe('pending');
+      expect(await rows('SELECT id FROM financial_transactions WHERE episode_id = :e', { e })).toEqual([]);
+      expect(await rows('SELECT id FROM character_state_history WHERE episode_id = :e', { e })).toEqual([]);
+      expect(await eventsState([p, s])).toBe(before);
+    });
+
+    test('that shape with the episode a draft: neither event is locked; a finalization of each commits, with the episode share-locked before the event row', async () => {
+      const { e, p, s } = await inconsistent();
+      expect([await isPlaceLocked(sequelize, s), await isPlaceLocked(sequelize, p)]).toEqual([false, false]);
+      expect([await oldRule(s), await oldRule(p)]).toEqual([false, false]);
+      const t = tracing();
+      // The episode is linked to both: by the stamp for S, by the Brief for P.
+      for (const [ev, set] of [[s, setB], [p, setA]]) {
+        t.clear();
+        const { work, calls } = writer(`Saved ${ev.slice(0, 6)}`);
+        expect(await finalizePlaceWrite(sequelize, ev, { sourceSetId: set, work })).toMatchObject({ outcome: O.OK, attempts: 1 });
+        expect(calls).toHaveLength(1);
+        expect(await venueName(ev)).toBe(`Saved ${ev.slice(0, 6)}`);
+        const [tx] = lockedBy(t);
+        expect(tx.episodes).toMatchObject({ mode: 'share', ids: [e] });
+        expect(tx.sequence).toEqual(['E:episodes:share', 'W:world_events:update', 'W:world_events:write']);
+        expect(tx.end).toBe('commit');
+      }
+    });
+
+    test('that shape with the episode accepted (a row write: it cannot be completed for real, see above): both events are locked, as under the old rule; both finalizations refuse', async () => {
+      const { e, p, s } = await inconsistent();
+      await fx.setEvaluation(e, 'accepted');
+      for (const ev of [s, p]) {
+        const was = await oldRule(ev);
+        const now = await isPlaceLocked(sequelize, ev);
+        expect([was, now]).toEqual([true, true]); // S by its stamp, P by the Brief: never weaker
+        const before = JSON.stringify(await eventRow(ev));
+        const { work, calls } = writer();
+        expect(await finalizePlaceWrite(sequelize, ev, { work })).toEqual({
+          outcome: O.PLACE_LOCKED, code: 'PLACE_LOCKED', message: placeLock.PLACE_LOCKED_MESSAGE, attempts: 1,
+        });
+        expect(calls).toHaveLength(0);
+        expect(JSON.stringify(await eventRow(ev))).toBe(before);
+      }
+    });
+
+    test('the mixed linked shape: stamped on A (whose Brief names A\'s own event) while draft B\'s Brief names it. Both episodes are share-locked; A accepted refuses, A a draft commits', async () => {
+      async function mixed(evaluationOfA) {
+        const a = await mkEpisode(show, { evaluation: evaluationOfA });
+        const b = await mkEpisode(show);
+        const primaryOfA = await mkEvent(show, { name: 'Own event of A' });
+        await mkBrief(show, a, primaryOfA);
+        const ev = await mkEvent(show, { stamp: a, set: setA });
+        await mkBrief(show, b, ev);
+        return { a, b, ev, primaryOfA };
+      }
+      const accepted = await mixed('accepted');
+      // A's own event cannot be stamped on A as well: one stamp per episode
+      // (the unique index), which is why this shape has it linked by the Brief alone.
+      await expect(sequelize.query('UPDATE world_events SET used_in_episode_id = :a WHERE id = :id', { replacements: { a: accepted.a, id: accepted.primaryOfA } }))
+        .rejects.toMatchObject({ original: { code: '23505', constraint: 'world_events_used_in_episode_unique' } });
+      expect(await oldRule(accepted.ev)).toBe(false); // the old rule asked B alone, a draft
+      expect(await isPlaceLocked(sequelize, accepted.ev)).toBe(true);
+      const t = tracing();
+      const refusedWork = writer();
+      expect(await finalizePlaceWrite(sequelize, accepted.ev, { sourceSetId: setA, work: refusedWork.work })).toMatchObject({ outcome: O.PLACE_LOCKED, attempts: 1 });
+      expect(refusedWork.calls).toHaveLength(0);
+      expect(await venueName(accepted.ev)).toBeNull();
+      let [tx] = lockedBy(t);
+      expect(tx.episodes).toMatchObject({ mode: 'share', ordered: true, ids: [accepted.a, accepted.b].sort() });
+      expect(tx.sequence).toEqual(['E:episodes:share', 'W:world_events:update']);
+      expect(tx.end).toBe('rollback');
+
+      const draft = await mixed('pending');
+      expect(await isPlaceLocked(sequelize, draft.ev)).toBe(false);
+      t.clear();
+      const { work, calls } = writer();
+      expect(await finalizePlaceWrite(sequelize, draft.ev, { sourceSetId: setA, work })).toMatchObject({ outcome: O.OK, attempts: 1 });
+      expect(calls).toHaveLength(1);
+      expect(await venueName(draft.ev)).toBe('Finalised');
+      [tx] = lockedBy(t);
+      expect(tx.episodes).toMatchObject({ mode: 'share', ordered: true, ids: [draft.a, draft.b].sort() });
+      expect(tx.end).toBe('commit');
     });
   });
 

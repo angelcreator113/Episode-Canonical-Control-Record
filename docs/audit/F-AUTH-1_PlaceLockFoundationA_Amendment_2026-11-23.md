@@ -76,6 +76,16 @@ Her earlier rulings that this change carries out, in her words:
 
 > "Do not automatically lock featured-guest editing merely because the Place is locked."
 
+Her review decisions on the change, 2026-11-23, in her words. Each settles a judgement made while building it (§3, §6):
+
+> "APPROVED: Guest controls use the terms-lock episode only. Do not restore a stamped-episode fallback that would change established guest-lock behavior for deleted episodes."
+
+> "APPROVED: Acceptance-status inclusion is opt-in on the existing helper. Preserve the Start-readiness response contract."
+
+> "APPROVED WITH TEST COVERAGE: The valid stamp-only non-primary event is acceptable for the acceptance-race tests. Also explicitly cover the mixed linked row shape and the existing refusal for a genuinely inconsistent brief/stamp combination. Do not change completion behavior under #3930."
+
+> "Retry callbacks must perform rollback-safe database work only. No paid generation, storage write, notification or irreversible side effect may run inside a retryable callback."
+
 No ownership rule is created. No public contract is created. No route gains a guard.
 
 # §3. What the change does (MEASURED on the branch)
@@ -152,6 +162,8 @@ A lock conflict (Postgres 40P01 or 55P03, or a `RetryableConflictError`) and a c
 
 `work` is given the transaction, and every statement in it must use it: the app has no CLS, so a statement without it runs on another connection, outside the locks. The helper documents this; it cannot enforce it.
 
+**`work` may run more than once, so it is rollback-safe database work only (RULED, §2).** "No paid generation, storage write, notification or irreversible side effect may run inside a retryable callback." It runs once per attempt, and an attempt that does not commit is rolled back; anything `work` did outside the transaction would not be. The helper's own comment says so. It is a contract on the caller: the helper cannot see what `work` does. The suite shows the part it can: a write made only by a first attempt that then met a retryable conflict is absent after the second attempt commits.
+
 One option is a test seam: `lockTimeout`, the wait of step 3. It defaults to `LOCK_TIMEOUT`, accepts only a plain value such as `300ms`, and no caller should pass it.
 
 ## The lock order, and why the episodes are locked FOR SHARE
@@ -188,12 +200,19 @@ Two private copies of a similar linked-episode query remain: `linkedEpisodeIds` 
 On a private, migrated local PostgreSQL test database, through the real app. No test sends DDL, and none calls a provider or the object storage.
 
 - `tests/integration/placeLockStrict.integration.test.js` (53 cases). Thirteen states as rows in the shape the real writers leave, each read with the old rule written out again and with the new rule, outside and inside a transaction; the old rule's episode among the linked episodes in every state; a two-part special made by the real season routes and Start Episode, then Part 1 marked accepted by a row write (the real window is held open in the next suite); every caller of §1 through its real route or service, as an ADMIN, in each of the three new states that carry a stamp: the code it already used, nothing changed, nothing generated or stored; the read flags; the event read's new field and Start readiness's unchanged answer; the guest rule compared with the old Place lock in all thirteen states; `lockedEventsAt` in a transaction; `acceptedEpisodeUses` for each of the three use tables.
-- `tests/integration/placeLockFinalizer.integration.test.js` (27 cases). Each outcome; the lock order from a statement trace; the bounded wait with no linked episode; a link that appears between the read and the locks; a real 55P03 and the retry; a real completion (`completeEpisode`) in both orders, for a primary event and for an event linked by its stamp alone; a real two-part completion held in its window by a `FOR SHARE` lock on Part 2, and a finalization ahead of one; the real event `PUT` with its insert, in both orders. Waits are seen in `pg_stat_activity`, not slept for. The network guard records no attempt by the helper.
+- `tests/integration/placeLockFinalizer.integration.test.js` (31 cases; the four added on her review are listed below). Each outcome; the lock order from a statement trace; the bounded wait with no linked episode; a link that appears between the read and the locks; a real 55P03 and the retry; a real completion (`completeEpisode`) in both orders, for a primary event and for an event linked by its stamp alone; a real two-part completion held in its window by a `FOR SHARE` lock on Part 2, and a finalization ahead of one; the real event `PUT` with its insert, in both orders. Waits are seen in `pg_stat_activity`, not slept for. The network guard records no attempt by the helper.
 - Frontend: `EventPackagePage.featureGuests.test.jsx` (13) and `EventPackagePage.placeLock.test.jsx` (3). The fixtures now carry what the read returns (`termsLockedBy.evaluation_status`); the guest controls stay open in the three new states while the Place is locked, and lock on the terms-lock episode's acceptance.
 - **Control.** With `src/utils/placeLock.js` put back to the basis, 32 of the 53 strict cases fail; with the page put back to the basis, 3 of the 16 frontend cases fail.
 
+**Added on her review (§2), in the finalizer suite's block "the mixed linked row shape and the inconsistent brief/stamp combination":**
+- *The genuinely inconsistent combination* (episode E's live Brief names event P, P is not stamped on E, event S is stamped on E). A real `completeEpisode(E)` is refused as it always was: `SecondaryEventError`, status 409, code `EPISODE_EVENT_LINK_INCONSISTENT`, details `{ episode_id, link_state: 'primary_link_missing', primary_event_id: P, events: [{ id: S, name, obligations: [] }] }`, and the message "This episode's events do not agree: its brief names one event while that event is not linked to it (also linked: "<S>"). The episode cannot be completed until that is repaired. Restore the link of the event its brief names, or remove the other event from the episode, first. Nothing was changed." E is not accepted, has no `financial_transactions` row and no `character_state_history` row, and both events' status, set and stamp are as they were. **Control:** with `src/utils/placeLock.js`, `eventEpisodeLink.js` and `eventTermsLock.js` put back to the basis, this case passes unchanged. Completion is not changed by this amendment.
+- *That shape, E a draft.* Neither event is locked under either rule; a finalization of S and of P each commits, `work` called once, with E share-locked before the event row (E is linked to both: by the stamp for S, by the Brief for P).
+- *That shape, E accepted* (by a row write, since it cannot be completed for real). Both events are locked under the old rule and the new one; both finalizations answer `PLACE_LOCKED`, `work` not called, nothing written.
+- *The mixed linked shape* (the event stamped on A, whose Brief names A's own event, while draft B's Brief names the event). A's own event cannot be stamped on A as well: the update is refused by the unique index (23505, `world_events_used_in_episode_unique`), asserted. With A accepted: the old rule says open, the new rule locked, and the finalization answers `PLACE_LOCKED` after share-locking both A and B in id order. With A a draft: it commits, both share-locked.
+- The existing case "a retryable conflict thrown by work" now also makes a write only the first attempt makes, and asserts it is absent after the retry commits.
+
 **Limits of the tests.**
-- A second event stamped on an episode whose own primary event is stamped too cannot be stored: the unique index `world_events_used_in_episode_unique` allows one stamp per episode. And a completion refuses an episode whose Brief names another event that is not stamped on it (409 `EPISODE_EVENT_LINK_INCONSISTENT`). So the real-acceptance races for "a non-primary event" use an event linked by its stamp alone, on an episode with no Brief. The rule itself is tested on the non-primary row shape.
+- A second event stamped on an episode whose own primary event is stamped too cannot be stored: the unique index `world_events_used_in_episode_unique` allows one stamp per episode. And a completion refuses an episode whose Brief names another event that is not stamped on it (409 `EPISODE_EVENT_LINK_INCONSISTENT`). So the real-acceptance races for "a non-primary event" use an event linked by its stamp alone, on an episode with no Brief (RULED acceptable, §2). The rule and the helper are tested on the mixed row shape, and the completion refusal is pinned, above.
 - Several existing suites that touch these callers run a migration's `up()` in their own setup (`placeLock`, `venueLook`, `venueLookImage`, `sceneSetVersions`, `eventLookUpload`, `injectSceneSetLink`, `lockOrderMatrix`, `lockOrderTrace`, `seasonSpecials`). They were not run locally for this change, by the rule that a local run sends no DDL; CI runs them.
 
 # §7. Limits of the change
