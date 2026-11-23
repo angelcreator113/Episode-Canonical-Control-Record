@@ -76,10 +76,16 @@ const STAYS_LOCKED_WHILE_REOPENED = new Set(['used_in_episode_id']);
 
 const EVENT_TERMS_REOPENED_CODE = 'EVENT_TERMS_REOPENED';
 
-/** The live episode that locks this event's terms, or null. */
+/**
+ * The live episode that locks this event's terms, or null. One episode: the
+ * newest live brief's, else the stamped one (a terms reopen relies on that).
+ * Its evaluation_status rides along for the event read (Foundation A). The
+ * Place lock does not ask this function: it asks every linked episode
+ * (utils/placeLock).
+ */
 async function findTermsLockEpisode(sequelize, eventId, { transaction } = {}) {
   const [briefRows] = await sequelize.query(
-    `SELECT e.id, e.title, e.episode_number, e.show_id
+    `SELECT e.id, e.title, e.episode_number, e.show_id, e.evaluation_status
        FROM episode_briefs b
        JOIN episodes e ON e.id = b.episode_id
       WHERE b.event_id = :eventId AND b.deleted_at IS NULL AND e.deleted_at IS NULL
@@ -88,7 +94,7 @@ async function findTermsLockEpisode(sequelize, eventId, { transaction } = {}) {
     { replacements: { eventId }, transaction }
   );
   if (briefRows?.[0]) return briefRows[0];
-  return findLiveLinkedEpisode(sequelize, eventId, { transaction });
+  return findLiveLinkedEpisode(sequelize, eventId, { transaction, withEvaluationStatus: true });
 }
 
 /** The terms_reopen marker in a canon_consequences value, or null. */

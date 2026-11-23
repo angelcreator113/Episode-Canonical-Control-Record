@@ -23,13 +23,17 @@ const EVENT = {
 };
 const SET = { id: 'set-1', name: 'Studio', scene_type: 'EVENT_LOCATION', show_id: 'show-1' };
 
-function mockPackage({ placeLocked, evaluation }) {
+function mockPackage({ placeLocked, evaluation, termsEvaluation }) {
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url === EVENT_URL) {
       return { data: {
         success: true, event: EVENT, sourceProfile: null, startedFromProfile: null, sceneSet: SET, venueLocation: null,
         invitationAsset: null, usedInEpisode: { id: 'ep-1', episode_number: 3, title: 'Sable ep', evaluation_status: evaluation },
-        termsLockedBy: { id: 'ep-1', episode_number: 3, title: 'Sable ep' }, termsReopen: null, placeLocked,
+        // termsEvaluation: the terms-lock episode is another one (a draft's brief names the event).
+        termsLockedBy: termsEvaluation
+          ? { id: 'ep-2', episode_number: 4, title: 'Sable ep, Part 2', evaluation_status: termsEvaluation }
+          : { id: 'ep-1', episode_number: 3, title: 'Sable ep', evaluation_status: evaluation },
+        termsReopen: null, placeLocked,
       } };
     }
     return { data: { success: true, deliverables: [], locked: true } };
@@ -53,6 +57,15 @@ describe('EventPackagePage: the Place after Start Episode (L13)', () => {
 
   test('the episode accepted: the scene set choice is gone', async () => {
     mockPackage({ placeLocked: true, evaluation: 'accepted' });
+    renderPage();
+    expect(await screen.findByTestId('place-scene-set')).toBeTruthy();
+    expect(screen.queryByTestId('place-choose-scene-set')).toBeNull();
+  });
+
+  // Foundation A (Evoni, 2026-11-23): any linked episode accepted locks the
+  // Place, so placeLocked can be true while the terms-lock episode is a draft.
+  test('another linked episode accepted, the terms-lock episode a draft: the scene set choice is gone', async () => {
+    mockPackage({ placeLocked: true, evaluation: 'accepted', termsEvaluation: 'pending' });
     renderPage();
     expect(await screen.findByTestId('place-scene-set')).toBeTruthy();
     expect(screen.queryByTestId('place-choose-scene-set')).toBeNull();
