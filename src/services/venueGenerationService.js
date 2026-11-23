@@ -31,12 +31,14 @@ async function downloadImage(url) {
   return Buffer.from(response.data);
 }
 
-async function uploadToS3(buffer, folder, suffix) {
+/** Stores one image; `stored`, when given, collects the object keys written. */
+async function uploadToS3(buffer, folder, suffix, stored = null) {
   const s3Key = `venues/${folder}/${uuidv4()}-${suffix}.png`;
   await s3.send(new PutObjectCommand({
     Bucket: S3_BUCKET, Key: s3Key, Body: buffer,
     ContentType: 'image/png', CacheControl: 'max-age=31536000',
   }));
+  if (stored) stored.push(s3Key);
   return `https://${S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${s3Key}`;
 }
 
@@ -149,13 +151,42 @@ async function attachedSetBaseBrief(sequelize, set, eventId, { overrides = {} } 
 // ─── MAIN: GENERATE VENUE IMAGES ────────────────────────────────────────────
 
 /**
+ * A new venue for an event: the interior and exterior are generated and
+ * stored, then the scene set, its angles and the event's move to it are
+ * saved together (Generation B1; Evoni, 2026-11-23).
+ *
+ * The save is utils/placeLock finalizePlaceWrite: one short transaction that
+ * commits only while the event's Place is not locked and the event is still
+ * at the set it had when this began. Everything paid, stored or made up (the
+ * provider calls, the downloads, the storage puts, the ids and the
+ * timestamp) comes before it; the transaction's work is database rows only,
+ * and may be run again after a lock conflict without paying again. With the
+ * rows, the event's draft episode follows it to the new set
+ * (eventPlaceSync.syncEpisodeEventLocation, as an event edit does).
+ *
+ * Saved: resolves what the route answers. Not saved: nothing is written,
+ * nothing is deleted from storage, the stored keys are logged, and a
+ * PlaceFinalizeRefusal is thrown (outcome 'generated_not_saved').
+ *
  * options.overrides: { <brief line key>: text }, the "Your override" lines
  * confirmed on the venue's brief (S2).
  */
 async function generateVenueImages(event, models, options = {}) {
-  const { draft, interior, exterior } = await prepareVenueBriefs(models.sequelize, event, { overrides: options.overrides || {} });
+  // The set the event had when this began: a set chosen meanwhile is kept.
+  const sourceSetId = event.scene_set_id ?? null;
+  const { draft, interior, exterior, estimate } = await prepareVenueBriefs(models.sequelize, event, { overrides: options.overrides || {} });
   const interiorPrompt = briefToPrompt(interior);
   const exteriorPrompt = briefToPrompt(exterior);
+
+  // What the provider calls were logged as: their cost and ai_usage_logs ids.
+  const logged = { usd: 0, priced: 0, ids: [] };
+  const onLogged = (info = {}) => {
+    if (info.usageLogId != null) logged.ids.push(info.usageLogId);
+    if (typeof info.costUsd === 'number') {
+      logged.usd += info.costUsd;
+      logged.priced += 1;
+    }
+  };
 
   console.log(`[VenueGen] Generating venue for: ${draft.name} (location ${draft.world_location_id || 'none'})`);
 
@@ -163,15 +194,15 @@ async function generateVenueImages(event, models, options = {}) {
   // when it has one (S6), else from the brief.
   console.log(`[VenueGen] Generating interior image${interior.mode === 'event_dressing' ? ' (event dressing of the approved base)' : ''}...`);
   const imageUrl = interior.mode === 'event_dressing'
-    ? (await generateImageFromImage(interior.approved_base.image_url, interiorPrompt, { size: 'landscape' })).url
-    : await generateImageUrl(interiorPrompt, VENUE_IMAGE_OPTIONS);
+    ? (await generateImageFromImage(interior.approved_base.image_url, interiorPrompt, { size: 'landscape', onLogged })).url
+    : await generateImageUrl(interiorPrompt, { ...VENUE_IMAGE_OPTIONS, onLogged });
 
   if (!imageUrl) throw new Error('Image generation failed — no URL returned');
 
   let exteriorUrl = null;
   try {
     console.log('[VenueGen] Generating exterior image...');
-    exteriorUrl = await generateImageUrl(exteriorPrompt, VENUE_IMAGE_OPTIONS);
+    exteriorUrl = await generateImageUrl(exteriorPrompt, { ...VENUE_IMAGE_OPTIONS, onLogged });
   } catch (err) {
     console.warn('[VenueGen] Exterior generation failed (non-blocking):', err.message);
   }
@@ -179,10 +210,11 @@ async function generateVenueImages(event, models, options = {}) {
   // Download and upload to S3
   const buffer = await downloadImage(imageUrl);
   const eventFolder = event.id || 'unknown';
+  const storedKeys = [];
   let s3Url;
 
   if (S3_BUCKET) {
-    s3Url = await uploadToS3(buffer, eventFolder, 'venue');
+    s3Url = await uploadToS3(buffer, eventFolder, 'venue', storedKeys);
     console.log(`[VenueGen] Uploaded venue image to S3`);
   } else {
     s3Url = imageUrl;
@@ -193,7 +225,7 @@ async function generateVenueImages(event, models, options = {}) {
   if (exteriorUrl && S3_BUCKET) {
     try {
       const extBuffer = await downloadImage(exteriorUrl);
-      exteriorS3Url = await uploadToS3(extBuffer, eventFolder, 'exterior');
+      exteriorS3Url = await uploadToS3(extBuffer, eventFolder, 'exterior', storedKeys);
       console.log('[VenueGen] Uploaded exterior to S3');
     } catch (err) {
       console.warn('[VenueGen] Exterior upload failed; keeping the provider URL:', err.message);
@@ -203,89 +235,120 @@ async function generateVenueImages(event, models, options = {}) {
     exteriorS3Url = exteriorUrl;
   }
 
-  // The Scene Set: the venue's World Location, and the full briefs (S5).
-  let sceneSet = null;
-  if (models.SceneSet) {
-    try {
-      const id = uuidv4();
-      const generatedAt = new Date().toISOString();
-      sceneSet = await models.SceneSet.create({
-        id,
-        name: draft.name,
-        scene_type: draft.scene_type,
-        canonical_description: draft.canonical_description,
-        world_location_id: draft.world_location_id,
-        base_still_url: s3Url,
-        base_runway_prompt: interiorPrompt,
-        show_id: event.show_id,
-        generation_status: 'complete',
-        base_generation: {
-          source: 'venue_generation',
-          generated_for_event: event.id,
-          generated_at: generatedAt,
-          brief: { ...interior, scene_set_id: id },
-          exterior_brief: exteriorS3Url ? { ...exterior, scene_set_id: id } : null,
-        },
-      });
-
-      if (models.SceneAngle) {
-        // Exterior establishing shot (for video generation)
-        if (exteriorS3Url) {
-          await models.SceneAngle.create({
-            scene_set_id: sceneSet.id,
-            angle_name: `${draft.name} — Exterior`,
-            angle_label: 'ESTABLISHING',
-            angle_kind: 'front', // L14
-            still_image_url: exteriorS3Url,
-            runway_prompt: exteriorPrompt,
-            generation_status: 'complete',
-            camera_motion: 'slow_pan_right',
-            video_duration: 10,
-            sort_order: 0,
-          });
-        }
-
-        // Interior wide shot
-        await models.SceneAngle.create({
-          scene_set_id: sceneSet.id,
-          angle_name: `${draft.name} — Event Space`,
-          angle_label: 'interior_wide',
-          angle_kind: 'inside', // L14
-          still_image_url: s3Url,
-          runway_prompt: interiorPrompt,
-          generation_status: 'complete',
-          sort_order: 1,
-        });
-      }
-
-      console.log(`[VenueGen] Scene set created: ${sceneSet.id} — ${draft.name} (${exteriorS3Url ? 'exterior + interior' : 'interior only'})`);
-    } catch (err) {
-      console.warn('[VenueGen] Scene set creation failed:', err.message);
-    }
-  }
-
-  // Link the scene set to the event it was made for (named in the route).
-  if (sceneSet) {
-    try {
-      await models.sequelize.query(
-        'UPDATE world_events SET scene_set_id = :sceneSetId, updated_at = NOW() WHERE id = :eventId',
-        { replacements: { sceneSetId: sceneSet.id, eventId: event.id } }
-      );
-    } catch (err) {
-      console.warn('[VenueGen] Linking the scene set to the event failed:', err.message);
-    }
-  }
-
   // The World Location's style guide is never written here (S5): the place
   // is read from it, and the venue image lives on the scene set.
-
-  return {
+  const answer = (sceneSetId) => ({
     venue_url: s3Url,
     exterior_url: exteriorS3Url,
-    scene_set_id: sceneSet?.id || null,
+    scene_set_id: sceneSetId,
     world_location_id: draft.world_location_id,
     brief: interior,
+  });
+  if (!models.SceneSet) return answer(null);
+
+  // The rows, whole, before the save: the ids and the timestamp are made
+  // here, so another try of the transaction writes the same rows.
+  const id = uuidv4();
+  const now = new Date();
+  // The Scene Set: the venue's World Location, and the full briefs (S5).
+  const setRow = {
+    id,
+    name: draft.name,
+    scene_type: draft.scene_type,
+    canonical_description: draft.canonical_description,
+    world_location_id: draft.world_location_id,
+    base_still_url: s3Url,
+    base_runway_prompt: interiorPrompt,
+    show_id: event.show_id,
+    generation_status: 'complete',
+    base_generation: {
+      source: 'venue_generation',
+      generated_for_event: event.id,
+      generated_at: now.toISOString(),
+      brief: { ...interior, scene_set_id: id },
+      exterior_brief: exteriorS3Url ? { ...exterior, scene_set_id: id } : null,
+    },
+    createdAt: now,
+    updatedAt: now,
   };
+  const angleRows = [];
+  if (models.SceneAngle) {
+    // Exterior establishing shot (for video generation)
+    if (exteriorS3Url) {
+      angleRows.push({
+        id: uuidv4(),
+        scene_set_id: id,
+        angle_name: `${draft.name} — Exterior`,
+        angle_label: 'ESTABLISHING',
+        angle_kind: 'front', // L14
+        still_image_url: exteriorS3Url,
+        runway_prompt: exteriorPrompt,
+        generation_status: 'complete',
+        camera_motion: 'slow_pan_right',
+        video_duration: 10,
+        sort_order: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    // Interior wide shot
+    angleRows.push({
+      id: uuidv4(),
+      scene_set_id: id,
+      angle_name: `${draft.name} — Event Space`,
+      angle_label: 'interior_wide',
+      angle_kind: 'inside', // L14
+      still_image_url: s3Url,
+      runway_prompt: interiorPrompt,
+      generation_status: 'complete',
+      sort_order: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  // The save. Every statement is given the finalizer's transaction, and no
+  // error is caught here: a failed statement leaves the transaction
+  // aborted, so the whole of it is rolled back. A new model instance per
+  // try. silent: the timestamps given above are kept as they are.
+  const { syncEpisodeEventLocation } = require('./eventPlaceSync');
+  const work = async ({ transaction }) => {
+    await models.SceneSet.create({ ...setRow }, { transaction, silent: true });
+    for (const angle of angleRows) await models.SceneAngle.create({ ...angle }, { transaction, silent: true });
+    // Link the scene set to the event it was made for (named in the route).
+    await models.sequelize.query(
+      'UPDATE world_events SET scene_set_id = :sceneSetId, updated_at = :now WHERE id = :eventId',
+      { replacements: { sceneSetId: id, eventId: event.id, now }, transaction });
+    // Its draft episode follows: the Event location and its beats.
+    await syncEpisodeEventLocation(models.sequelize, { eventId: event.id, fromSetId: sourceSetId, toSetId: id, transaction });
+    return { scene_set_id: id };
+  };
+
+  const { finalizePlaceWrite, PLACE_FINALIZE_OUTCOMES } = require('../utils/placeLock');
+  const { PlaceFinalizeRefusal, generatedNotSavedLine } = require('./sceneGenerationService');
+  const orphan = (code, attempts) => generatedNotSavedLine({
+    keys: storedKeys,
+    eventId: event.id,
+    code,
+    attempts,
+    costUsd: logged.priced ? Math.round(logged.usd * 1e6) / 1e6 : null,
+    estimateUsd: estimate?.usd ?? null,
+    usageLogIds: logged.ids,
+  });
+  let saved;
+  try {
+    saved = await finalizePlaceWrite(models.sequelize, event.id, { sourceSetId, work });
+  } catch (err) {
+    console.error(orphan('SAVE_FAILED', null));
+    throw err;
+  }
+  if (saved.outcome !== PLACE_FINALIZE_OUTCOMES.OK) {
+    console.error(orphan(saved.code, saved.attempts));
+    throw new PlaceFinalizeRefusal(saved);
+  }
+
+  console.log(`[VenueGen] Scene set created: ${id} — ${draft.name} (${exteriorS3Url ? 'exterior + interior' : 'interior only'})`);
+  return answer(id);
 }
 
 module.exports = {

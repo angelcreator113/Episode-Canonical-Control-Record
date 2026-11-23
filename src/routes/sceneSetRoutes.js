@@ -1441,8 +1441,13 @@ router.post('/:id/generate-base', validateUUIDParam('id'), requireAuth, authoriz
       console.log(`[SceneGen] Base scene for "${set.name}" generation complete`);
     } catch (genErr) {
       console.error(`[SceneGen] Base scene for "${set.name}" failed:`, genErr.message);
-      // Approved during the run: the set keeps its approved base, complete.
-      if (!(genErr instanceof approvedBase.ApprovedBaseError)) await set.update({ generation_status: 'failed' });
+      // Approved during the run: the set keeps its approved base. Generated
+      // and not saved (PlaceFinalizeRefusal, Generation B1): the set already
+      // has its earlier status back, and the reason is on it. Neither is a
+      // failed generation.
+      const notAFailure = genErr instanceof approvedBase.ApprovedBaseError
+        || genErr instanceof sceneGenService.PlaceFinalizeRefusal;
+      if (!notAFailure) await set.update({ generation_status: 'failed' });
     }
   } catch (err) {
     console.error('Scene Sets POST /:id/generate-base error:', err);

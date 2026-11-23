@@ -33,10 +33,12 @@ async function locationApprovingSet(sequelize, sceneSetId, { transaction } = {})
 
 /**
  * null when the set's base may be replaced; otherwise { status: 409, error }
- * naming the location whose approved base it is (answer 3).
+ * naming the location whose approved base it is (answer 3). With a
+ * transaction, it is read inside it (Generation B1: the base's final write
+ * asks again in the transaction that saves the picture).
  */
-async function baseReplaceRefusal(sequelize, sceneSetId) {
-  const location = await locationApprovingSet(sequelize, sceneSetId);
+async function baseReplaceRefusal(sequelize, sceneSetId, { transaction } = {}) {
+  const location = await locationApprovingSet(sequelize, sceneSetId, { transaction });
   if (!location) return null;
   return {
     status: 409,

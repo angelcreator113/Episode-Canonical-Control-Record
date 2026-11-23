@@ -61,6 +61,20 @@ export const REFRESH_FAILED_MESSAGE = "Done — couldn't refresh the page. Reloa
 
 const lookGenerating = (d) => d?.look?.status === 'generating';
 const baseGenerating = (d) => d?.scene_set?.generation_status === 'generating';
+/**
+ * A base run that made a picture and did not save it (the Place locked
+ * meanwhile, or the base was approved meanwhile): the set keeps the status
+ * it had, and its last error is newer than its last saved base. True when
+ * the set says so: { error, failed_at, generated_at? } with a status that is
+ * neither generating nor failed.
+ */
+export const baseNotSaved = (set) => {
+  if (!set?.error || !set.failed_at) return false;
+  if (set.generation_status === 'generating' || set.generation_status === 'failed') return false;
+  const failedAt = Date.parse(set.failed_at);
+  return !Number.isNaN(failedAt) && failedAt > (Date.parse(set.generated_at) || 0);
+};
+const baseCouldNot = (set) => set?.generation_status === 'failed' || baseNotSaved(set);
 
 // When this section started a run (the base's has no start time from the server).
 const STARTED_KEY = (eventId) => `ell-run-started:${eventId}`;
@@ -114,8 +128,9 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
     if (lookGenerating(prev) && (data?.look?.status === 'failed' || (data?.look?.status === 'complete' && data.look.error))) {
       toast?.(`The look could not be generated${data.look.error ? `: ${data.look.error}` : ''}`, 'error');
     }
-    if (baseGenerating(prev) && data?.scene_set?.generation_status === 'complete') toast?.('The base is ready: approve it in Scene Sets');
-    if (baseGenerating(prev) && data?.scene_set?.generation_status === 'failed') toast?.(`The base could not be generated${data.scene_set.error ? `: ${data.scene_set.error}` : ''}`, 'error');
+    // A run whose picture was not saved leaves the set complete with its old base: not "ready".
+    if (baseGenerating(prev) && data?.scene_set?.generation_status === 'complete' && !baseNotSaved(data.scene_set)) toast?.('The base is ready: approve it in Scene Sets');
+    if (baseGenerating(prev) && baseCouldNot(data?.scene_set)) toast?.(`The base could not be generated${data.scene_set.error ? `: ${data.scene_set.error}` : ''}`, 'error');
     const finished = (lookGenerating(prev) && !lookGenerating(data)) || (baseGenerating(prev) && !baseGenerating(data));
     if (finished) Promise.resolve(savedRef.current?.()).catch((err) => console.error('[EventLookImage] refresh after a run failed:', err));
   };
@@ -312,7 +327,7 @@ export default function EventLookImage({ showId, eventId, onToast, onSaved, poll
   const lookReady = look?.status === 'complete' && look.image_url;
   const approved = state?.approved_base || null;
   const baseWaiting = set && set.base_still_url && !approved;
-  const baseFailed = !lookReady && set?.generation_status === 'failed';
+  const baseFailed = !lookReady && baseCouldNot(set);
   // L13: the Place locks when the episode is accepted.
   const locked = state?.editable === false;
   const openSetId = set?.id || approved?.scene_set_id || null;
