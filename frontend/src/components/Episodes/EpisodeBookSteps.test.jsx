@@ -140,10 +140,13 @@ test('the next step is the only highlighted one; a done step folds and opens on 
   expect(story.className).toContain('is-next');
   expect(document.querySelectorAll('.tw-step.is-next')).toHaveLength(1);
   expect(screen.getByText('Write the short story').className).toContain('is-primary');
-  expect(screen.getByText('Start the chapter').className).not.toContain('is-primary');
+  // The chapter step's button appears once the book's list has loaded: waited for, as the other tests do.
+  expect((await screen.findByText('Start the chapter')).className).not.toContain('is-primary');
   // The approved record folds to its title; Open shows it again.
+  // The step is marked done in one render and folded by an effect in the
+  // next: the fold is waited for (it was asserted in between, once in CI).
   const body = first.querySelector('.tw-step-body');
-  expect(body.hidden).toBe(true);
+  await waitFor(() => expect(body.hidden).toBe(true));
   fireEvent.click(within(first).getByRole('button', { name: 'Open' }));
   expect(body.hidden).toBe(false);
   expect(within(first).getByDisplayValue('She found the look.')).toBeTruthy();
