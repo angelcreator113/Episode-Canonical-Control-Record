@@ -713,18 +713,16 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       expect(res.body.setup_complete).toBe(false);
       expect(res.body.message).toMatch(/Its locations were not saved: This event's scene set changed/);
       const step = res.body.data.setup_status.steps.locations;
-      expect(step).toEqual({ status: 'failed', code: 'STALE_SOURCE_SET', reason: `${STALE_MESSAGE} The episode's locations were not saved: set them in the episode's Locations.` });
+      expect(step).toEqual({
+        status: 'failed', code: 'STALE_SOURCE_SET', reason: `${STALE_MESSAGE} The episode's locations were not saved: set them in the episode's Locations.`,
+        roles: [{ role: 'event', name: null }, { role: 'home', name: null }],
+      });
       expect(res.body.data.setup_status.complete).toBe(false);
       const ep = res.body.data.episode.id;
       expect((await episodeRow(ep)).setup_status).toMatchObject({ complete: false, steps: { locations: { status: 'failed', code: 'STALE_SOURCE_SET' } } });
       expect((await eventRow(ev)).scene_set_id).toBe(w.c); // the newer choice stands
       expect((await links(ep)).filter((l) => l.scene_set_id === w.a)).toEqual([]);
-
-      // Retried from the episode: its locations are set there, and Resume setup stops calling the step failed.
-      const set = await save(ep, [loc('event', w.c), loc('home', w.home)]);
-      expect(set.status).toBe(200);
-      const resumed = await asAdmin(request(app).post(`/api/v1/episode-brief/${ep}/setup/resume`)).send({});
-      expect(resumed.body.data.setup_status.steps.locations).toEqual({ status: 'complete', count: 2 });
+      // What Resume setup then asks of the episode: the describe below.
     });
 
     test('three at once: a Start past its commit, a Locations save on the new episode moving the event, and an event edit: each takes its turn, the last choice stands, the Start does not write over it; no deadlock', async () => {
@@ -797,9 +795,267 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       jest.restoreAllMocks();
       expect(res.status).toBe(201);
       expect(res.body.setup_complete).toBe(false);
-      expect(res.body.data.setup_status.steps.locations).toEqual({ status: 'failed', code: 'SAVE_FAILED', reason: "The episode's locations could not be saved. Set them in the episode's Locations." });
+      expect(res.body.data.setup_status.steps.locations).toEqual({
+        status: 'failed', code: 'SAVE_FAILED', reason: "The episode's locations could not be saved. Set them in the episode's Locations.",
+        roles: [{ role: 'event', name: null }, { role: 'home', name: null }],
+      });
       expect(JSON.stringify(res.body.data.setup_status)).not.toMatch(/violates|constraint|INSERT/);
       expect(await links(res.body.data.episode.id)).toEqual([]);
+    });
+  });
+
+  // ══ Resume setup and a failed locations step ═══════════════════════════
+  // Resume setup does not save locations. For a locations step that failed at
+  // Start it only reads the episode, its event, its live locations and its
+  // live beats, and calls the step done when they agree. The corrections
+  // below go through the routes a user has: the Locations save and the beat
+  // editor's save. Where a row is written directly, the test says why.
+  describe('Resume setup and a locations step that failed at Start', () => {
+    const startable = (setId = w.a) => mkEvent(show, { set: setId });
+    const resume = (ep) => asAdmin(request(app).post(`/api/v1/episode-brief/${ep}/setup/resume`)).send({});
+    const moveBeat = (ep, n, setId) => asAdmin(request(app).put(`/api/v1/episode-brief/${ep}/plan/${n}`)).send({ scene_set_id: setId });
+    const beatSets = async (ep) => Object.fromEntries((await rows(
+      'SELECT beat_number, scene_set_id FROM scene_plans WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY beat_number', { ep })).map((b) => [b.beat_number, b.scene_set_id]));
+    const stepOf = async (ep) => (await episodeRow(ep)).setup_status.steps.locations;
+    const INCOMPLETE = 'LOCATIONS_INCOMPLETE';
+    const noDatabaseText = (step) => expect(JSON.stringify(step)).not.toMatch(/violates|constraint|SELECT|INSERT|UPDATE|scene_set_episodes|scene_plans/);
+
+    /**
+     * A Start whose locations were refused as stale: the event was moved to C
+     * by a real event PUT after Start's commit and before its beats were
+     * made. Left behind: one location (the event's, at C, made by the event
+     * edit's sync), home beats at home, and the event's beats (10, 11, 12)
+     * at A, the set Start was made against.
+     */
+    async function staleStart({ locations = [loc('event', w.a), loc('home', w.home)], key = null } = {}) {
+      const ev = await startable();
+      const committed = gateOn((rec) => !rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans');
+      const req = asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`));
+      if (key) req.set('Idempotency-Key', key);
+      const pending = send(req.send({ draft_script: false, locations, event_scene_set_id: w.a }));
+      await committed.reached;
+      expect((await putEvent(ev, { scene_set_id: w.c })).status).toBe(200);
+      committed.open();
+      const res = await pending;
+      expect(res.status).toBe(201);
+      expect(res.body.data.setup_status.steps.locations).toMatchObject({ status: 'failed', code: 'STALE_SOURCE_SET' });
+      trace.uninstall();
+      trace = null;
+      return { ev, ep: res.body.data.episode.id, res };
+    }
+    /** [injected] A Start whose locations save failed outright: no location at all; its beats are at the sets it chose. */
+    async function failedStart(locations = [loc('event', w.a), loc('home', w.home)]) {
+      const ev = await startable();
+      failStatement(/INSERT INTO scene_set_episodes/);
+      const res = await start(ev, { locations, event_scene_set_id: w.a });
+      jest.restoreAllMocks();
+      jest.spyOn(console, 'log').mockImplementation(() => {});
+      jest.spyOn(console, 'warn').mockImplementation(() => {});
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      expect(res.status).toBe(201);
+      expect(res.body.data.setup_status.steps.locations).toMatchObject({ status: 'failed', code: 'SAVE_FAILED' });
+      return { ev, ep: res.body.data.episode.id, res };
+    }
+    const stillFailed = async (ep, pattern) => {
+      const res = await resume(ep);
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(false);
+      expect(res.body.data.setup_status.complete).toBe(false);
+      const step = res.body.data.setup_status.steps.locations;
+      expect(step).toMatchObject({ status: 'failed', code: INCOMPLETE });
+      if (pattern) expect(step.reason).toMatch(pattern);
+      noDatabaseText(step);
+      expect(await stepOf(ep)).toEqual(step);
+      return step;
+    };
+    const nowComplete = async (ep, count) => {
+      const res = await resume(ep);
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.setup_status.complete).toBe(true);
+      expect(res.body.data.setup_status.steps.locations).toEqual({ status: 'complete', count });
+      expect((await episodeRow(ep)).setup_status.complete).toBe(true);
+    };
+
+    test('the failed step records the roles Start tried to save (extras by name)', async () => {
+      const { res } = await failedStart([loc('event', w.a), loc('home', w.home), loc('closet', w.closet), loc('extra', w.b, 'Car')]);
+      expect(res.body.data.setup_status.steps.locations.roles).toEqual([
+        { role: 'event', name: null }, { role: 'home', name: null }, { role: 'closet', name: null }, { role: 'extra', name: 'Car' },
+      ]);
+    });
+
+    test('Resume with nothing corrected: still failed and incomplete, and nothing but setup_status is written', async () => {
+      const { ep } = await failedStart();
+      const before = await snapshot();
+      const step = await stillFailed(ep, /Missing: Event, Home\./);
+      expect(step.roles).toEqual([{ role: 'event', name: null }, { role: 'home', name: null }]);
+      expect(await snapshot()).toEqual(before);
+      expect(await links(ep)).toEqual([]);
+    });
+
+    test('the event edit\'s sync made only an Event location after Start\'s stale refusal: one location does not clear the step', async () => {
+      const { ep } = await staleStart();
+      expect(await links(ep)).toEqual([{ scene_set_id: w.c, role: 'event', role_name: null }]);
+      // No home location, so the home beats have none either; the event's beats are at the older set.
+      const step = await stillFailed(ep, /Missing: Home\./);
+      expect(step.reason).toMatch(/14 beats name a scene set that is not their location \(beats 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14\)/);
+      expect(await beatSets(ep)).toMatchObject({ 10: w.a, 11: w.a, 12: w.a, 1: w.home });
+      expect(await links(ep)).toEqual([{ scene_set_id: w.c, role: 'event', role_name: null }]);
+    });
+
+    test('the locations set again from the episode, but the event\'s beats still at the older set: failed until the beats are moved in the beat editor; then complete', async () => {
+      const { ep } = await staleStart();
+      expect((await save(ep, [loc('event', w.c), loc('home', w.home)])).status).toBe(200);
+      // The Locations save moves beats only from a location it replaces: there was none at A.
+      expect(await beatSets(ep)).toMatchObject({ 10: w.a, 11: w.a, 12: w.a, 1: w.home });
+      const step = await stillFailed(ep, /^The episode's locations are not complete\. 3 beats name a scene set that is not their location \(beats 10, 11, 12\)\./);
+      expect(step.reason).not.toMatch(/Missing|Event location/);
+      // Two of the three moved: still failed, naming the one left.
+      expect((await moveBeat(ep, 10, w.c)).status).toBe(200);
+      expect((await moveBeat(ep, 11, w.c)).status).toBe(200);
+      await stillFailed(ep, /1 beat names a scene set that is not its location \(beat 12\)/);
+      expect((await moveBeat(ep, 12, w.c)).status).toBe(200);
+      await nowComplete(ep, 2);
+      expect(await beatSets(ep)).toMatchObject({ 10: w.c, 11: w.c, 12: w.c });
+    });
+
+    test('a role Start was asked for is missing (closet): failed with the reason; complete once it is set', async () => {
+      const { ep } = await failedStart([loc('event', w.a), loc('home', w.home), loc('closet', w.closet)]);
+      expect((await save(ep, [loc('event', w.a), loc('home', w.home)])).status).toBe(200);
+      const step = await stillFailed(ep, /Missing: Closet\./);
+      expect(step.reason).toMatch(/1 beat names a scene set that is not its location \(beat 8\)/); // the closet beat is at the closet set
+      expect((await save(ep, [loc('event', w.a), loc('home', w.home), loc('closet', w.closet)])).status).toBe(200);
+      await nowComplete(ep, 3);
+    });
+
+    test('a missing home, and a missing named extra: each is said; another extra\'s name does not stand in for it', async () => {
+      const { ep } = await failedStart([loc('event', w.a), loc('home', w.home), loc('extra', w.b, 'Car')]);
+      expect((await save(ep, [loc('event', w.a), loc('extra', w.b, 'Cafe')])).status).toBe(200);
+      await stillFailed(ep, /Missing: Home, "Car"\./);
+      expect((await save(ep, [loc('event', w.a), loc('home', w.home), loc('extra', w.b, 'Car')])).status).toBe(200);
+      await nowComplete(ep, 3);
+    });
+
+    test('the Event location at another set than the event has: failed', async () => {
+      const { ep, ev } = await failedStart();
+      expect((await save(ep, [loc('event', w.a), loc('home', w.home)])).status).toBe(200);
+      // Written directly: every route that changes an event's set also moves its draft
+      // episode's Event location, so no route leaves the two apart.
+      await run('UPDATE world_events SET scene_set_id = :b WHERE id = :ev', { b: w.b, ev });
+      const step = await stillFailed(ep, /The Event location is not the event's current scene set\./);
+      expect(step.reason).not.toMatch(/Missing/);
+      await run('UPDATE world_events SET scene_set_id = :a WHERE id = :ev', { a: w.a, ev });
+      await nowComplete(ep, 2);
+    });
+
+    test('an unrelated extra at the older set does not make the event\'s beats right: failed', async () => {
+      const { ep } = await staleStart();
+      expect((await save(ep, [loc('event', w.c), loc('home', w.home), loc('extra', w.a, 'Old hall')])).status).toBe(200);
+      const step = await stillFailed(ep, /3 beats name a scene set that is not their location \(beats 10, 11, 12\)/);
+      expect(step.reason).not.toMatch(/Missing/);
+    });
+
+    test('a location removed again (its link soft-deleted) does not count, and its beats are named; a set removed from Scene Sets likewise', async () => {
+      const { ep } = await failedStart();
+      expect((await save(ep, [loc('event', w.a), loc('home', w.home)])).status).toBe(200);
+      expect((await save(ep, [loc('event', w.a)])).status).toBe(200); // the home link is soft-deleted by the save
+      expect(await rows('SELECT role FROM scene_set_episodes WHERE episode_id = :ep AND deleted_at IS NOT NULL', { ep })).toEqual([{ role: 'home' }]);
+      const step = await stillFailed(ep, /Missing: Home\./);
+      expect(step.reason).toMatch(/beats name a scene set that is not their location \(beats 1, /);
+
+      const other = await failedStart();
+      expect((await save(other.ep, [loc('event', w.a), loc('home', w.home2)])).status).toBe(200);
+      // Removed from Scene Sets (soft-deleted), written directly: the link row stays, the set is gone.
+      await run('UPDATE scene_sets SET deleted_at = NOW() WHERE id = :id', { id: w.home2 });
+      await stillFailed(other.ep, /Missing: Home\./);
+      await run('UPDATE scene_sets SET deleted_at = NULL WHERE id = :id', { id: w.home2 });
+    });
+
+    test('a beat the user locked or chose keeps its set, as the writers leave it: right at any live location of the episode, wrong at a set that is not one', async () => {
+      const { ep } = await staleStart();
+      expect((await save(ep, [loc('event', w.c), loc('home', w.home), loc('extra', w.a, 'Old hall')])).status).toBe(200);
+      // Chosen in the beat editor (chosen: true), at the extra: the user's own placement.
+      for (const n of [10, 11]) {
+        expect((await asAdmin(request(app).put(`/api/v1/episode-brief/${ep}/plan/${n}`)).send({ scene_set_id: w.a, chosen: true })).status).toBe(200);
+      }
+      await stillFailed(ep, /1 beat names a scene set that is not its location \(beat 12\)/);
+      expect((await moveBeat(ep, 12, w.c)).status).toBe(200);
+      await nowComplete(ep, 3);
+
+      // A chosen beat whose set is no longer a location is named.
+      const other = await staleStart();
+      expect((await save(other.ep, [loc('event', w.c), loc('home', w.home), loc('extra', w.a, 'Old hall')])).status).toBe(200);
+      for (const n of [10, 11, 12]) {
+        expect((await asAdmin(request(app).put(`/api/v1/episode-brief/${other.ep}/plan/${n}`)).send({ scene_set_id: w.a, chosen: true })).status).toBe(200);
+      }
+      expect((await save(other.ep, [loc('event', w.c), loc('home', w.home)])).status).toBe(200); // the extra is removed; chosen beats stay at A
+      expect(await beatSets(other.ep)).toMatchObject({ 10: w.a, 11: w.a, 12: w.a });
+      await stillFailed(other.ep, /3 beats name a scene set that is not their location \(beats 10, 11, 12\)/);
+    });
+
+    test('a failed step from before roles were recorded: home, and the event when the event has a set; what Start was asked for beyond that is not known', async () => {
+      const { ep } = await failedStart([loc('event', w.a), loc('home', w.home), loc('extra', w.b, 'Car')]);
+      // As an older failed step reads: no roles. Written directly: no route writes a step.
+      await run("UPDATE episodes SET setup_status = setup_status #- '{steps,locations,roles}' WHERE id = :ep", { ep });
+      expect((await stepOf(ep)).roles).toBeUndefined();
+      const step = await stillFailed(ep, /Missing: Event, Home\./);
+      expect(step.roles).toBeUndefined();
+      expect((await save(ep, [loc('event', w.a)])).status).toBe(200);
+      await stillFailed(ep, /Missing: Home\./);
+      // Without the extra Start was asked for: complete all the same (the fallback cannot know of it).
+      expect((await save(ep, [loc('event', w.a), loc('home', w.home)])).status).toBe(200);
+      await nowComplete(ep, 2);
+
+      // With the roles recorded, the same correction is not enough.
+      const recorded = await failedStart([loc('event', w.a), loc('home', w.home), loc('extra', w.b, 'Car')]);
+      expect((await save(recorded.ep, [loc('event', w.a), loc('home', w.home)])).status).toBe(200);
+      await stillFailed(recorded.ep, /Missing: "Car"\./);
+    });
+
+    test('an accepted episode: Resume leaves its evaluation, locations, beats and saved scenes as they were; the step stays failed', async () => {
+      const { ep } = await staleStart();
+      await fx.setEvaluation(ep, 'accepted');
+      const read = async () => ({
+        episode: (({ setup_status: _s, updated_at: _u, ...rest }) => rest)(await episodeRow(ep)),
+        links: await rows('SELECT * FROM scene_set_episodes WHERE episode_id = :ep ORDER BY id', { ep }),
+        plans: await rows('SELECT * FROM scene_plans WHERE episode_id = :ep ORDER BY id', { ep }),
+        scenes: await rows('SELECT * FROM scenes WHERE episode_id = :ep ORDER BY id', { ep }),
+        events: await rows('SELECT * FROM world_events WHERE show_id = :show ORDER BY id', { show }),
+      });
+      const before = await read();
+      expect(before.plans).toHaveLength(14);
+      expect(before.scenes.length).toBeGreaterThan(0);
+      await stillFailed(ep, /Missing: Home\./);
+      expect(await read()).toEqual(before);
+      expect(await evaluationOf(ep)).toBe('accepted');
+    });
+
+    test('Start, its replay, the episode\'s record and Resume agree: incomplete while the step is failed, complete only after the check passes', async () => {
+      const key = `genb3-${fx.uuid()}`;
+      const { ev, ep, res } = await staleStart({ key });
+      expect(res.body.setup_complete).toBe(false);
+      expect(res.body.data.setup_status.complete).toBe(false);
+      const replay = () => asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`)).set('Idempotency-Key', key)
+        .send({ draft_script: false, locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a });
+      const again = await replay();
+      expect(again.status).toBe(200);
+      expect(again.body).toMatchObject({ replayed: true, setup_complete: false });
+      expect(again.body.data.setup_status.steps.locations).toMatchObject({ status: 'failed', code: 'STALE_SOURCE_SET' });
+      expect((await episodeRow(ep)).setup_status.complete).toBe(false);
+
+      await stillFailed(ep);
+      const afterResume = await replay();
+      expect(afterResume.body).toMatchObject({ replayed: true, setup_complete: false });
+      expect(afterResume.body.data.setup_status.steps.locations).toMatchObject({ status: 'failed', code: INCOMPLETE });
+
+      expect((await save(ep, [loc('event', w.c), loc('home', w.home)])).status).toBe(200);
+      for (const n of [10, 11, 12]) expect((await moveBeat(ep, n, w.c)).status).toBe(200);
+      // Corrected, but not yet checked: still recorded as failed.
+      expect((await replay()).body.setup_complete).toBe(false);
+      await nowComplete(ep, 2);
+      const done = await replay();
+      expect(done.body).toMatchObject({ replayed: true, setup_complete: true });
+      expect(done.body.data.setup_status).toMatchObject({ complete: true, steps: { locations: { status: 'complete', count: 2 } } });
     });
   });
 

@@ -393,11 +393,19 @@ async function resumeEpisodeSetup(models, episodeId) {
   await require('./beatScenesService').syncBeatScenesQuietly(models.sequelize, episodeId, 'resume setup');
   const steps = { ...(episode.setup_status?.steps || {}), scene_plan: scenePlanStep(result) };
   if (!steps.locations) steps.locations = { status: 'complete' };
-  // A locations step that failed at Start (B3) is done once the episode has
-  // its locations: they are set again from the episode's Locations, and
-  // this is where the step stops reading as failed.
-  if (steps.locations.status === 'failed' && Array.isArray(locations) && locations.length) {
-    steps.locations = { status: 'complete', count: locations.length };
+  // A locations step that failed at Start (B3) is not saved again here: the
+  // locations are set from the episode's Locations, and its beats in the
+  // Beat Plan. This only reads (episodeLocationsService.checkLocationsStep):
+  // the step is done when every location Start tried to save is there, the
+  // Event location is the event's set, and every beat names its location's
+  // set; until then it stays failed, with what is missing. A check that
+  // cannot be read leaves the step as it was.
+  if (steps.locations.status === 'failed') {
+    try {
+      steps.locations = await require('./episodeLocationsService').checkLocationsStep(models.sequelize, { episodeId, step: steps.locations });
+    } catch (checkErr) {
+      console.error(`[EpisodeGenerator] The locations step of episode ${episodeId} could not be checked on resume:`, checkErr.message);
+    }
   }
   const setup_status = await recordSetupStatus(models, episodeId, steps);
   return { episode_id: episodeId, scene_plan: steps.scene_plan, setup_status };

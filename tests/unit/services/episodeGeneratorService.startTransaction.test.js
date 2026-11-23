@@ -7,7 +7,11 @@
  * Episode and the Brief. The non-blocking steps (feed, history, asset
  * linking) stay outside the transaction. The episode's locations (L3, L6;
  * Evoni, 2026-10-02) are linked in their own transaction after the Start
- * commits, and a link failure does not fail the Start.
+ * commits, and a link failure does not fail the Start. Since Generation B3
+ * that transaction is the Place finalizer's, inside
+ * episodeLocationsService.applyStartLocations: that it takes the transaction
+ * and that a failure is logged are asserted in
+ * episodeLocationsService.startLocations.test.js.
  *
  * The sequelize transaction is mocked: rows created with a transaction
  * are held in a pending set and only reach the store on commit; a throw

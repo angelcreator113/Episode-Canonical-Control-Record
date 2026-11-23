@@ -358,11 +358,16 @@ async function saveEpisodeLocations(sequelize, { showId, episodeId, locations: b
  * Start Episode's locations, written after its commit (Generation B3):
  * through the Place finalizer, with the set the event had under Start's own
  * lock as source. Resolves the setup step: { status: 'complete', count } or
- * { status: 'failed', code, reason }, with a reason that is never the
+ * { status: 'failed', code, reason, roles }, with a reason that is never the
  * database's own message. Never throws.
+ *
+ * roles: the locations Start tried to save, as [{ role, name }] (name for an
+ * extra, which is how an extra is told from another). Resume setup reads it
+ * to know which locations the episode was meant to have (checkLocationsStep).
  */
 async function applyStartLocations(sequelize, { episodeId, eventId, sourceSetId, locations }) {
   if (!locations.length) return { status: 'complete', count: 0 };
+  const roles = locations.map((l) => ({ role: l.role, name: l.role === 'extra' ? (l.name || null) : null }));
   const { finalizePlaceWrite, PLACE_FINALIZE_OUTCOMES } = require('../utils/placeLock');
   const { PLACE_FINALIZE_RETRY_DELAY_MS, errorClassOf } = require('./sceneGenerationService');
   try {
@@ -376,11 +381,112 @@ async function applyStartLocations(sequelize, { episodeId, eventId, sourceSetId,
     });
     if (saved.outcome === PLACE_FINALIZE_OUTCOMES.OK) return { status: 'complete', count: locations.length };
     console.error(`[EpisodeLocations] Start's locations were not saved for episode ${episodeId}: event=${eventId} outcome=${saved.code} attempts=${saved.attempts}`);
-    return { status: 'failed', code: saved.code, reason: `${saved.message} The episode's locations were not saved: set them in the episode's Locations.` };
+    return { status: 'failed', code: saved.code, reason: `${saved.message} The episode's locations were not saved: set them in the episode's Locations.`, roles };
   } catch (err) {
     console.error(`[EpisodeLocations] Start's locations were not saved for episode ${episodeId}: event=${eventId} outcome=SAVE_FAILED error=${errorClassOf(err)}`);
-    return { status: 'failed', code: 'SAVE_FAILED', reason: "The episode's locations could not be saved. Set them in the episode's Locations." };
+    return { status: 'failed', code: 'SAVE_FAILED', reason: "The episode's locations could not be saved. Set them in the episode's Locations.", roles };
   }
+}
+
+// ─── RESUME SETUP'S CHECK OF A FAILED LOCATIONS STEP (B3 correction) ─────────
+//
+// Resume setup does not save locations: the choice Start could not save may
+// be the one that was refused. It reads, and calls the step done only when
+// the episode's locations, its event and its beats agree. It writes nothing.
+
+const LOCATIONS_INCOMPLETE_CODE = 'LOCATIONS_INCOMPLETE';
+const ROLE_LABELS = Object.freeze({ event: 'Event', home: 'Home', closet: 'Closet' });
+// The writer's own rule for "the same location" (applyLocations' sameSlot): the role, and for an extra its name.
+const holdsRole = (location, wanted) => location.role === wanted.role
+  && (wanted.role !== 'extra' || (location.name || '') === (wanted.name || ''));
+
+/**
+ * What is missing or inconsistent, from values already read (no database):
+ *   roles      the failed step's roles ([{ role, name }]), or not a list for
+ *              a step recorded before roles were
+ *   locations  the episode's live locations (listLocations: live links to
+ *              live sets)
+ *   eventSetId the scene set the episode's event has now, or null
+ *   beats      the episode's live beats that name a set
+ *              ([{ beat_number, scene_set_id, locked, chosen_by_user }])
+ * Returns { missing: [{ role, name }], eventElsewhere, staleBeats: [n] }.
+ *
+ * A. Every role Start tried to save has a live location. A step with no
+ *    roles (recorded before they were): home, and the event when the event
+ *    has a set. That fallback does not reconstruct what Start was asked
+ *    for: a closet or an extra it was asked for is not known and not asked
+ *    of the episode.
+ * B. When the event has a set, the episode's Event location is that set (no
+ *    Event location then counts as a missing one).
+ * C. Every beat that names a set names the right one. A beat's location is
+ *    its role's, by the planner's own rule (planLocationsService placeBeat
+ *    over constants/beatLocations BEAT_LOCATIONS: the role of its beat
+ *    number; the closet beat at home when there is no closet), so an extra
+ *    that happens to use the set does not make an event beat right. A beat
+ *    that is locked or chosen by the user is one the writers never move
+ *    (applyLocations, eventPlaceSync): it keeps the set it was given, and
+ *    is right at any live location of the episode, wrong at a set that is
+ *    not one.
+ */
+function locationsStepGaps({ roles, locations, eventSetId = null, beats = [] }) {
+  const wanted = Array.isArray(roles)
+    ? roles.filter((r) => r && ROLES.includes(r.role)).map((r) => ({ role: r.role, name: r.role === 'extra' ? (r.name || null) : null }))
+    : [{ role: 'home', name: null }];
+  if (eventSetId && !wanted.some((r) => r.role === 'event')) wanted.unshift({ role: 'event', name: null });
+  const missing = wanted.filter((r) => !locations.some((l) => holdsRole(l, r)));
+  const eventLocation = locations.find((l) => l.role === 'event') || null;
+  const eventElsewhere = Boolean(eventSetId && eventLocation && String(eventLocation.scene_set_id) !== String(eventSetId));
+
+  const { setsByRole, placeBeat } = require('./planLocationsService');
+  const roleSets = setsByRole(locations);
+  const live = new Set(locations.map((l) => String(l.scene_set_id)));
+  const noAngles = new Map();
+  const staleBeats = beats
+    .filter((b) => b.scene_set_id)
+    .filter((b) => ((b.locked || b.chosen_by_user)
+      ? !live.has(String(b.scene_set_id))
+      : String(placeBeat(Number(b.beat_number), roleSets, noAngles).scene_set_id || '') !== String(b.scene_set_id)))
+    .map((b) => Number(b.beat_number))
+    .sort((x, y) => x - y);
+  return { missing, eventElsewhere, staleBeats };
+}
+
+/** The fixed sentence for what locationsStepGaps found; an extra is named as the user named it. */
+function locationsGapsReason({ missing, eventElsewhere, staleBeats }) {
+  const parts = [];
+  if (missing.length) parts.push(`Missing: ${missing.map((r) => ROLE_LABELS[r.role] || `"${r.name || 'extra location'}"`).join(', ')}.`);
+  if (eventElsewhere) parts.push("The Event location is not the event's current scene set.");
+  if (staleBeats.length) {
+    const one = staleBeats.length === 1;
+    parts.push(`${staleBeats.length} beat${one ? ' names' : 's name'} a scene set that is not ${one ? 'its' : 'their'} location (beat${one ? '' : 's'} ${staleBeats.join(', ')}).`);
+  }
+  return `The episode's locations are not complete. ${parts.join(' ')} Set them in the episode's Locations and Beat Plan, then choose Resume setup.`;
+}
+
+/**
+ * A locations step that failed at Start, checked for Resume setup: the step
+ * to record. { status: 'complete', count } when A, B and C hold; else the
+ * step still failed, with code LOCATIONS_INCOMPLETE, the fixed sentence for
+ * what is missing, and its roles kept. Reads only (three SELECTs): it saves
+ * no location and moves no beat, on a draft or an accepted episode alike.
+ * The event is the episode's by the rule the Locations save uses
+ * (EPISODE_EVENT_ID_SQL), not only its brief's.
+ */
+async function checkLocationsStep(sequelize, { episodeId, step }) {
+  const locations = await listLocations(sequelize, episodeId);
+  const event = await episodeEventSnapshot(sequelize, episodeId);
+  const [beats] = await sequelize.query(
+    `SELECT beat_number, scene_set_id, locked, chosen_by_user FROM scene_plans
+      WHERE episode_id = :episodeId AND deleted_at IS NULL AND scene_set_id IS NOT NULL`,
+    { replacements: { episodeId } });
+  const gaps = locationsStepGaps({ roles: step?.roles, locations, eventSetId: event?.scene_set_id ?? null, beats });
+  if (!gaps.missing.length && !gaps.eventElsewhere && !gaps.staleBeats.length) return { status: 'complete', count: locations.length };
+  return {
+    status: 'failed',
+    code: LOCATIONS_INCOMPLETE_CODE,
+    reason: locationsGapsReason(gaps),
+    ...(Array.isArray(step?.roles) ? { roles: step.roles } : {}),
+  };
 }
 
 /**
@@ -512,6 +618,10 @@ module.exports = {
   listLocations,
   applyLocations,
   applyStartLocations,
+  checkLocationsStep,
+  locationsStepGaps,
+  locationsGapsReason,
+  LOCATIONS_INCOMPLETE_CODE,
   assertEventSetShown,
   saveEpisodeLocations,
   resolveStartLocations,

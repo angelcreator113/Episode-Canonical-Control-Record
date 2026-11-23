@@ -3,7 +3,7 @@
 
 **Document version**
 
-v1.0. This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
+v1.1 (v1.0 was this file at `974ae498`, on the same unmerged branch, before Evoni's correction of the same day; "Her correction" in §2, step 7 of Start Episode in §4, §4a, §8 and the test lists of §9 are what changed). This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
 - The FD tail, XK tail and PE tail are unchanged.
 - No earlier register file is edited, and no banner is added to one.
 
@@ -48,6 +48,15 @@ Evoni approved Generation B3 on 2026-11-23 as one change. Her rulings, as given 
 11. `findStartBlockers` is not changed. The frontend only sends the displayed set id and shows the stale 409 and the failed step; no Locations redesign.
 
 **Standing terms.** No migration, table, endpoint, or new locking, sync, recovery or persistence system. `src/utils/placeLock.js` is not changed. No authorization change. No live provider, storage or model call in a test.
+
+## Her correction (RULED, 2026-11-23)
+
+v1.0 of this change let "Resume setup" call a failed locations step done as soon as the episode had any live location (§4a). She approved a narrow correction, as given to this work:
+1. Resume setup is a read-only consistency check for this step, never a second writer of locations.
+2. A failed step records the roles Start tried to save, in the existing vocabulary (event, home, closet, extra; an extra by its name).
+3. The step is cleared only when (A) every recorded role has a live location, with a conservative fallback for a step recorded without roles (home, and the event when the event has a set); (B) when the episode's event has a set, the episode's Event location is that set; (C) every live beat that names a set names an appropriate live location, by its role where the existing data gives one.
+4. Otherwise the step stays failed and the setup incomplete, with a fixed sentence for what is missing and a meaningful code. The original write is not run again; no beat, set, link or saved scene is moved, made or rewritten; accepted episodes' data is not altered.
+5. Start's answer, its replay, the checklist and Resume setup's answer agree.
 
 # §3. What was verified before the code was written (MEASURED)
 
@@ -94,13 +103,34 @@ The route (`src/routes/episodes.js`, `PUT /:episodeId/locations`) is not changed
 
 1. `GET …/episode-locations` adds `event_scene_set_id`: the event row's set, or `null` (`src/routes/worldEvents/episodeGenerate.js:199`).
 2. `POST …/generate-episode` reads `event_scene_set_id` from the body (`:64`).
-3. Before anything is created (`:694-696`, `assertEventSetShown`, `episodeLocationsService.js:393`): locations sent without the field are 400 `EPISODE_LOCATIONS_INVALID`; a value that is neither a string nor `null` is 400; a value that is not the event's set is 409 `STALE_SOURCE_SET` with the finalizer's text. A replay of a request already answered (the same Idempotency-Key) is answered before this, as it was.
-4. In the main transaction, after the event rows are locked (`:740-754`): the event's set is read again and checked again (409 `STALE_SOURCE_SET`, nothing created). When no locations were sent and the set differs from the one read first, the locations are resolved again from the held value.
-5. After the commit (`:1051`): `applyStartLocations` (`episodeLocationsService.js:364-385`) runs `finalizePlaceWrite(eventId, { sourceSetId: <the set held in step 4>, retryDelayMs: 250, work: lockSetRows + applyLocations })`. It never throws. It resolves `{ status: 'complete', count }` or `{ status: 'failed', code, reason }`:
+3. Before anything is created (`:702-704`, `assertEventSetShown`, `episodeLocationsService.js:499`): locations sent without the field are 400 `EPISODE_LOCATIONS_INVALID`; a value that is neither a string nor `null` is 400; a value that is not the event's set is 409 `STALE_SOURCE_SET` with the finalizer's text. A replay of a request already answered (the same Idempotency-Key) is answered before this, as it was.
+4. In the main transaction, after the event rows are locked (`:748-762`): the event's set is read again and checked again (409 `STALE_SOURCE_SET`, nothing created). When no locations were sent and the set differs from the one read first, the locations are resolved again from the held value.
+5. After the commit (`:1059`): `applyStartLocations` (`episodeLocationsService.js:368-390`) runs `finalizePlaceWrite(eventId, { sourceSetId: <the set held in step 4>, retryDelayMs: 250, work: lockSetRows + applyLocations })`. It never throws. It resolves `{ status: 'complete', count }` or `{ status: 'failed', code, reason }`:
    - a refusal: `code` is the finalizer's, `reason` its text followed by "The episode's locations were not saved: set them in the episode's Locations.";
    - anything else: `code: 'SAVE_FAILED'`, `reason: "The episode's locations could not be saved. Set them in the episode's Locations."` The database's message goes to the error log by class only.
 6. The result gains `setup_status` (what `recordSetupStatus` wrote: `{ complete, steps }`), and the 201 gains `setup_complete` (false when a step failed) and, when the locations step failed, the sentence ". Its locations were not saved: <reason>" at the end of `message`. A replay carries the same two (`src/services/startEpisodeIdempotency.js:123`).
-7. **Retry.** The locations are set from the episode's Locations (the save above). "Resume setup" then marks the step complete when the episode has locations (`resumeEpisodeSetup`, `:399-401`); until then the checklist keeps showing it.
+7. **Retry.** A failed step also records `roles`: the locations Start tried to save, as `[{ role, name }]` (`name` for an extra). The locations are set from the episode's Locations (the save above) and its beats in the Beat Plan. "Resume setup" does not save them: it checks (§4a), and marks the step complete only when the check passes; until then the checklist keeps showing it.
+
+## §4a. Resume setup's check of a failed locations step (the correction)
+
+**The defect in v1.0 (MEASURED, by tests that fail at `974ae498`).** `resumeEpisodeSetup` replaced a failed step by `{ status: 'complete', count }` when `listLocations` returned at least one row. Two sequences, each reproduced through the real routes before the fix (`placeLockGenerationB3.integration.test.js`, the Resume describe; at `974ae498` Resume answered `success: true` in both):
+- After Start's stale refusal, the event edit that caused it had already given the new draft episode an Event location (`syncEpisodeEventLocation`, `src/services/eventPlaceSync.js`, its insert when the episode has no event link). One location, no home: cleared.
+- The locations then set from the episode (event at the newer set, home): the event's beats (10, 11, 12) still named the older set, because `applyLocations` moves beats only from a previous link of the same role and there was none: cleared.
+
+**What ties a beat to a role (MEASURED).** `scene_plans` has no role column. The role is a function of the beat number: `BEAT_LOCATIONS` (`src/constants/beatLocations.js`), built from `CANONICAL_BEATS`' `typical_location` (HOME_BASE → home, CLOSET → closet, EVENT_LOCATION → event; transition beats 7 and 9 home, 10 event). `placeBeat` (`src/services/planLocationsService.js`) applies it, with the closet beat at home when the episode has no closet; `createScenePlanRows` and the AI planner (`scenePlannerService.js`) both place beats with it. Extras are never a beat's role (`setsByRole` leaves them out). So the appropriate location of a beat is derivable from existing data, and no data was added.
+
+**The rule (`locationsStepGaps`, `:431`, and `checkLocationsStep`, `:475`, `src/services/episodeLocationsService.js`; called from `resumeEpisodeSetup`, `src/services/episodeGeneratorService.js:403-409`).** Read from the episode's live locations (`listLocations`: `scene_set_episodes` with `deleted_at IS NULL`, joined to live sets), its event (`EPISODE_EVENT_ID_SQL`, the resolution the Locations save uses: the live brief's event, else the first event stamped with the episode; `resumeEpisodeSetup`'s own event read for missing beats is the brief's only, and is not changed) and its live beats that name a set:
+- **A.** Every recorded role has a live location of that role; an extra is matched by role and name, as `applyLocations`' `sameSlot` does. **A step with no `roles`** (recorded before they were): home, and the event when the event has a set. This fallback does not reconstruct what Start was asked for: a closet or an extra it was asked for is not known, and is not asked of the episode.
+- **B.** When the event has a set, the episode's Event location is that set. With no Event location at all, the event counts as a missing role (also when Start saved none).
+- **C.** A beat that is neither locked nor chosen by the user must name the set `placeBeat` gives its beat number over the live locations (its role's location; the closet beat at home when there is no closet). An extra that uses the same set does not satisfy it; a beat whose role has no location is named. **A locked or `chosen_by_user` beat** is one the existing writers never move (`applyLocations` and `syncEpisodeEventLocation` both write only `locked = false AND chosen_by_user = false`), and the beat editor may put it at any set, which then joins the locations (`linkBeatSet`): it keeps its set, and is right at any live location of the episode (an extra included) and wrong at a set that is not one. It is not exempt altogether, since "lock every beat" on stale beats would otherwise clear the step.
+
+**When the check fails** the step is `{ status: 'failed', code: 'LOCATIONS_INCOMPLETE', reason, roles }`. `LOCATIONS_INCOMPLETE` is a fixed string beside the step's other codes (the finalizer's, `SAVE_FAILED`). `reason` is a fixed sentence: "The episode's locations are not complete." then any of "Missing: Home, Closet, "<an extra's name>".", "The Event location is not the event's current scene set.", "N beats name a scene set that is not their location (beats …).", then "Set them in the episode's Locations and Beat Plan, then choose Resume setup." The only text in it that is not fixed is an extra's name, which the user typed. `roles` is kept. A check that cannot be read leaves the step as it was.
+
+**What it writes.** The check is three reads. `resumeEpisodeSetup` then records `episodes.setup_status`, as it always did. Its two existing steps before the check are unchanged and are not part of the check: `createScenePlanRows` inserts only beats the episode is missing, and `syncBeatScenesQuietly` creates, updates or soft-deletes the beats' scene rows where they differ from the beats. **Neither asks whether the episode is accepted** (MEASURED by reading): Resume on an accepted episode that is missing beats, or whose scene rows differ from its beats, writes those rows, as at the basis. On an accepted episode with its 14 beats and its scenes in step, Resume writes nothing but `setup_status` (tested).
+
+**Stale beats are not repaired here.** After a stale refusal the user sets the Locations, and moves each named beat in the beat editor (`PUT /api/v1/episode-brief/:episodeId/plan/:beatNumber`, the existing route; it refuses a locked beat until it is unlocked). The Locations save does not move them. Repairing beats and saved scenes in bulk is the held work (S1).
+
+**Agreement (MEASURED, one test).** Start's 201 (`setup_complete: false`, `data.setup_status.complete: false`), its replay (which reads the episode's record), `episodes.setup_status` (what the checklist reads) and Resume setup's answer (`success: false`, `data.setup_status.complete: false`) say incomplete while the step is failed; after the corrections and a passing check all four say complete. Corrections alone, before Resume setup is chosen, change nothing: the record is updated by the check.
 
 ## Frontend
 
@@ -133,7 +163,12 @@ Both paths: the episode(s) `FOR SHARE` in id order, the event row `FOR UPDATE`, 
 
 - **Start's beats are made before its locations are saved**, by existing code outside the finalizer, on the locations chosen before the commit. After a stale refusal of the step, beats can still name the older set until the locations are set on the episode.
 - **An event edit before a Locations save is simply what the save reads.** The save is refused as stale only when the event's set changes between its first read and its locks.
-- **A failed locations step is cleared by Resume setup only once the episode has locations**; it does not run the save again by itself, since the choice it would save may be the one that was refused.
+- **A failed locations step is cleared only by Resume setup's check** (§4a), and only when chosen: correcting the episode does not update the record by itself.
+- **The fallback for a step without `roles`** asks for home and, when the event has a set, the event; nothing else Start was asked for is known. No step without `roles` was written by a merged version: v1.0 was not merged.
+- **Stale beats are named, not repaired.** Each is moved in the beat editor; there is no bulk move.
+- **An accepted episode whose step is failed and whose locations or beats do not pass cannot be corrected**: its Locations save is refused (`EPISODE_ACCEPTED`). The step stays failed.
+- **Resume setup's route sentence is about beats.** `POST /api/v1/episode-brief/:episodeId/setup/resume` (`src/routes/episodeBriefRoutes.js`, not changed here) answers an incomplete setup with `success: false`, `code: 'SETUP_INCOMPLETE'` and "Setup is still incomplete: N beats missing (…)", built from the scene-plan step; when only the locations step is failed that reads "0 beats missing ()". The step's own reason is in `data.setup_status`.
+- **The checklist alert reads the episode it was given.** `EpisodeProductionChecklist.jsx` (not changed here) shows `episode.setup_status` as loaded with the page, and its Resume toast shows the route's sentence; the step's new reason, or its clearing, shows when the episode is loaded again.
 - **The Start toast is shown as the page opens the episode.** The lasting indication is the episode's checklist.
 - **The second path's exhaustion code is `RETRY`**, not `PLACE_FINALIZE_RETRY_EXHAUSTED`: it is not a Place finalization (§4, 5).
 - **`PUT …/locations` still answers an unexpected error with a 500 carrying the error's message**, as at the basis; this change adds no such path and does not alter that one.
@@ -145,22 +180,38 @@ Both paths: the episode(s) `FOR SHARE` in id order, the event row `FOR UPDATE`, 
 
 On a private, migrated local PostgreSQL test database, through the real app, against the real `completeEpisode`, the real event `PUT`, and the real `makeEventVersion` and `makeEveryday`. No test sends DDL. The network guard reports 0 external attempts.
 
-`tests/integration/placeLockGenerationB3.integration.test.js` (37 cases). **Real locks and injected errors are told apart in the file and here.** "Real lock" means a second database session really holds the row, or a real concurrent request is held open at a statement by the lock trace's gate and let go; nothing is simulated about the lock. "Injected" means an error thrown at a chosen statement by the test.
+`tests/integration/placeLockGenerationB3.integration.test.js` (50 cases; the 13 of the correction are listed below). **Real locks and injected errors are told apart in the file and here.** "Real lock" means a second database session really holds the row, or a real concurrent request is held open at a statement by the lock trace's gate and let go; nothing is simulated about the lock. "Injected" means an error thrown at a chosen statement by the test.
 
 - *Real locks:* the acceptance holding its episode when the save begins, and the save first (both paths, a primary event and one linked by its stamp alone); a real two-part special; an event `PUT` during the save (both paths: stale); `makeEventVersion` both orders and both paths; `makeEveryday` both orders; a plain update and a `FOR UPDATE` held on a set row; a set row let go during the pause (saved on try two, one pause, no session but the holder's inside a transaction meanwhile) and held throughout (three tries, two pauses: `RETRY` on the one path, `PLACE_FINALIZE_RETRY_EXHAUSTED` on the other); the event moved between Start's first read and its lock, and after its commit; a Start past its commit, a Locations save and an event edit at once; a set row held while Start saves its locations.
 - *Injected:* a failure at the beat move, the link soft-delete, the link insert and the event update of a save (500, every row as it was); Start's locations failing for another reason (`SAVE_FAILED`, no database text).
 - *Neither (plain sequences):* the two paths' statement traces; an episode with no event; a home edit on a draft whose Place is locked by another episode (saved, event untouched) and an event move there (409 `PLACE_LOCKED`); accepted before the save; the proposal's field; Start with the value, with `null`, with a stale value, without the field (400), with no locations; Resume setup clearing the step after a Locations save.
 
-Also run on that database, unchanged and passing: `placeLockGenerationB1` (56), `placeLockGenerationB2` (69), `placeLockFinalizer` (52), `placeLockStrict` (53), `eventPlaceSync` (6), `startEpisodeHomeSet` (1), `startEpisodeOfferDecision` (49), `regenerateEpisodeSafe` (2), `dealTermsDraft` (7), `p1PlanAdmin` (85), `p2aSceneAdmin` (335). The unit directory: 743 suites.
+**The correction's cases (Resume setup).** Corrections go through the routes a user has (the Locations save, the beat editor's save). Three rows are written directly, each said in the test: the event's set (no route leaves an event and its draft episode's Event location apart), a set's soft-delete, and the removal of `roles` from a step.
+- The failed step records the roles, extras by name.
+- Nothing corrected: still failed, and nothing but `setup_status` written.
+- Only the Event location the event edit's sync made: still failed (home missing; no beat at its location). *Fails at `974ae498`.*
+- Locations set again, the event's beats at the older set: failed, naming beats 10, 11, 12; moved one by one in the beat editor, failed until the last, then complete. *Fails at `974ae498`.*
+- A closet Start was asked for, missing; a home and a named extra missing, another extra's name not standing in.
+- The Event location at another set than the event's.
+- An extra at the older set does not make the event's beats right.
+- A location removed again (its link soft-deleted), and a set removed from Scene Sets, do not count.
+- A chosen beat at an extra is right; a chosen beat whose set is no longer a location is named.
+- A step without `roles`: the fallback, and its limit shown against the same Start with roles.
+- An accepted episode: the episode row (but `setup_status`), its links, beats, scenes and the show's events equal before and after.
+- Start, its replay, the record and Resume setup agree, before and after.
 
-Frontend (Vitest): new `useStartEpisode.test.jsx` (the field sent with the value the step was shown, though another set is chosen in the step; `null` sent; a 409 `STALE_SOURCE_SET` shown with the server's sentence, nothing opened, the steps kept; a failed locations step said with its reason and the episode opened). `EpisodeProductionChecklist.setup.test.jsx` gains one case (the failed step shown with its reason, and Resume setup).
+Also run on that database, unchanged and passing: `placeLockGenerationB1` (56), `placeLockGenerationB2` (69), `placeLockFinalizer` (52), `placeLockStrict` (53), `eventPlaceSync` (6), `startEpisodeHomeSet` (1), `startEpisodeOfferDecision` (49), `regenerateEpisodeSafe` (2), `p1PlanAdmin` (85); and, before the correction only, `dealTermsDraft` (7) and `p2aSceneAdmin` (335). The unit directory: 744 suites.
+
+Unit: new `tests/unit/services/episodeLocationsService.startLocations.test.js` (13 cases): `applyStartLocations` (every statement takes the finalizer's transaction; a failure is logged and does not throw; a refusal; no locations) and `locationsStepGaps` rule by rule.
+
+Frontend (Vitest): new `useStartEpisode.test.jsx` (the field sent with the value the step was shown, though another set is chosen in the step; `null` sent; a 409 `STALE_SOURCE_SET` shown with the server's sentence, nothing opened, the steps kept; a failed locations step said with its reason and the episode opened). `EpisodeProductionChecklist.setup.test.jsx` gains one case (the failed step shown with its reason; Resume setup answered as still incomplete is shown as not finished, never as resumed).
 
 **Existing tests changed:**
-- `tests/unit/services/episodeGeneratorService.startTransaction.test.js`: two cases pinned the old post-commit `applyLocations` call and the logged failure; they are replaced by three (the call to `applyStartLocations` after the commit; the 400 and the 409; a failed step making the setup incomplete).
+- `tests/unit/services/episodeGeneratorService.startTransaction.test.js`: two cases pinned the old post-commit `applyLocations` call and the logged failure; they are replaced by three (the call to `applyStartLocations` after the commit; the 400 and the 409; a failed step making the setup incomplete). Two of their assertions could not stay there, since the write is no longer in that function: that the locations are written in a transaction of their own, and that a failure is logged. Both are asserted in the new unit file above.
 - `EventPackagePage.startEpisode.test.jsx` (2 assertions) and `EventPackagePage.moneyWarnings.test.jsx` (2): the pinned Start body gains `event_scene_set_id: null`.
 - By reading, not run (they send DDL): the Start helpers of `episodeLocations`, `l14Zones` and `plannerAngles` send `event_scene_set_id` with their locations.
 
-**Not run locally, by the rule that a local run sends no DDL** (CI runs them): `episodeLocations`, `l14Zones`, `plannerAngles`, `termsPricingFixes`, `startRegenerateLocks`, `lockOrderMatrix`, `lockOrderTrace`, `setupResume`, `episodeLockSafety`, `beatPlanChosen`. Apart from the three helpers above, none was found by reading to assert something this change alters (INFERRED from reading, not run).
+**Not run locally, by the rule that a local run sends no DDL** (CI runs them): `episodeLocations`, `l14Zones`, `plannerAngles`, `termsPricingFixes`, `startRegenerateLocks`, `lockOrderMatrix`, `lockOrderTrace`, `setupResume`, `episodeLockSafety`, `beatPlanChosen`. Apart from the three helpers above, none was found by reading to assert something this change alters (INFERRED from reading, not run). `setupResume` and `plannerAngles` call Resume setup on episodes whose locations step is not failed (absent, or complete), which the correction does not touch.
 
 ---
 
