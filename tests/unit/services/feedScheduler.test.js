@@ -286,6 +286,150 @@ describe('feedScheduler', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
+  // 2b. updateConfig bounds (Evoni, 2026-11-22): interval_hours 1 to 168,
+  //     batch_size a whole number 1 to 20; a refusal changes nothing
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('updateConfig bounds', () => {
+    const refused = (updates) => {
+      try { scheduler.updateConfig(updates); } catch (err) { return err; }
+      return null;
+    };
+
+    it('accepts the ends of each range', () => {
+      for (const updates of [{ interval_hours: 1 }, { interval_hours: 168 }, { batch_size: 1 }, { batch_size: 20 }, { interval_hours: 4.5 }]) {
+        expect(scheduler.updateConfig(updates)).toMatchObject(updates);
+      }
+    });
+
+    it.each([
+      [{ interval_hours: 0 }, ['interval_hours']], [{ interval_hours: -1 }, ['interval_hours']],
+      [{ interval_hours: 0.99 }, ['interval_hours']], [{ interval_hours: 168.01 }, ['interval_hours']],
+      [{ interval_hours: NaN }, ['interval_hours']], [{ interval_hours: Infinity }, ['interval_hours']],
+      [{ interval_hours: 'soon' }, ['interval_hours']], [{ interval_hours: true }, ['interval_hours']],
+      [{ interval_hours: [4] }, ['interval_hours']], [{ interval_hours: '1e3' }, ['interval_hours']],
+      [{ batch_size: 0 }, ['batch_size']], [{ batch_size: 21 }, ['batch_size']], [{ batch_size: 2.5 }, ['batch_size']],
+      [{ batch_size: -3 }, ['batch_size']], [{ batch_size: NaN }, ['batch_size']], [{ batch_size: Infinity }, ['batch_size']],
+      [{ batch_size: '21' }, ['batch_size']], [{ batch_size: '' }, ['batch_size']], [{ batch_size: {} }, ['batch_size']],
+      [{ batch_size: 10, interval_hours: 0 }, ['interval_hours']],
+      [{ auto_fill_enabled: false, batch_size: 500 }, ['batch_size']],
+      [{ interval_hours: 1000, batch_size: 0 }, ['interval_hours', 'batch_size']],
+    ])('refuses %j whole, naming %j', (updates, fields) => {
+      const before = scheduler.getConfig();
+      const err = refused(updates);
+      expect(err).toMatchObject({ code: 'INVALID_SCHEDULER_CONFIG', status: 400, fields });
+      expect(err.message).toMatch(/Nothing was changed\.$/);
+      expect(scheduler.configRefusal(updates)).toEqual({ code: 'INVALID_SCHEDULER_CONFIG', message: err.message, fields });
+      expect(scheduler.getConfig()).toEqual(before);
+    });
+
+    it('a refusal leaves a running timer alone', () => {
+      jest.useFakeTimers();
+      const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+      const setIntervalSpy = jest.spyOn(global, 'setInterval');
+      scheduler.startScheduler(4, createMockDb());
+      const nextRun = scheduler.getSchedulerStatus().next_run;
+      clearIntervalSpy.mockClear();
+      setIntervalSpy.mockClear();
+
+      expect(refused({ interval_hours: 0.001, batch_size: 10 })).not.toBeNull();
+
+      expect(clearIntervalSpy).not.toHaveBeenCalled();
+      expect(setIntervalSpy).not.toHaveBeenCalled();
+      expect(scheduler.getSchedulerStatus()).toMatchObject({ running: true, interval_hours: 4, next_run: nextRun });
+      expect(scheduler.getConfig().batch_size).toBe(5);
+
+      scheduler.stopScheduler();
+      clearIntervalSpy.mockRestore();
+      setIntervalSpy.mockRestore();
+      jest.useRealTimers();
+    });
+
+    // startScheduler takes an interval too (POST /start, and the server's own
+    // startup call): the same limits, checked before anything is set.
+    describe('startScheduler', () => {
+      let clearIntervalSpy;
+      let setIntervalSpy;
+      let setTimeoutSpy;
+      beforeEach(() => {
+        jest.useFakeTimers();
+        clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+        setIntervalSpy = jest.spyOn(global, 'setInterval');
+        setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+      });
+      afterEach(() => {
+        scheduler.stopScheduler();
+        jest.restoreAllMocks();
+        jest.useRealTimers();
+      });
+      const startRefused = (value) => {
+        try { scheduler.startScheduler(value, createMockDb()); } catch (err) { return err; }
+        return null;
+      };
+
+      it.each([[0], [0.001], [0.99], [-4], [168.01], [1e9], [NaN], [Infinity], ['soon'], [''], [true], [false], [[4]]])(
+        'refuses interval %j when stopped: nothing set, no timer made',
+        (value) => {
+          const before = scheduler.getConfig();
+          expect(startRefused(value)).toMatchObject({ code: 'INVALID_SCHEDULER_CONFIG', status: 400, fields: ['interval_hours'] });
+          expect(scheduler.getConfig()).toEqual(before);
+          expect(scheduler.getSchedulerStatus()).toMatchObject({ running: false, enabled: false, interval_hours: 4, next_run: null });
+          expect(setIntervalSpy).not.toHaveBeenCalled();
+          expect(setTimeoutSpy).not.toHaveBeenCalled();
+          expect(clearIntervalSpy).not.toHaveBeenCalled();
+        },
+      );
+
+      it('refuses an out-of-bounds interval while running: the timer and its next run are as they were', () => {
+        scheduler.startScheduler(4, createMockDb());
+        const before = { config: scheduler.getConfig(), status: scheduler.getSchedulerStatus() };
+        setIntervalSpy.mockClear(); setTimeoutSpy.mockClear(); clearIntervalSpy.mockClear();
+        for (const value of [0.001, 0, 500, 'abc']) {
+          expect(startRefused(value)).toMatchObject({ code: 'INVALID_SCHEDULER_CONFIG' });
+        }
+        expect(scheduler.getConfig()).toEqual(before.config);
+        expect(scheduler.getSchedulerStatus()).toEqual(before.status);
+        expect(setIntervalSpy).not.toHaveBeenCalled();
+        expect(setTimeoutSpy).not.toHaveBeenCalled();
+        expect(clearIntervalSpy).not.toHaveBeenCalled();
+      });
+
+      it("the server's own startup call, startScheduler(4, db), still starts on four hours", () => {
+        const appSrc = require('fs').readFileSync(require('path').join(__dirname, '..', '..', '..', 'src', 'app.js'), 'utf8');
+        expect(appSrc).toMatch(/startFeedScheduler\(4, db\);/);
+        scheduler.startScheduler(4, createMockDb());
+        expect(scheduler.getSchedulerStatus()).toMatchObject({ running: true, enabled: true, interval_hours: 4 });
+        expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+        expect(setIntervalSpy.mock.calls[0][1]).toBe(4 * 60 * 60 * 1000);
+        expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+        expect(setTimeoutSpy.mock.calls[0][1]).toBe(15000);
+      });
+
+      it.each([[1, 1], [168, 168], ['6', 6], [null, 4], [undefined, 4]])('starts with interval %j on %j hours', (value, hours) => {
+        scheduler.startScheduler(value, createMockDb());
+        expect(scheduler.getConfig().interval_hours).toBe(hours);
+        expect(setIntervalSpy.mock.calls[0][1]).toBe(hours * 60 * 60 * 1000);
+      });
+
+      it('does nothing, as before, when FEED_SCHEDULER_ENABLED is not true and the interval is valid', () => {
+        process.env.FEED_SCHEDULER_ENABLED = 'false';
+        try {
+          scheduler.startScheduler(6, createMockDb());
+          expect(scheduler.getSchedulerStatus()).toMatchObject({ running: false, enabled: false, interval_hours: 4 });
+          expect(setIntervalSpy).not.toHaveBeenCalled();
+        } finally {
+          process.env.FEED_SCHEDULER_ENABLED = 'true';
+        }
+      });
+    });
+
+    it('configRefusal is null for a request with nothing out of bounds', () => {
+      for (const updates of [{}, { batch_size: null }, { auto_fill_enabled: false }, { batch_size: '15' }, { unknown: 9999 }]) {
+        expect(scheduler.configRefusal(updates)).toBeNull();
+      }
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
   // 3. startScheduler / stopScheduler
   // ─────────────────────────────────────────────────────────────────────────
   describe('startScheduler / stopScheduler', () => {
