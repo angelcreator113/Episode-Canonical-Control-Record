@@ -157,6 +157,20 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
     });
   }
 
+  /** Makes the first statement in a transaction whose text matches lose to a lock once (55P03), then run. */
+  function conflictOnce(pattern) {
+    const real = sequelize.query.bind(sequelize);
+    let done = false;
+    return jest.spyOn(sequelize, 'query').mockImplementation((sql, options) => {
+      if (!done && options?.transaction && pattern.test(flat(sql))) {
+        done = true;
+        return Promise.reject(Object.assign(new Error('canceling statement due to lock timeout'), { original: { code: '55P03' } }));
+      }
+      return real(sql, options);
+    });
+  }
+  const notAttachedLines = () => errorLines().filter((l) => l.includes('stored and not attached'));
+
   // ── Fixtures ───────────────────────────────────────────────────────────
   const baseUrl = () => `https://genb2-test-bucket.s3.us-east-1.amazonaws.com/scene-sets/base-${fx.uuid()}.jpg`;
   /** A venue: a location, a set there (with a base or not), approved or not. */
@@ -442,6 +456,7 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
         expect(JSON.stringify(res.body)).not.toMatch(/not saved|costs again/i);
         expect(falCalls()).toHaveLength(0);
         expect(mockS3Send).not.toHaveBeenCalled();
+        expect(orphanLines()).toEqual([]); // nothing was generated: no [GeneratedNotSaved] line
         expect(await lookOf(a.ev)).toBeNull();
         expect((await snapshot()).looks).toEqual(before.looks);
 
@@ -587,6 +602,7 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       expect(pause.mock.calls).toEqual([[DELAY], [DELAY]]);
       expect(t.records.filter((r) => r.error === '55P03')).toHaveLength(3);
       expect(falCalls()).toHaveLength(0);
+      expect(orphanLines()).toEqual([]);
       await holder.rollback();
       expect(await lookOf(ev)).toBeNull();
     });
@@ -855,6 +871,7 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       expect(puts()).toHaveLength(1);
       expect(deletes()).toHaveLength(0);
       expect(logged.filter((l) => l.includes('stored and not attached'))).toEqual([expect.stringMatching(/outcome=SAVE_FAILED error=SequelizeForeignKeyConstraintError\/23503; nothing was deleted from storage$/)]);
+      expect(logged.find((l) => l.includes('stored and not attached'))).toContain(`storage_key=${puts()[0]} event=${ev}`);
     });
 
     test('an existing set\'s row held throughout: 409 PLACE_FINALIZE_RETRY_EXHAUSTED, stored and not attached, after two pauses', async () => {
@@ -954,6 +971,9 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
         expect(await angleRowOf(f.look.id, f.angle)).toBeNull();
         expect(puts()).toHaveLength(1);
         expect(deletes()).toHaveLength(0);
+        expect(notAttachedLines()).toEqual([
+          expect.stringMatching(new RegExp(`storage_key=${puts()[0]} event=${f.ev} set=${f.set} outcome=PLACE_LOCKED attempts=1; nothing was deleted from storage$`)),
+        ]);
       });
     });
 
@@ -996,8 +1016,14 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
 
       const g = await dressedFixture();
       failStatement(/INSERT INTO scene_set_look_angles/);
+      const snap = await snapshot();
       const up = await uploadAngle(g.ep, g.angle);
+      const logged = notAttachedLines();
       jest.restoreAllMocks();
+      expect(await snapshot()).toEqual(snap); // no record changed
+      expect(puts()).toHaveLength(1);
+      expect(deletes()).toHaveLength(0);
+      expect(logged).toEqual([expect.stringMatching(new RegExp(`storage_key=${puts()[0]} event=${g.ev} set=${g.set} outcome=SAVE_FAILED error=SequelizeForeignKeyConstraintError/23503; nothing was deleted from storage$`))]);
       expect(up.status).toBe(500);
       expect(up.body).toEqual({ success: false, error: UPLOAD_SAVE_FAILED });
       expect(JSON.stringify(up.body)).not.toMatch(LEAK);
@@ -1118,6 +1144,254 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       expect(res.status).toBe(409);
       expect(res.body).toEqual({ success: false, code: 'VENUE_LOOK_LOCKED', error: "This event's episode is accepted: its venue look is locked" });
       expect(mockAnthropic).not.toHaveBeenCalled();
+    });
+  });
+
+  // ══ The final verification round (Evoni, 2026-11-23) ═══════════════════
+  describe('a dressed angle\'s claim, which is not inside a finalization', () => {
+    async function dressedFixture() {
+      const { loc, set } = await venue();
+      const { ep, ev } = await primary({ set, loc });
+      expect((await uploadLook(ev)).status).toBe(200);
+      const look = await lookOf(ev);
+      const angle = (await models.SceneAngle.create({ scene_set_id: set, angle_label: 'WIDE', angle_name: 'Wide', still_image_url: baseUrl() })).id;
+      mockS3Send.mockClear();
+      return { ep, ev, set, look, angle };
+    }
+
+    test('the acceptance committing between the Place check and the claim: the claim is taken and the picture is paid for; the save then refuses, the row is not left generating, and the picture is not kept', async () => {
+      const f = await dressedFixture();
+      // The check is a read with no lock: held open here just after it has answered "not locked".
+      const checked = gateOn((rec, sql) => !rec.txId && /FROM episodes e WHERE e\.deleted_at IS NULL AND \(e\.id = \(SELECT w\.used_in_episode_id/.test(sql));
+      const pending = send(generateAngle(f.ep, f.angle));
+      await checked.reached;
+      expect(await angleRowOf(f.look.id, f.angle)).toBeNull(); // not claimed yet
+      await accept(f.ep);
+      checked.open();
+      const res = await pending;
+      expect(res.status).toBe(202); // the claim does not ask again
+      const row = await angleSettled(f.look.id, f.angle);
+      expect(row).toMatchObject({ status: 'failed', image_url: null, error: `${PLACE_LOCKED_MESSAGE} ${GENERATED_NOT_SAVED_MESSAGE}` });
+      expect(falCalls()).toHaveLength(1); // paid for once, and not kept
+      expect(deletes()).toHaveLength(0);
+      expect(orphanLines()).toEqual([expect.stringMatching(new RegExp(`event=${f.ev} set=${f.set} outcome=PLACE_LOCKED`))]);
+    });
+
+    test('the claim first, then the acceptance (which does not wait for a claim): 202; the save after the paid call refuses', async () => {
+      const f = await dressedFixture();
+      const hold = holdGeneration();
+      const res = await generateAngle(f.ep, f.angle);
+      expect(res.status).toBe(202);
+      await hold.reached;
+      expect(await angleRowOf(f.look.id, f.angle)).toMatchObject({ status: 'generating' });
+      await accept(f.ep); // not blocked by the claim: it is a committed row, not a lock
+      hold.release();
+      expect(await angleSettled(f.look.id, f.angle)).toMatchObject({ status: 'failed', error: `${PLACE_LOCKED_MESSAGE} ${GENERATED_NOT_SAVED_MESSAGE}` });
+      expect(falCalls()).toHaveLength(1);
+    });
+
+    test('ANGLE_GENERATING as before for a second start while one runs; a claim stuck past its ten minutes is taken again', async () => {
+      const f = await dressedFixture();
+      const hold = holdGeneration();
+      expect((await generateAngle(f.ep, f.angle)).status).toBe(202);
+      await hold.reached;
+      const second = await generateAngle(f.ep, f.angle);
+      expect(second.status).toBe(409);
+      expect(second.body).toEqual({ success: false, error: 'This dressed angle is already being generated. Wait for it to finish.', code: 'ANGLE_GENERATING' });
+      expect(falCalls()).toHaveLength(1);
+      hold.release();
+      await angleSettled(f.look.id, f.angle);
+      // A run that died: still generating, untouched for twenty minutes.
+      await run("UPDATE scene_set_look_angles SET status = 'generating', updated_at = NOW() - INTERVAL '20 minutes' WHERE look_id = :look AND scene_angle_id = :angle", { look: f.look.id, angle: f.angle });
+      expect((await generateAngle(f.ep, f.angle)).status).toBe(202);
+      expect(await angleSettled(f.look.id, f.angle)).toMatchObject({ status: 'complete', source: 'generated' });
+      expect(falCalls()).toHaveLength(2);
+    });
+  });
+
+  describe('an existing set that is gone when the finalization takes its row', () => {
+    test('"Generate this look": 409 SET_NOT_FOUND; no claim, the event not moved, nothing generated', async () => {
+      const { loc, set } = await venue();
+      const { ev } = await primary({ loc }); // not linked: the venue's one set would be used and linked
+      const g = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'world_events');
+      const pending = send(generateLook(ev));
+      await g.reached; // the finalizer holds the event row; the set row is not taken yet
+      await run('UPDATE scene_sets SET deleted_at = NOW() WHERE id = :set', { set });
+      g.open();
+      const res = await pending;
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual({ success: false, code: 'SET_NOT_FOUND', error: 'That scene set no longer exists.' });
+      expect(await lookOf(ev)).toBeNull();
+      expect((await eventRow(ev)).scene_set_id).toBeNull();
+      expect(falCalls()).toHaveLength(0);
+      expect(orphanLines()).toEqual([]);
+    });
+
+    test('an uploaded look: 409 SET_NOT_FOUND saying the file was stored and not attached; no look, the event not moved', async () => {
+      const { loc, set } = await venue();
+      const { ev } = await primary({ loc });
+      const hold = holdStorage();
+      const pending = send(uploadLook(ev));
+      await hold.reached;
+      await run('UPDATE scene_sets SET deleted_at = NOW() WHERE id = :set', { set });
+      hold.release();
+      const res = await pending;
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual({ success: false, code: 'SET_NOT_FOUND', error: `That scene set no longer exists. ${UPLOAD_NOT_ATTACHED}` });
+      expect(await lookOf(ev)).toBeNull();
+      expect((await eventRow(ev)).scene_set_id).toBeNull();
+      expect(deletes()).toHaveLength(0);
+      expect(notAttachedLines()).toEqual([expect.stringContaining(`storage_key=${puts()[0]}`)]);
+    });
+
+    test('an ordinary lookup of a set that is not there is as before: a deleted set the event points at reads as none', async () => {
+      const { loc, set } = await venue({ approved: false, base: false });
+      const { ev } = await primary({ set, loc });
+      await run('UPDATE scene_sets SET deleted_at = NOW() WHERE id = :set', { set });
+      expect((await readLook(ev)).scene_set).toBeNull();
+      const brief = await asAdmin(request(app).post(lookUrl(ev, '/brief'))).send({});
+      expect(brief.status).toBe(200);
+      expect(brief.body.data).toMatchObject({ step: 'base', scene_set: null, creates_set: { name: expect.any(String) } });
+    });
+  });
+
+  describe('a set that would be made for the venue, when the first finalization refuses', () => {
+    test('"Generate this look", the acceptance committing first: 409 PLACE_LOCKED; no set, the event not moved, no look, no episode location, nothing generated', async () => {
+      const { loc } = await venue({ approved: false, withSet: false });
+      const { ep, ev } = await primary({ loc });
+      const before = await snapshot();
+      const g = acceptanceHoldsEpisode();
+      const acceptance = settle(completeEpisode(ep, show, sequelize));
+      await Promise.race([g.reached, acceptance]);
+      const pending = send(generateLook(ev));
+      await waitForLockWait(sequelize, `%FROM episodes WHERE id IN%${ep}%FOR SHARE%`);
+      g.open();
+      const [res, a] = await Promise.all([pending, acceptance]);
+      if (!a.ok) throw a.error;
+      expect(res.status).toBe(409);
+      expect(res.body).toEqual(LOCKED);
+      const after = await snapshot();
+      expect(after.sets).toEqual([]);
+      expect(after.looks).toEqual([]);
+      expect(after.links).toEqual(before.links);
+      expect((await eventRow(ev)).scene_set_id).toBeNull();
+      expect(falCalls()).toHaveLength(0);
+      expect(orphanLines()).toEqual([]);
+    });
+  });
+
+  describe('a lock conflict inside a save is tried again without paying, storing or asking the model again', () => {
+    test('the look\'s completion: one pause, saved on the second try; the provider and storage used once', async () => {
+      const { loc, set } = await venue();
+      const { ev } = await primary({ set, loc });
+      conflictOnce(/UPDATE scene_set_looks SET status = 'complete'/);
+      expect((await generateLook(ev)).status).toBe(202);
+      expect(await lookSettled(ev)).toMatchObject({ status: 'complete', source: 'generated', error: null });
+      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(falCalls()).toHaveLength(1);
+      expect(puts()).toHaveLength(1);
+    });
+
+    test('an uploaded look, its set row held and let go during the pause: attached on the second try; the file stored once', async () => {
+      const { loc, set } = await venue();
+      const { ev } = await primary({ set, loc });
+      const hold = holdStorage();
+      const pending = send(uploadLook(ev));
+      await hold.reached;
+      const holder = await holdTransaction();
+      await sequelize.query('SELECT id FROM scene_sets WHERE id = :set FOR UPDATE', { replacements: { set }, transaction: holder });
+      pause.mockImplementation(async () => { await holder.rollback(); });
+      hold.release();
+      const res = await pending;
+      expect(res.status).toBe(200);
+      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(puts()).toHaveLength(1);
+      expect(await lookOf(ev)).toMatchObject({ status: 'complete', source: 'uploaded' });
+    });
+
+    test('a dressed angle: generated (one provider call) and uploaded (one storage write), each saved on the second try', async () => {
+      const { loc, set } = await venue();
+      const { ep, ev } = await primary({ set, loc });
+      expect((await uploadLook(ev)).status).toBe(200);
+      const look = await lookOf(ev);
+      const angle = (await models.SceneAngle.create({ scene_set_id: set, angle_label: 'WIDE', angle_name: 'Wide' })).id;
+      mockS3Send.mockClear();
+      const first = conflictOnce(/UPDATE scene_set_look_angles SET status = 'complete'/);
+      expect((await generateAngle(ep, angle)).status).toBe(202);
+      expect(await angleSettled(look.id, angle)).toMatchObject({ status: 'complete', source: 'generated' });
+      first.mockRestore();
+      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(falCalls()).toHaveLength(1);
+      expect(puts()).toHaveLength(1);
+
+      mockS3Send.mockClear();
+      pause.mockClear();
+      conflictOnce(/INSERT INTO scene_set_look_angles/);
+      const up = await uploadAngle(ep, angle);
+      expect(up.status).toBe(200);
+      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(puts()).toHaveLength(1);
+      expect(await angleRowOf(look.id, angle)).toMatchObject({ status: 'complete', source: 'uploaded', image_url: up.body.data.image_url });
+    });
+
+    test('the venue-look draft: saved on the second try; the model called once', async () => {
+      const { ev } = await primary();
+      mockAnthropic.mockImplementation(async () => ({ content: [{ text: DRAFT_JSON }] }));
+      conflictOnce(/UPDATE world_events SET venue_look/);
+      const res = await draft(ev);
+      expect(res.status).toBe(200);
+      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(mockAnthropic).toHaveBeenCalledTimes(1);
+      expect((await eventRow(ev)).venue_look).toMatchObject({ overall: 'Candlelit glass hall.' });
+    });
+  });
+
+  describe('the claim recovery and timeout rules are as they were', () => {
+    test('a base claim stuck past its window is taken again through the finalization; a recent one is BASE_GENERATING', async () => {
+      const { loc, set } = await venue({ approved: false, base: false });
+      const { ev } = await primary({ set, loc });
+      await run("UPDATE scene_sets SET generation_status = 'generating', updated_at = NOW() WHERE id = :set", { set });
+      const recent = await generateLook(ev);
+      expect(recent.status).toBe(409);
+      expect(recent.body).toEqual({ success: false, code: 'BASE_GENERATING', error: expect.stringMatching(/is already being generated\. Wait for it to finish\.$/) });
+      expect(falCalls()).toHaveLength(0);
+      await run("UPDATE scene_sets SET updated_at = NOW() - INTERVAL '20 minutes' WHERE id = :set", { set });
+      expect((await generateLook(ev)).status).toBe(202);
+      expect(await baseSettled(set)).toMatchObject({ generation_status: 'complete' });
+      expect(falCalls()).toHaveLength(1);
+    });
+
+    test('a look claim stuck past its window is taken again; a recent one is LOOK_GENERATING', async () => {
+      const { loc, set } = await venue();
+      const { ev } = await primary({ set, loc });
+      await run(`INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, created_at, updated_at)
+                 VALUES (gen_random_uuid(), :set, :ev, 'generating', 'generated', NOW(), NOW())`, { set, ev });
+      const recent = await generateLook(ev);
+      expect(recent.status).toBe(409);
+      expect(recent.body.code).toBe('LOOK_GENERATING');
+      await run("UPDATE scene_set_looks SET updated_at = NOW() - INTERVAL '20 minutes' WHERE event_id = :ev", { ev });
+      expect((await generateLook(ev)).status).toBe(202);
+      expect(await lookSettled(ev)).toMatchObject({ status: 'complete', source: 'generated' });
+      expect(falCalls()).toHaveLength(1);
+    });
+
+    test('the read still marks a base or a look stuck past the window failed with its reason, and leaves a recent one', async () => {
+      const { loc, set } = await venue({ approved: false, base: false });
+      const { ev } = await primary({ set, loc });
+      await run("UPDATE scene_sets SET generation_status = 'generating', updated_at = NOW() WHERE id = :set", { set });
+      expect((await readLook(ev)).scene_set).toMatchObject({ generation_status: 'generating', error: null, not_saved: false });
+      await run("UPDATE scene_sets SET updated_at = NOW() - INTERVAL '20 minutes' WHERE id = :set", { set });
+      const stuck = (await readLook(ev)).scene_set;
+      expect(stuck).toMatchObject({ generation_status: 'failed', not_saved: false });
+      expect(stuck.error).toMatch(/^Timed out: no image after \d+ minutes$/);
+
+      const other = await venue();
+      const b = await primary({ set: other.set, loc: other.loc });
+      await run(`INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, created_at, updated_at)
+                 VALUES (gen_random_uuid(), :set, :ev, 'generating', 'generated', NOW(), NOW() - INTERVAL '20 minutes')`, { set: other.set, ev: b.ev });
+      const look = (await readLook(b.ev)).look;
+      expect(look).toMatchObject({ status: 'failed' });
+      expect(look.error).toMatch(/^Timed out: no image after \d+ minutes$/);
     });
   });
 

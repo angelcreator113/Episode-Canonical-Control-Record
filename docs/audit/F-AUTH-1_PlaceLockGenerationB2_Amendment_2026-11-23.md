@@ -3,7 +3,7 @@
 
 **Document version**
 
-v1.0. This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
+v1.1 (v1.0 was this file before Evoni's review of the same day, on the same unmerged branch; §2 "Her review", the meaning of `generated_at` in §4, §8 and the test lists of §9 are what changed). This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
 - The FD tail, XK tail and PE tail are unchanged.
 - No earlier register file is edited, and no banner is added to one.
 
@@ -56,6 +56,14 @@ Evoni approved Generation B2 on 2026-11-23 as one change. The terms she approved
 - Work callbacks are rollback-safe database work only; never a provider, storage or model call inside the finalizer; a database transaction is never held across paid generation.
 - No SQL, stack traces or storage credentials in responses.
 - Every existing response not named above is preserved.
+
+## Her review of the change (RULED, 2026-11-23)
+
+She reviewed the change and accepted its architecture. Her rulings, as given to this work:
+1. The dressed-angle 409 `PLACE_LOCKED` is approved; previously saved images are preserved.
+2. `SET_NOT_FOUND` as a 409 from the finalization's set-row lock is approved; ordinary lookups that answer 404 are unchanged.
+3. An upload's unexpected save failure as a 500 without a code is accepted on condition that the frontend handles it, that no database record changes, and that the stored-but-unattached file is logged (verified, §9).
+4. `generated_at` in the read is kept as it is, and its meaning is to be stated: the last save of the base, generated or uploaded (§4).
 
 # §3. What was verified before the callbacks were written (MEASURED)
 
@@ -121,7 +129,7 @@ The model loop is first and alone: two tries on a model or parse failure, 502 `V
 |---|---|
 | `not_saved` | `true` when the set is neither generating nor failed, has a `base_generation.last_error`, and its `failed_at` is newer than its last save (`generated_at` or `uploaded_at`, whichever is later) |
 | `failed_at` | `base_generation.failed_at`, ISO, or `null` |
-| `generated_at` | the base's last save, generated or uploaded, ISO, or `null`: what `failed_at` is read against |
+| `generated_at` | **The last time the set's base was saved, whether it was generated or uploaded**: the later of `base_generation.generated_at` and `base_generation.uploaded_at`, ISO, or `null` when the set never had a base saved. It is not "when a picture was last generated": after an upload it is the upload's time, and a run that was generated and not saved does not move it. It is what `failed_at` is read against (ruled kept under this name, §2). |
 | `error` | `last_error` when the set is `failed` (as before) or `not_saved`; else `null` |
 
 A later generation or upload makes the last save newer than the failure: `not_saved` is false and `error` null, with nothing rewritten. `EventLookImage.jsx` is not changed: B1's `baseNotSaved` reads exactly `error`, `failed_at` and `generated_at`.
@@ -148,9 +156,10 @@ Unchanged from Foundation A and B1: the linked episodes `FOR SHARE` in id order,
 # §8. Limits and open points
 
 - **Dressed angles on an accepted episode are now refused.** That is the ruling (§2, 3); it is also a behaviour a user can meet: "Generate angle" and "Upload image" on a beat at the look's set answer 409 `PLACE_LOCKED` once the episode is accepted.
-- **A dressed angle's claim is not inside a finalization** (as ruled). A claim taken just before an acceptance commits is released by the completion's refusal after the paid call: the picture is paid for and not kept.
-- **An upload's unexpected failure has no code** (the route's existing 500 shape with a fixed sentence): no code for it exists, and none was to be invented.
-- **`generated_at` in the read is the base's last save**, an upload included. It is named for B1's frontend check, which reads that field.
+- **A dressed angle's claim is not inside a finalization** (as ruled). The Place check before it is a read, and the claim is an autocommit statement that takes no lock on the episode or the event. So an acceptance that commits between the check and the claim is not seen: the claim is taken, the answer is 202, the provider is paid, and the save then refuses under the locks; the row keeps its previous image (or reads failed) with the reason and is not left generating, and the picture is not kept. The window is the few statements between the check and the claim. An acceptance does not wait for a claim either (it is a committed row, not a lock). Both sequences are held open and tested (§9).
+- **An upload's unexpected failure has no code** (the route's existing 500 shape with a fixed sentence): no code for it exists, and none was to be invented. Accepted on conditions (§2), each tested: both panels show the sentence as an error; no record changes; the stored key is logged and nothing is deleted.
+- **A set that is gone when the finalization takes its row** answers 409 `SET_NOT_FOUND` ("That scene set no longer exists."), with the not-attached sentence after an upload. The code exists in `dressedAngleService.js` as a 404 for an ordinary lookup, which is unchanged.
+- **`generated_at` in the read is the base's last save**, an upload included (§4). It is named for B1's frontend check, which reads that field.
 - **A set row held for longer than three tries and two pauses** still ends `PLACE_FINALIZE_RETRY_EXHAUSTED`.
 - **The doubles.** The provider, the storage and the model are test doubles in every run here.
 - **The live schema and the running processes were not verified.** No server was contacted. **No migration; no stored row is changed.**
@@ -159,7 +168,7 @@ Unchanged from Foundation A and B1: the linked episodes `FOR SHARE` in id order,
 
 On a private, migrated local PostgreSQL test database, through the real app. The image provider (`axios`), the object storage (`S3Client`) and the model (`Anthropic`) are doubles. No test sends DDL. The network guard reports 0 external attempts.
 
-`tests/integration/placeLockGenerationB2.integration.test.js` (55 cases), against the real `completeEpisode`, a real two-part completion and the real event `PUT`:
+`tests/integration/placeLockGenerationB2.integration.test.js` (69 cases; the 14 added on her review are listed after the first six groups), against the real `completeEpisode`, a real two-part completion and the real event `PUT`:
 
 - **The look step.** Saved with the same 202; the claim in one transaction (episodes, event row, set row `FOR NO KEY UPDATE NOWAIT`), the completion in another, none spanning the provider call. Accepted during generation, for a primary event and for an event linked by its stamp alone: not kept, the reason on the row, never left generating, one provider call, nothing deleted, the key logged; a look that had an image keeps it, its source and its dressed angles. Both orders against a real acceptance at the save and at the claim (at the claim, acceptance first: 409 `PLACE_LOCKED`, nothing generated, no claim, no "not saved"). A real two-part window. The event moved by a real `PUT` during generation: not attached to either set. The save failing at the look's row and at the dressed-angle drop: rolled back, the previous image kept with the fixed sentence. A provider failure and `LOOK_GENERATING` as before.
 - **The set row.** Held when the claim is saved and let go during the pause: 202 on try two, one pause, no session but the holder's inside a transaction while it waits. Held throughout: three tries, two pauses, 409 `PLACE_FINALIZE_RETRY_EXHAUSTED` with its established text and nothing generated. Held when a generated base is saved: saved on try two, the provider and storage used once.
@@ -168,9 +177,19 @@ On a private, migrated local PostgreSQL test database, through the real app. The
 - **Dressed angles.** Before acceptance: generated and uploaded as before, the completion in one finalization. After acceptance (both kinds of event): both refused before the claim, the provider and the storage write. Accepted during generation: not kept, the previous image stays, not left generating. Accepted while an upload was being stored. Both orders against a real acceptance. The save failing. An episode with no event: `NO_LOOK`.
 - **The venue-look draft.** Saved after one model call. The model failing: two tries and 502, or one failure then saved, as before. The save failing: 500 `GENERATED_SAVE_FAILED`, the model called once, nothing of the database's in the answer. Accepted while the model was writing: 409 `VENUE_LOOK_LOCKED`. A conflict on every try: 409 `PLACE_FINALIZE_RETRY_EXHAUSTED`, the model called once. Already accepted: the early 409 and no model call.
 
+**Added on her review:**
+- *A dressed angle's claim.* The acceptance committed between the Place check and the claim (the check's read held open just after it answered): 202, one paid call, then the save refuses and the row reads failed with the reason, not generating. The claim first, then the acceptance, which does not wait for it. `ANGLE_GENERATING` for a second start, and a claim untouched for twenty minutes taken again.
+- *A set gone at the finalization.* Soft-deleted while the finalizer holds the event row: "Generate this look" answers 409 `SET_NOT_FOUND`, no claim, the event not moved, nothing generated; an upload answers it with the not-attached sentence, the key logged. A deleted set the event points at still reads as none in the read and the brief.
+- *A set that would be made, refused.* The acceptance first on the create path: 409 `PLACE_LOCKED`, no set, no look, no episode location, the event not moved.
+- *A lock conflict inside a save* (55P03 once, at the statement): the look's completion, a dressed angle's completion and upload, an uploaded look with its set row really held and let go during the pause, and the draft: each saved on the second try after one pause, with one provider call, one storage write or one model call.
+- *The claim rules.* A base claim and a look claim stuck past the window are taken again through the finalization, and a recent one is `BASE_GENERATING` / `LOOK_GENERATING`; the read still marks a stuck base or look failed with "Timed out: no image after … minutes" and leaves a recent one.
+- A refusal before generation logs no `[GeneratedNotSaved]` line; an unattached upload's line names its storage key for the 500 too; a dressed upload's refusal and 500 are logged with the key, change no record and delete nothing.
+
+A failure at the last write of each flow leaves none of the earlier ones: the start (the sync, after the set, the claim and the move), the look's completion (the dressed-angle drop, after the look's row), an upload (the drop, after the set, the look and the move) are the cases above; a dressed angle's completion and upload and the draft are each one statement.
+
 Also run on that database, unchanged and passing: `placeLockGenerationB1` (56), `placeLockFinalizer` (52), `placeLockStrict` (53), `p1PlanAdmin` (85), `p2aSceneAdmin` (335), `p2bSceneSetAdmin` (243), `eventPlaceSync` (6), `worldLocationAdmin` (79), `looksFixes4` (6, 1 skipped as before).
 
-Frontend (Vitest): `EventLookImage.notSaved.test.jsx` gains three cases with the read as B2 sends it (a not-saved base shown and toasted; a later upload clearing it; a failed base as before); `EventLookImage.todaysPayload.test.jsx` is reworded, not changed in what it asserts: it described the read "today" as lacking the new fields, and now says "before B2".
+Frontend (Vitest): `DressedAngles.test.jsx` gains four cases and `EventLookImage.upload.test.jsx` four (her review): a 409 `PLACE_LOCKED` on generate, an upload's 409 "stored and not attached" and its 500, each shown as an error toast with the server's sentence and never as a success; and a run refused after the picture was made, shown as "last try failed" beside the previous image. Both components already showed `error` from any refused request; they are not changed. `EventLookImage.notSaved.test.jsx` gains three cases with the read as B2 sends it (a not-saved base shown and toasted; a later upload clearing it; a failed base as before); `EventLookImage.todaysPayload.test.jsx` is reworded, not changed in what it asserts: it described the read "today" as lacking the new fields, and now says "before B2".
 
 **One existing assertion was changed, by reading:** `tests/integration/venueLookImage.integration.test.js` pinned the exact options the base step gives `generateBaseScene`; it now expects `priorStatus: 'pending'` and `finalize: expect.any(Function)` beside the three it had.
 

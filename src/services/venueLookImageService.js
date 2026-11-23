@@ -249,7 +249,7 @@ async function takeSetRow(models, { newRow, setId, transaction }) {
   const [rows] = await models.sequelize.query(
     'SELECT id FROM scene_sets WHERE id = :id AND deleted_at IS NULL FOR NO KEY UPDATE NOWAIT',
     { replacements: { id: setId }, transaction });
-  if (!rows.length) throw new VenueLookImageError('That scene set no longer exists', 409, 'SET_NOT_FOUND');
+  if (!rows.length) throw new VenueLookImageError('That scene set no longer exists.', 409, 'SET_NOT_FOUND');
 }
 
 /** The event moves to the set, and its draft episode follows (eighth audit); in the transaction given. */
