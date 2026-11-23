@@ -82,3 +82,47 @@ describe('EventLookImage: a base generated and not saved', () => {
     expect((await screen.findByTestId('event-look-base-failed')).textContent).toBe(`The base could not be generated: ${REASON}.`);
   });
 });
+
+// Generation B2: the look read now sends these fields (venueLookImageService
+// eventLook): error for a failed base or one generated and not saved,
+// not_saved, failed_at, and generated_at as the base's last save (generated
+// or uploaded).
+describe('EventLookImage with the look read as B2 sends it', () => {
+  const FAILED_AT = '2026-11-23T10:05:00.000Z';
+  const sent = (fields) => ({ id: 'set-1', name: 'Glasshouse Hall', base_still_url: null, generation_status: 'pending', error: null, not_saved: false, failed_at: null, generated_at: null, ...fields });
+  const read = (set) => ({ scene_set: set, approved_base: null, look: null, venue_changed: false, editable: true });
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockImplementation(async (url) => (url === BASE ? { data: { success: true, data: lookState } } : { data: {} }));
+  });
+
+  test('a base generated and not saved: the recorded reason is shown, and toasted when the run ends; never "The base is ready"', async () => {
+    lookState = read(sent({ generation_status: 'generating' }));
+    const { onToast } = renderIt();
+    await screen.findByTestId('event-look-generating');
+    lookState = read(sent({ error: REASON, not_saved: true, failed_at: FAILED_AT }));
+    expect((await screen.findByTestId('event-look-base-failed')).textContent).toBe(`The base could not be generated: ${REASON}.`);
+    expect(onToast).toHaveBeenCalledWith(`The base could not be generated: ${REASON}`, 'error');
+    expect(onToast).not.toHaveBeenCalledWith('The base is ready: approve it in Scene Sets');
+  });
+
+  test('a base uploaded (or generated) after an older not-saved run: the read clears it, and the panel shows the base waiting, with no error line', async () => {
+    lookState = read(sent({ error: REASON, not_saved: true, failed_at: FAILED_AT }));
+    const view = renderIt();
+    await screen.findByTestId('event-look-base-failed');
+    view.unmount?.();
+    // What the read sends after the upload: failed_at still on record, older than the last save; no error.
+    lookState = read(sent({ base_still_url: 'https://x/uploaded.jpg', generation_status: 'complete', failed_at: FAILED_AT, generated_at: '2026-11-23T11:00:00.000Z' }));
+    renderIt();
+    expect((await screen.findAllByTestId('event-look-awaiting')).length).toBeGreaterThan(0);
+    expect(baseNotSaved(lookState.scene_set)).toBe(false);
+  });
+
+  test('a failed base is as before; a base never refused shows no error line', async () => {
+    lookState = read(sent({ generation_status: 'failed', error: 'Timed out: no image after 15 minutes', failed_at: FAILED_AT }));
+    renderIt();
+    expect((await screen.findByTestId('event-look-base-failed')).textContent).toBe('The base could not be generated: Timed out: no image after 15 minutes.');
+    expect(baseNotSaved(lookState.scene_set)).toBe(false);
+    expect(baseNotSaved(sent({ base_still_url: 'https://x/b.jpg', generation_status: 'complete', generated_at: '2026-11-23T09:00:00.000Z' }))).toBe(false);
+  });
+});

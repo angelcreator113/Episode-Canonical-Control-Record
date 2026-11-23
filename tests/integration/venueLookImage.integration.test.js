@@ -129,7 +129,9 @@ const guardIt = enforcing() ? it : it.skip;
     expect((await rows('SELECT scene_set_id FROM world_events WHERE id = :ev', { ev }))[0].scene_set_id).toBe(created.id);
     expect(base).toHaveBeenCalledTimes(1);
     // L8: no event dressing; the event only sets the environment (DJ bug 3).
-    expect(base.mock.calls[0][2]).toEqual({ eventId: null, environmentEventId: ev, overrides: {} });
+    // Generation B2: the base is saved through the Place finalizer, and a
+    // refusal puts back the status the new set had (pending).
+    expect(base.mock.calls[0][2]).toEqual({ eventId: null, environmentEventId: ev, overrides: {}, priorStatus: 'pending', finalize: expect.any(Function) });
     expect(await rows('SELECT id FROM scene_set_looks WHERE event_id = :ev', { ev })).toHaveLength(0);
   });
 

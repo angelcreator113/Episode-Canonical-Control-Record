@@ -305,27 +305,60 @@ async function draftVenueLook(sequelize, { showId, eventId, anthropic } = {}) {
   const venue = await loadVenueDescription(sequelize, event);
   const prompt = buildDraftPrompt(event, venue);
   const api = anthropic || getClient();
+  // The model first: tried again only when the model call or its answer
+  // fails. Saving is not part of this loop, so a save that fails never pays
+  // for the model again (Generation B2; Evoni, 2026-11-23).
+  let draft = null;
   let lastErr = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 2 && !draft; attempt += 1) {
     try {
       const response = await api.messages.create({ model: MODELS[0], max_tokens: 700, messages: [{ role: 'user', content: prompt }] });
-      const draft = parseDraft(response?.content?.[0]?.text);
-      // Merged into the look as it is now, read again under a lock: an edit
-      // saved while the draft was being written was overwritten (eighth audit).
-      const { look, keptEdited, updatedAt } = await sequelize.transaction(async (transaction) => {
-        const [[fresh]] = await sequelize.query('SELECT venue_look FROM world_events WHERE id = :eventId FOR UPDATE',
-          { replacements: { eventId }, transaction });
-        const merged = mergeDraft(fresh ? readVenueLook(fresh.venue_look) : current, draft);
-        return { ...merged, updatedAt: await writeLook(sequelize, eventId, merged.look, transaction) };
-      });
-      return { venue_look: await withReferenceUrls(sequelize, look), kept_edited: keptEdited, updated_at: updatedAt };
+      draft = parseDraft(response?.content?.[0]?.text);
     } catch (err) {
       if (err?.status === 429) throw new VenueLookError(err.message, 429, 'AI_BUDGET_EXCEEDED');
       lastErr = err;
       console.error(`[venueLook] draft attempt ${attempt + 1} failed:`, err.message);
     }
   }
-  throw new VenueLookError(`Drafting failed: ${lastErr?.message || 'unknown error'}`, 502, 'VENUE_LOOK_DRAFT_FAILED');
+  if (!draft) throw new VenueLookError(`Drafting failed: ${lastErr?.message || 'unknown error'}`, 502, 'VENUE_LOOK_DRAFT_FAILED');
+
+  // Then one save, through the Place finalizer (utils/placeLock): the
+  // event's episodes and its row are locked, and the Place lock is asked
+  // again under them. The draft is merged into the look as it is now, read
+  // in that transaction: an edit saved while the draft was being written
+  // was overwritten (eighth audit). The look is not tied to a scene set, so
+  // no source set is compared.
+  const { finalizePlaceWrite } = require('../utils/placeLock');
+  const { PLACE_FINALIZE_RETRY_DELAY_MS, GENERATED_SAVE_FAILED, errorClassOf } = require('./sceneGenerationService');
+  let saved;
+  try {
+    saved = await finalizePlaceWrite(sequelize, eventId, {
+      retryDelayMs: PLACE_FINALIZE_RETRY_DELAY_MS,
+      work: async ({ transaction }) => {
+        const [[fresh]] = await sequelize.query('SELECT venue_look FROM world_events WHERE id = :eventId',
+          { replacements: { eventId }, transaction });
+        const merged = mergeDraft(fresh ? readVenueLook(fresh.venue_look) : current, draft);
+        return { ...merged, updatedAt: await writeLook(sequelize, eventId, merged.look, transaction) };
+      },
+    });
+  } catch (err) {
+    // The draft was written and paid for; the save failed for a reason that
+    // is no lock conflict and no refusal. Not tried again, and the
+    // database's own message is not sent.
+    console.error(`[venueLook] the draft was written and not saved (${errorClassOf(err)})`);
+    throw new VenueLookError('The draft was written, but saving it failed. Nothing was saved. Drafting again costs again.', 500, GENERATED_SAVE_FAILED);
+  }
+  if (saved.outcome !== 'OK') {
+    console.error(`[venueLook] the draft was written and not saved: event=${eventId} outcome=${saved.code} attempts=${saved.attempts}`);
+    const NOT_SAVED = 'The draft was written, but it was not saved. Drafting again costs again.';
+    // The Place locked while the draft was being written: this route's own lock code and text.
+    if (saved.code === 'PLACE_LOCKED') {
+      throw new VenueLookError(`This event's episode is accepted: its venue look is locked. ${NOT_SAVED}`, 409, 'VENUE_LOOK_LOCKED');
+    }
+    throw new VenueLookError(`${saved.message} ${NOT_SAVED}`, 409, saved.code);
+  }
+  const { look, keptEdited, updatedAt } = saved.value;
+  return { venue_look: await withReferenceUrls(sequelize, look), kept_edited: keptEdited, updated_at: updatedAt };
 }
 
 module.exports = {

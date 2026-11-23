@@ -131,4 +131,56 @@ describe('DressedAngles (S8, answer 2)', () => {
     render(<DressedAngles episodeId="ep-1" setId="set-1" />);
     expect((await screen.findByTestId('dressed-angle-status-a-inside')).textContent).toBe('Dressed · last try failed: Provider timeout');
   });
+
+  // Generation B2 (Evoni, 2026-11-23): a dressed angle is refused once the
+  // event's Place is locked, and an upload can be stored and not attached.
+  // The panel says what the server said.
+  describe('refusals and failures of Generation B2', () => {
+    const LOCKED = "This event's episode is accepted: its Place is locked";
+    const NOT_ATTACHED = `${LOCKED} The file was stored, but it was not attached. Nothing was changed.`;
+    const SAVE_FAILED = 'The file was stored, but attaching it failed. Nothing was changed.';
+    const refuse = (status, body) => Object.assign(new Error('refused'), { response: { status, data: body } });
+    const pickFile = async () => {
+      const front = await screen.findByTestId('dressed-angle-a-front');
+      fireEvent.click(within(front).getByRole('button', { name: 'Upload the dressed Front steps' }));
+      fireEvent.change(screen.getByTestId('dressed-angles-file'), { target: { files: [new File(['x'], 'dressed.jpg', { type: 'image/jpeg' })] } });
+    };
+
+    test('Generate on a locked Place: the 409 PLACE_LOCKED sentence is shown as an error', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.mocked(api.post).mockImplementation(async (url) => {
+        if (url.endsWith('/brief')) return { data: { success: true, data: { target: { kind: 'dressed_angle', angle_id: 'a-front' }, brief: BRIEF, estimate: { usd: 0.04, priced: true } } } };
+        throw refuse(409, { success: false, error: LOCKED, code: 'PLACE_LOCKED' });
+      });
+      const onToast = vi.fn();
+      render(<DressedAngles episodeId="ep-1" setId="set-1" onToast={onToast} />);
+      const front = await screen.findByTestId('dressed-angle-a-front');
+      fireEvent.click(within(front).getByRole('button', { name: 'Generate dressed' }));
+      fireEvent.click(await screen.findByTestId('sbc-confirm'));
+      await waitFor(() => expect(onToast).toHaveBeenCalledWith(LOCKED, 'error'));
+      expect(onToast).not.toHaveBeenCalledWith(expect.stringMatching(/^Dressing /));
+    });
+
+    test.each([
+      ['a 409 saying the file was stored and not attached', 409, { success: false, error: NOT_ATTACHED, code: 'PLACE_LOCKED' }, NOT_ATTACHED],
+      ['the 500 with no code and a fixed sentence', 500, { success: false, error: SAVE_FAILED }, SAVE_FAILED],
+    ])('Upload answered with %s: that sentence is shown as an error, never "uploaded"', async (_name, status, body, shown) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.mocked(api.post).mockRejectedValue(refuse(status, body));
+      const onToast = vi.fn();
+      render(<DressedAngles episodeId="ep-1" setId="set-1" onToast={onToast} />);
+      await pickFile();
+      await waitFor(() => expect(onToast).toHaveBeenCalledWith(shown, 'error'));
+      expect(onToast).not.toHaveBeenCalledWith(expect.stringMatching(/dressed image uploaded/));
+    });
+
+    test('a run refused after the picture was made: the previous dressed image stays, with the reason beside it', async () => {
+      const reason = `${LOCKED} The image was generated but it was not saved. Generating it again costs again.`;
+      data.angles[1].dressed = { status: 'complete', image_url: 'https://x/i-dressed.jpg', error: reason };
+      render(<DressedAngles episodeId="ep-1" setId="set-1" />);
+      const inside = await screen.findByTestId('dressed-angle-a-inside');
+      expect(inside.textContent).toContain(`Dressed · last try failed: ${reason}`);
+      expect(inside.querySelector('img').getAttribute('src')).toBe('https://x/i-dressed.jpg');
+    });
+  });
 });

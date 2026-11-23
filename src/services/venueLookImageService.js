@@ -29,6 +29,7 @@
  *                      approval: nothing is generated
  */
 
+const crypto = require('crypto');
 const { buildSceneBrief, briefToPrompt, loadBriefLocation, loadBriefEvent, readBriefOverrides } = require('./sceneBriefService');
 const { venueLocationId, venueDraftSet } = require('./venueGenerationService');
 
@@ -173,26 +174,93 @@ async function lookBrief(sequelize, { showId, eventId, chosenSetId = null, overr
   };
 }
 
-async function createVenueSet(models, event, locationId) {
+// ─── SAVING THROUGH THE PLACE FINALIZER (Generation B2; Evoni, 2026-11-23) ───
+//
+// Every write these flows make to an event's Place is committed by
+// utils/placeLock finalizePlaceWrite: one short transaction that locks the
+// event's linked episodes and the event row, asks the Place lock again, and
+// checks the event is still at the set it had when the request read it.
+// The work given to it is database rows only, each statement in its
+// transaction; a provider call, a storage write and a model call are never
+// inside it, and it is never held across one.
+
+const UPLOAD_NOT_ATTACHED = 'The file was stored, but it was not attached. Nothing was changed.';
+const NOT_STARTED = 'This could not be saved. Nothing was generated and nothing was changed.';
+const UPLOAD_SAVE_FAILED = 'The file was stored, but attaching it failed. Nothing was changed.';
+
+/** finalizePlaceWrite with the generation paths' pause between tries that lost to a lock (B1). */
+function finalizePlace(sequelize, eventId, { sourceSetId, work }) {
+  const { finalizePlaceWrite } = require('../utils/placeLock');
+  const { PLACE_FINALIZE_RETRY_DELAY_MS } = require('./sceneGenerationService');
+  return finalizePlaceWrite(sequelize, eventId, { sourceSetId, work, retryDelayMs: PLACE_FINALIZE_RETRY_DELAY_MS });
+}
+
+/**
+ * A database error that is no refusal and no lock conflict, as it is
+ * answered: logged by its class, and thrown on as a fixed sentence. The
+ * database's own message, which names rows and values, is not sent.
+ */
+function safeFailure(err, label, sentence) {
+  const { errorClassOf } = require('./sceneGenerationService');
+  console.error(`[VenueLookImage] ${label} (${errorClassOf(err)})`);
+  return new Error(sentence);
+}
+
+/**
+ * The row of the set that would be made for the venue, whole, with its id
+ * and timestamp, before any transaction: another try writes the same row.
+ */
+async function newVenueSetRow(models, event, locationId) {
   const location = await loadLocation(models.sequelize, locationId);
   const draft = venueDraftSet(event, location);
-  const created = await models.SceneSet.create({
+  const now = new Date();
+  return {
+    id: crypto.randomUUID(),
     name: draft.name,
     scene_type: 'EVENT_LOCATION',
     show_id: event.show_id,
     world_location_id: locationId,
     canonical_description: draft.canonical_description,
-  });
-  return liveSet(models.sequelize, created.id);
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
-async function linkEvent(sequelize, eventId, setId) {
-  const [[before]] = await sequelize.query('SELECT scene_set_id FROM world_events WHERE id = :eventId', { replacements: { eventId } });
-  await sequelize.query('UPDATE world_events SET scene_set_id = :setId, updated_at = NOW() WHERE id = :eventId',
-    { replacements: { setId, eventId } });
-  // Its draft episode follows (eighth audit).
-  await require('./eventPlaceSync').syncEpisodeEventLocation(sequelize, { eventId, fromSetId: before?.scene_set_id || null, toSetId: setId });
+/** That row as a set reads before it is saved (liveSet's fields). */
+const unsavedSet = (row) => ({
+  id: row.id, name: row.name, show_id: row.show_id, scene_type: row.scene_type, world_location_id: row.world_location_id,
+  base_still_url: null, base_model: null, generation_status: 'pending', canonical_description: row.canonical_description,
+  visual_language: {}, time_of_day: null, season: null, style_reference_url: null, base_generation: null, updated_at: row.updatedAt,
+});
+
+/**
+ * The set the work is for, in the finalizer's transaction: made, or (an
+ * existing one) its row locked without waiting. makeEventVersion and
+ * makeEveryday hold a set row and then wait for the event row; the
+ * finalizer holds the event row, so waiting for a set row here would close
+ * that circle. A held row is a lock conflict (55P03), which the finalizer
+ * rolls back and tries again after its pause.
+ */
+async function takeSetRow(models, { newRow, setId, transaction }) {
+  if (newRow) {
+    await models.SceneSet.create({ ...newRow }, { transaction, silent: true });
+    return;
+  }
+  const [rows] = await models.sequelize.query(
+    'SELECT id FROM scene_sets WHERE id = :id AND deleted_at IS NULL FOR NO KEY UPDATE NOWAIT',
+    { replacements: { id: setId }, transaction });
+  if (!rows.length) throw new VenueLookImageError('That scene set no longer exists.', 409, 'SET_NOT_FOUND');
 }
+
+/** The event moves to the set, and its draft episode follows (eighth audit); in the transaction given. */
+async function linkEvent(sequelize, eventId, setId, { transaction, fromSetId = null } = {}) {
+  await sequelize.query('UPDATE world_events SET scene_set_id = :setId, updated_at = NOW() WHERE id = :eventId',
+    { replacements: { setId, eventId }, transaction });
+  await require('./eventPlaceSync').syncEpisodeEventLocation(sequelize, { eventId, fromSetId, toSetId: setId, transaction });
+}
+
+/** A refusal before anything was generated or stored: its own code and text, 409. */
+const refusal = (outcome) => new VenueLookImageError(outcome.message, 409, outcome.code);
 
 /**
  * "Generate this look" after the cost was confirmed. Returns { result, run }:
@@ -210,16 +278,43 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
   if (target.kind === 'choose') {
     throw new VenueLookImageError('This venue has several scene sets: choose one', 409, 'CHOOSE_SET', { options: target.options });
   }
-  const set = target.kind === 'create' ? await createVenueSet(models, event, target.locationId) : target.set;
-  // The event moves to the set only once nothing below refuses (eighth
-  // audit: a refused run still re-pointed the event, and its episode).
-  const link = async () => { if (target.kind === 'create' || target.link) await linkEvent(sequelize, event.id, set.id); };
+  // A set that would be made is not made yet: its row is ready, and it is
+  // saved with the claim and the event's move, or not at all.
+  const newRow = target.kind === 'create' ? await newVenueSetRow(models, event, target.locationId) : null;
+  const set = newRow ? unsavedSet(newRow) : target.set;
+  const linking = Boolean(newRow || target.link);
+  const sourceSetId = event.scene_set_id ?? null;
 
   const plan = await planLook(sequelize, { event, set, overrides: overrides.value || {} });
   const sceneGen = require('./sceneGenerationService');
 
+  // Before the answer, and before anything is paid for: the set (made, or
+  // its row taken), the claim and the event's move, in one finalization.
+  // The event moves only once nothing refuses (eighth audit: a refused run
+  // still re-pointed the event, and its episode). A refusal here generated
+  // nothing: it is answered with its own code, never as "not saved".
+  const begin = async (claim) => {
+    let saved;
+    try {
+      saved = await finalizePlace(sequelize, event.id, {
+        sourceSetId,
+        work: async ({ transaction }) => {
+          await takeSetRow(models, { newRow, setId: set.id, transaction });
+          const claimed = claim ? await claim(transaction) : null;
+          if (linking) await linkEvent(sequelize, event.id, set.id, { transaction, fromSetId: sourceSetId });
+          return claimed;
+        },
+      });
+    } catch (err) {
+      if (err instanceof VenueLookImageError) throw err;
+      throw safeFailure(err, `starting the look for event ${event.id} failed`, NOT_STARTED);
+    }
+    if (saved.outcome !== 'OK') throw refusal(saved);
+    return saved.value;
+  };
+
   if (plan.step === STEPS.AWAITING_APPROVAL) {
-    await link();
+    if (linking) await begin(null);
     return { result: { step: plan.step, scene_set_id: set.id }, run: null };
   }
 
@@ -229,65 +324,114 @@ async function startLook(models, { showId, eventId, chosenSetId = null, override
     if (missing.length) throw new VenueLookImageError(`Base model ${plan.estimate.base_model} needs ${missing.join(', ')}, which is not configured.`, 503, 'PROVIDER_NOT_CONFIGURED');
     // One base at a time (a double click paid twice); a run stuck past
     // STUCK_AFTER_MS can be started again.
-    const [claimed] = await sequelize.query(
-      `UPDATE scene_sets SET generation_status = 'generating', updated_at = NOW()
-        WHERE id = :id AND (generation_status IS DISTINCT FROM 'generating' OR updated_at < NOW() - make_interval(secs => :stuck))
-        RETURNING id`,
-      { replacements: { id: set.id, stuck: STUCK_AFTER_MS / 1000 } });
-    if (!claimed.length) throw new VenueLookImageError(`The base of "${set.name}" is already being generated. Wait for it to finish.`, 409, 'BASE_GENERATING');
-    await link();
+    await begin(async (transaction) => {
+      const [claimed] = await sequelize.query(
+        `UPDATE scene_sets SET generation_status = 'generating', updated_at = NOW()
+          WHERE id = :id AND (generation_status IS DISTINCT FROM 'generating' OR updated_at < NOW() - make_interval(secs => :stuck))
+          RETURNING id`,
+        { replacements: { id: set.id, stuck: STUCK_AFTER_MS / 1000 }, transaction });
+      if (!claimed.length) throw new VenueLookImageError(`The base of "${set.name}" is already being generated. Wait for it to finish.`, 409, 'BASE_GENERATING');
+      return claimed[0];
+    });
     const run = async () => {
       try {
         const instance = await models.SceneSet.findByPk(set.id);
         // L8: the empty room, no event dressing, in the event's light (DJ bug 3).
-        await sceneGen.generateBaseScene(instance, models, { eventId: null, environmentEventId: event.id, overrides: overrides.value || {} });
+        // The base is saved through the Place finalizer: only while the
+        // Place is still not locked and the event is still at this set.
+        await sceneGen.generateBaseScene(instance, models, {
+          eventId: null,
+          environmentEventId: event.id,
+          overrides: overrides.value || {},
+          priorStatus: set.generation_status,
+          finalize: (work) => finalizePlace(sequelize, event.id, { sourceSetId: set.id, work }),
+        });
       } catch (err) {
-        console.error(`[VenueLookImage] base for "${set.name}" failed:`, err.message);
+        console.error(`[VenueLookImage] base for "${set.name}" failed:`, err.generatedSaveFailed ? sceneGen.errorClassOf(err) : err.message);
         // Generated and not saved (Generation B1): generateBaseScene put the
         // set's status back and kept the reason; it is not marked failed.
         if (err instanceof sceneGen.PlaceFinalizeRefusal) return;
-        await markBaseFailed(models.sequelize, set.id, err.message || String(err));
+        // The save itself failing is a failed base, with a fixed reason: not the database's message.
+        await markBaseFailed(models.sequelize, set.id, err.generatedSaveFailed ? sceneGen.GENERATED_SAVE_FAILED_MESSAGE : (err.message || String(err)));
       }
     };
     return { result: { step: plan.step, scene_set_id: set.id }, run };
   }
 
   if (!process.env.FAL_KEY) throw new VenueLookImageError('A look uses Flux Kontext, which needs FAL_KEY, which is not configured.', 503, 'PROVIDER_NOT_CONFIGURED');
-  const [[look]] = await sequelize.query(
-    `INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, brief, estimate_usd, error, created_at, updated_at)
-     VALUES (gen_random_uuid(), :setId, :eventId, 'generating', 'generated', CAST(:brief AS jsonb), :estimate, NULL, NOW(), NOW())
-     ON CONFLICT (scene_set_id, event_id) WHERE deleted_at IS NULL
-     -- The look's source and brief stay those of its current image until
-     -- this run has one: a failed run that kept the old image had already
-     -- named it generated from the new base, so a stale look was used
-     -- again and an uploaded one became generated (audit, 2026-10-15).
-     DO UPDATE SET status = 'generating', estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
-       WHERE scene_set_looks.status <> 'generating' OR scene_set_looks.updated_at < NOW() - make_interval(secs => :stuck)
-     RETURNING id, updated_at::text AS claimed_at`,
-    { replacements: { setId: set.id, eventId: event.id, brief: JSON.stringify(plan.brief), estimate: plan.estimate?.usd ?? null, stuck: STUCK_AFTER_MS / 1000 } });
-  // A look already generating is not started (and paid for) again.
-  if (!look) throw new VenueLookImageError('This look is already being generated. Wait for it to finish.', 409, 'LOOK_GENERATING');
-  await link();
+  const look = await begin(async (transaction) => {
+    const [[claimed]] = await sequelize.query(
+      `INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, brief, estimate_usd, error, created_at, updated_at)
+       VALUES (gen_random_uuid(), :setId, :eventId, 'generating', 'generated', CAST(:brief AS jsonb), :estimate, NULL, NOW(), NOW())
+       ON CONFLICT (scene_set_id, event_id) WHERE deleted_at IS NULL
+       -- The look's source and brief stay those of its current image until
+       -- this run has one: a failed run that kept the old image had already
+       -- named it generated from the new base, so a stale look was used
+       -- again and an uploaded one became generated (audit, 2026-10-15).
+       DO UPDATE SET status = 'generating', estimate_usd = EXCLUDED.estimate_usd, error = NULL, updated_at = NOW()
+         WHERE scene_set_looks.status <> 'generating' OR scene_set_looks.updated_at < NOW() - make_interval(secs => :stuck)
+       RETURNING id, updated_at::text AS claimed_at`,
+      { replacements: { setId: set.id, eventId: event.id, brief: JSON.stringify(plan.brief), estimate: plan.estimate?.usd ?? null, stuck: STUCK_AFTER_MS / 1000 }, transaction });
+    // A look already generating is not started (and paid for) again.
+    if (!claimed) throw new VenueLookImageError('This look is already being generated. Wait for it to finish.', 409, 'LOOK_GENERATING');
+    return claimed;
+  });
   const run = async () => {
+    // This run's row keeps its previous image, with the reason beside it.
+    const notKept = (reason) => sequelize.query(
+      `UPDATE scene_set_looks SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE ${OWN_LOOK_RUN}`,
+      { replacements: { id: look.id, claimedAt: look.claimed_at, error: String(reason).slice(0, 500) } });
+    let out;
     try {
-      const out = await sceneGen.generateDressedStill(set, briefToPrompt(plan.brief), plan.brief.approved_base.image_url, { suffix: `look-${event.id}` });
-      // Only this run's row: an upload (or a newer run) since is kept
-      // (audit, 2026-10-15: a late result overwrote an uploaded look).
-      const [done] = await sequelize.query(
-        `UPDATE scene_set_looks SET status = 'complete', image_url = :url, source = 'generated', brief = CAST(:brief AS jsonb),
-                cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
-          WHERE ${OWN_LOOK_RUN} RETURNING id`,
-        { replacements: { id: look.id, claimedAt: look.claimed_at, url: out.stillUrl, cost: out.cost, brief: JSON.stringify(plan.brief) } });
-      if (done.length) await dropDressedAngles(sequelize, look.id);
-      else console.warn(`[VenueLookImage] look ${look.id} changed while generating; this result is not kept`);
+      out = await sceneGen.generateDressedStill(set, briefToPrompt(plan.brief), plan.brief.approved_base.image_url, { suffix: `look-${event.id}` });
     } catch (err) {
       console.error(`[VenueLookImage] look for event ${event.id} on "${set.name}" failed:`, err.message);
-      await sequelize.query(
-        `UPDATE scene_set_looks SET status = ${KEEP_PREVIOUS_IMAGE}, error = :error, updated_at = NOW() WHERE ${OWN_LOOK_RUN}`,
-        { replacements: { id: look.id, claimedAt: look.claimed_at, error: String(err.message || err).slice(0, 500) } });
+      await notKept(err.message || err);
+      return;
     }
+    // The picture is made and stored. Its row is saved through the Place
+    // finalizer; the provider is not called again whatever that answers.
+    const orphan = (code, attempts, errorClass = null) => sceneGen.generatedNotSavedLine({
+      keys: [sceneGen.storageKeyOf(out.stillUrl)], eventId: event.id, setId: set.id, code, attempts, costUsd: out.cost, usageLogIds: out.usageLogIds, errorClass,
+    });
+    let saved;
+    try {
+      saved = await finalizePlace(sequelize, event.id, {
+        sourceSetId: set.id,
+        work: async ({ transaction }) => {
+          // Only this run's row: an upload (or a newer run) since is kept
+          // (audit, 2026-10-15: a late result overwrote an uploaded look).
+          const [done] = await sequelize.query(
+            `UPDATE scene_set_looks SET status = 'complete', image_url = :url, source = 'generated', brief = CAST(:brief AS jsonb),
+                    cost_usd = :cost, generated_at = NOW(), updated_at = NOW()
+              WHERE ${OWN_LOOK_RUN} RETURNING id`,
+            { replacements: { id: look.id, claimedAt: look.claimed_at, url: out.stillUrl, cost: out.cost, brief: JSON.stringify(plan.brief) }, transaction });
+          if (done.length) await dropDressedAngles(sequelize, look.id, transaction);
+          return done.length;
+        },
+      });
+    } catch (err) {
+      console.error(orphan('SAVE_FAILED', null, sceneGen.errorClassOf(err)));
+      await notKept(sceneGen.GENERATED_SAVE_FAILED_MESSAGE);
+      return;
+    }
+    if (saved.outcome !== 'OK') {
+      // Refused after the picture was made (the Place locked, the event's
+      // set changed, the event deleted, every try a lock conflict): the
+      // previous image stays, nothing is deleted from storage.
+      console.error(orphan(saved.code, saved.attempts));
+      await notKept(`${saved.message} ${sceneGen.GENERATED_NOT_SAVED_MESSAGE}`);
+      return;
+    }
+    if (!saved.value) console.warn(`[VenueLookImage] look ${look.id} changed while generating; this result is not kept`);
   };
-  return { result: { step: plan.step, scene_set_id: set.id, look_id: look.id }, run };
+  return { result: { step: plan.step, scene_set_id: set.id, look_id: look.id }, run: async () => {
+    try {
+      await run();
+    } catch (err) {
+      console.error(`[VenueLookImage] look for event ${event.id} could not be finished (${sceneGen.errorClassOf(err)})`);
+    }
+  } };
 }
 
 /**
@@ -308,20 +452,46 @@ async function uploadLook(models, { showId, eventId, chosenSetId = null, storeIm
   if (target.kind === 'choose') {
     throw new VenueLookImageError('This venue has several scene sets: choose one', 409, 'CHOOSE_SET', { options: target.options });
   }
-  const set = target.kind === 'create' ? await createVenueSet(models, event, target.locationId) : target.set;
+  const newRow = target.kind === 'create' ? await newVenueSetRow(models, event, target.locationId) : null;
+  const set = newRow ? unsavedSet(newRow) : target.set;
+  const sourceSetId = event.scene_set_id ?? null;
+  // The file is stored first, outside any transaction (a set that will be
+  // made already has its id). Then one finalization: the set, the look, the
+  // event's move (linked once the image is stored and its look saved,
+  // eighth audit) and the dressed angles cut from the old image.
   const imageUrl = await storeImage(set);
-  const [[look]] = await sequelize.query(
-    `INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, image_url, brief, estimate_usd, cost_usd, error, generated_at, created_at, updated_at)
-     VALUES (gen_random_uuid(), :setId, :eventId, 'complete', 'uploaded', :url, NULL, NULL, 0, NULL, NOW(), NOW(), NOW())
-     ON CONFLICT (scene_set_id, event_id) WHERE deleted_at IS NULL
-     DO UPDATE SET status = 'complete', source = 'uploaded', image_url = EXCLUDED.image_url, brief = NULL,
-                   estimate_usd = NULL, cost_usd = 0, error = NULL, generated_at = NOW(), updated_at = NOW()
-     RETURNING id, status, source, image_url`,
-    { replacements: { setId: set.id, eventId: event.id, url: imageUrl } });
-  // Linked once the image is stored and its look saved (eighth audit).
-  if (target.kind === 'create' || target.link) await linkEvent(sequelize, event.id, set.id);
-  await dropDressedAngles(sequelize, look.id);
-  return { scene_set_id: set.id, look };
+  const { storageKeyOf, errorClassOf } = require('./sceneGenerationService');
+  const stored = `storage_key=${storageKeyOf(imageUrl) || 'unknown'} event=${event.id} set=${set.id}`;
+  let saved;
+  try {
+    saved = await finalizePlace(sequelize, event.id, {
+      sourceSetId,
+      work: async ({ transaction }) => {
+        await takeSetRow(models, { newRow, setId: set.id, transaction });
+        const [[row]] = await sequelize.query(
+          `INSERT INTO scene_set_looks (id, scene_set_id, event_id, status, source, image_url, brief, estimate_usd, cost_usd, error, generated_at, created_at, updated_at)
+           VALUES (gen_random_uuid(), :setId, :eventId, 'complete', 'uploaded', :url, NULL, NULL, 0, NULL, NOW(), NOW(), NOW())
+           ON CONFLICT (scene_set_id, event_id) WHERE deleted_at IS NULL
+           DO UPDATE SET status = 'complete', source = 'uploaded', image_url = EXCLUDED.image_url, brief = NULL,
+                         estimate_usd = NULL, cost_usd = 0, error = NULL, generated_at = NOW(), updated_at = NOW()
+           RETURNING id, status, source, image_url`,
+          { replacements: { setId: set.id, eventId: event.id, url: imageUrl }, transaction });
+        if (newRow || target.link) await linkEvent(sequelize, event.id, set.id, { transaction, fromSetId: sourceSetId });
+        await dropDressedAngles(sequelize, row.id, transaction);
+        return row;
+      },
+    });
+  } catch (err) {
+    console.error(`[VenueLookImage] an uploaded look was stored and not attached: ${stored} outcome=SAVE_FAILED error=${errorClassOf(err)}; nothing was deleted from storage`);
+    if (err instanceof VenueLookImageError) throw new VenueLookImageError(`${err.message} ${UPLOAD_NOT_ATTACHED}`, err.status, err.code);
+    throw new Error(UPLOAD_SAVE_FAILED);
+  }
+  if (saved.outcome !== 'OK') {
+    // Refused after the file was stored: the established 409, saying so.
+    console.error(`[VenueLookImage] an uploaded look was stored and not attached: ${stored} outcome=${saved.code} attempts=${saved.attempts}; nothing was deleted from storage`);
+    throw new VenueLookImageError(`${saved.message} ${UPLOAD_NOT_ATTACHED}`, 409, saved.code);
+  }
+  return { scene_set_id: set.id, look: saved.value };
 }
 
 // The row a look's run may write: its own, while it is still the run.
@@ -351,10 +521,10 @@ const LOOK_LOCATION_JOIN = (sl, s, loc) => `LEFT JOIN world_locations ${loc}
  * A look with a new image: its dressed angles were cut from the old one,
  * so they are removed (soft) and made again from the new look.
  */
-async function dropDressedAngles(sequelize, lookId) {
+async function dropDressedAngles(sequelize, lookId, transaction = null) {
   await sequelize.query(
     `UPDATE scene_set_look_angles SET deleted_at = NOW(), updated_at = NOW() WHERE look_id = :lookId AND deleted_at IS NULL`,
-    { replacements: { lookId } });
+    { replacements: { lookId }, ...(transaction ? { transaction } : {}) });
 }
 
 /** A base that failed: generation_status failed, its reason kept in base_generation.last_error. */
@@ -366,6 +536,33 @@ async function markBaseFailed(sequelize, setId, reason) {
             updated_at = NOW()
       WHERE id = :setId`,
     { replacements: { setId, reason: String(reason || 'failed').slice(0, 500) } });
+}
+
+/**
+ * A base run that made a picture and did not save it (Generation B1: the
+ * Place locked meanwhile, or the base was approved meanwhile) leaves the set
+ * with the status it had and the reason in base_generation.last_error with
+ * failed_at. It is "not saved" while that failure is newer than the base's
+ * last save, generated or uploaded: a later generation or upload clears it.
+ * A set that is generating or failed says so through its status.
+ */
+function baseSaveState(set, baseGeneration) {
+  const at = (v) => {
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? null : t;
+  };
+  const failedAt = at(baseGeneration.failed_at);
+  const generatedAt = at(baseGeneration.generated_at);
+  const uploadedAt = at(baseGeneration.uploaded_at);
+  const savedAt = Math.max(generatedAt || 0, uploadedAt || 0);
+  const settled = set.generation_status !== 'generating' && set.generation_status !== 'failed';
+  const notSaved = Boolean(settled && baseGeneration.last_error && failedAt !== null && failedAt > savedAt);
+  return {
+    not_saved: notSaved,
+    failed_at: failedAt === null ? null : new Date(failedAt).toISOString(),
+    // The base's last save, generated or uploaded: what failed_at is read against.
+    generated_at: savedAt ? new Date(savedAt).toISOString() : null,
+  };
 }
 
 const isStuck = (updatedAt) => Boolean(updatedAt) && Date.now() - new Date(updatedAt).getTime() > STUCK_AFTER_MS;
@@ -407,10 +604,13 @@ async function eventLook(sequelize, { showId, eventId }) {
     look = await readLook();
   }
   const baseGeneration = typeof set.base_generation === 'string' ? JSON.parse(set.base_generation) : (set.base_generation || {});
+  const saveState = baseSaveState(set, baseGeneration);
   return {
     scene_set: {
       id: set.id, name: set.name, base_still_url: set.base_still_url || null, generation_status: set.generation_status || null,
-      error: set.generation_status === 'failed' ? (baseGeneration.last_error || null) : null,
+      // The reason of a failed base, or of a base that was generated and not saved (B2).
+      error: set.generation_status === 'failed' || saveState.not_saved ? (baseGeneration.last_error || null) : null,
+      ...saveState,
     },
     approved_base: approvedOf(location),
     look: look || null,
