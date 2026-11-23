@@ -118,6 +118,9 @@ async function loadStartReplay(models, episodeId, { beats = [] } = {}) {
     // first Start's commit, which a replay does not run again.
     linkedSecondaryEvents,
     postCommit: {},
+    // What the first Start's setup did, as the episode records it (B3): a
+    // replay says a failed locations step as the first answer did.
+    setup_status: (episode && (typeof episode.get === 'function' ? episode.get('setup_status') : episode.setup_status)) || null,
     replayed: true,
   };
 }

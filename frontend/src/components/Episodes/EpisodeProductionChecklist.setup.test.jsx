@@ -62,6 +62,37 @@ describe('Resume setup', () => {
     expect(banner.textContent).toContain('season slot: the episode is in no season slot yet (slot boom). Place it from the Season Roadmap.');
   });
 
+  // Generation B3 (Evoni, 2026-11-23): a Start whose locations were not
+  // saved (the event's set changed, its Place locked, or the save kept
+  // losing to a lock) leaves the episode visibly incomplete, with the
+  // reason and Resume setup.
+  test('a Start whose locations were not saved says so with the reason, and offers Resume setup', async () => {
+    plan = Array.from({ length: 14 }, (_, i) => ({ beat_number: i + 1, locked: false }));
+    coverage = { complete: true, present: 14, expected: 14, missing: [], duplicates: [], unknown: 0, text: '14 of 14 beats' };
+    const reason = "This event's scene set changed while this was being made. Nothing was saved over the newer choice. The episode's locations were not saved: set them in the episode's Locations.";
+    // Resume setup only checks the step (B3 correction): with the locations
+    // still not right it answers success: false with the step's reason.
+    const stillFailed = { status: 'failed', code: 'LOCATIONS_INCOMPLETE', roles: [{ role: 'event', name: null }, { role: 'home', name: null }],
+      reason: "The episode's locations are not complete. Missing: Home. Set them in the episode's Locations and Beat Plan, then choose Resume setup." };
+    vi.mocked(api.post).mockResolvedValue({ data: {
+      success: false, code: 'SETUP_INCOMPLETE', error: stillFailed.reason,
+      data: { scene_plan: { status: 'complete', created: 0, existing: 14, missing: [], failed: [] }, setup_status: { complete: false, steps: { scene_plan: { status: 'complete' }, locations: stillFailed } } },
+    } });
+    renderChecklist({ id: 'ep-1', show_id: 'show-1', setup_status: { complete: false, steps: {
+      scene_plan: { status: 'complete' },
+      locations: { status: 'failed', code: 'STALE_SOURCE_SET', reason, roles: stillFailed.roles },
+    } } });
+    const banner = await screen.findByTestId('setup-incomplete');
+    expect(banner.textContent).toContain('Setup did not finish.');
+    expect(banner.textContent).toContain(`locations: ${reason}`);
+    fireEvent.click(screen.getByTestId('setup-resume'));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/v1/episode-brief/ep-1/setup/resume'));
+    // Said as not finished, never as resumed; the alert stays.
+    expect(await screen.findByText(/The episode's locations are not complete\. Missing: Home\./)).toBeTruthy();
+    expect(screen.queryByText(/Setup resumed/)).toBeNull();
+    expect(screen.getByTestId('setup-incomplete')).toBeTruthy();
+  });
+
   test('a complete episode shows no repair', async () => {
     plan = Array.from({ length: 14 }, (_, i) => ({ beat_number: i + 1, locked: false }));
     coverage = { complete: true, present: 14, expected: 14, missing: [], duplicates: [], unknown: 0, text: '14 of 14 beats' };

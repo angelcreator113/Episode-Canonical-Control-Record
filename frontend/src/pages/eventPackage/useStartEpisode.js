@@ -14,6 +14,12 @@ import { useState } from 'react';
 import api from '../../services/api';
 import useOfferDecision from '../../hooks/useOfferDecision';
 
+/** The event's set as the Locations step was shown it: the server's own field, else the proposal's event entry; null for none. */
+export function shownEventSet(step) {
+  if (step && Object.prototype.hasOwnProperty.call(step, 'event_scene_set_id')) return step.event_scene_set_id ?? null;
+  return step?.locations?.find((l) => l.role === 'event')?.scene_set_id ?? null;
+}
+
 export default function useStartEpisode({ showId, eventId, gatesMet, used, moneyPending, readiness, moneyWarnings, setToast, navigate, joinFromWhosNew }) {
   const [starting, setStarting] = useState(false);
   const [startConfirmOpen, setStartConfirmOpen] = useState(false);
@@ -50,9 +56,14 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
 
   // Locations confirmed: ask who's new before anything is created. The
   // locations step stays mounted (hidden), so Back returns to it as edited.
+  // The scene set the step showed for the event goes with them (B3; Evoni,
+  // 2026-11-23): the value the server sent when the step loaded
+  // (event_scene_set_id; null when the event had no set), not anything
+  // chosen in the step. The server refuses a Start made against a set the
+  // event no longer has.
   const confirmStartEpisode = (locations) => {
     if (!gatesMet || used || starting) return;
-    setWhosNewStep({ locations });
+    setWhosNewStep({ locations, eventSceneSetId: shownEventSet(locationsStep) });
   };
 
   // "Who's new" answered (Task #3202). feature: profiles to feature; add:
@@ -60,7 +71,7 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
   // in the new episode. "No one new" passes nothing and changes nothing.
   const finishStartEpisode = async ({ feature = [], add = [], reveal = null } = {}) => {
     if (!gatesMet || used || starting || !whosNewStep) return;
-    const { locations } = whosNewStep;
+    const { locations, eventSceneSetId = null } = whosNewStep;
     setStarting(true);
     try {
       if ((feature.length || add.length) && joinFromWhosNew) {
@@ -80,12 +91,19 @@ export default function useStartEpisode({ showId, eventId, gatesMet, used, money
       // same choice is sent again; `check` is the read-only status question
       // the dialog asks after a network failure.
       const res = await offerDecision.run((decision, extra, config) => api.post(`/api/v1/world/${showId}/events/${eventId}/generate-episode`, {
-        draft_script: false, locations, ...(decision ? { offer_decision: decision, ...extra } : {}),
+        draft_script: false, locations, event_scene_set_id: eventSceneSetId, ...(decision ? { offer_decision: decision, ...extra } : {}),
       }, config), { check: () => api.get(`/api/v1/world/${showId}/events/${eventId}/start-readiness`) });
       if (res.data.success) {
         const ep = res.data.data.episode;
         setWhosNewStep(null);
         setLocationsStep(null);
+        // The episode exists, but its locations were not saved (B3): said
+        // here, and shown on the episode's checklist ("Setup did not
+        // finish") until they are set there.
+        const locationsSetup = res.data.data.setup_status?.steps?.locations;
+        if (locationsSetup?.status === 'failed') {
+          setToast(`The episode was started, but its locations were not saved: ${locationsSetup.reason || 'set them in the episode\'s Locations.'}`);
+        }
         // The new friend is revealed in this episode: hidden on The Pulse
         // until Lala arrives at the event (pulseReveals, moment lala_arrives).
         // The episode exists either way; a failed reveal is said, not undone.

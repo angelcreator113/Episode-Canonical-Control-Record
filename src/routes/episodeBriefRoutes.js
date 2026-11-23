@@ -661,15 +661,35 @@ router.post('/:episodeId/plan/lock-all', requireAuth, authorize(['ADMIN']), asyn
 // ── RESUME SETUP (audit STATE-01) ─────────────────────────────────────────────
 // Makes the scene-plan beats a partly initialised episode is missing and
 // records the outcome on episodes.setup_status. Never a second episode.
+//
+// An incomplete setup's sentence (B3 correction, Evoni 2026-11-23): it was
+// built from the scene-plan step alone, so a setup whose beats all exist
+// and whose locations step is failed read "0 beats missing ()". With that
+// step failed and no beat missing, the sentence is the step's own recorded
+// reason; with beats missing too, the beats sentence as it always was, then
+// the reason. Nothing is read or worked out here: both come from what
+// resumeEpisodeSetup returns. The top-level code stays SETUP_INCOMPLETE;
+// the step's own code is data.setup_status.steps.locations.code.
+// A failed locations step with no code was recorded before the codes were
+// (its reason was then the error's own message): its reason is not echoed.
+const LOCATIONS_NOT_SAVED = "The episode's locations were not saved. Set them in the episode's Locations, then choose Resume setup.";
+function setupIncompleteError(result) {
+  const step = result.scene_plan;
+  const beats = `Setup is still incomplete: ${step.missing.length} beat${step.missing.length !== 1 ? 's' : ''} missing (${step.missing.join(', ')})`;
+  const locations = result.setup_status.steps?.locations;
+  if (locations?.status !== 'failed') return beats;
+  const reason = locations.code && typeof locations.reason === 'string' && locations.reason ? locations.reason : LOCATIONS_NOT_SAVED;
+  return step.missing.length ? `${beats}. ${reason}` : reason;
+}
+
 router.post('/:episodeId/setup/resume', requireAuth, authorize(['ADMIN']), async (req, res) => {
   try {
     const { resumeEpisodeSetup } = require('../services/episodeGeneratorService');
     const result = await resumeEpisodeSetup(models, req.params.episodeId);
     if (!result) return res.status(404).json({ success: false, error: 'Episode not found' });
-    const step = result.scene_plan;
     return res.json({
       success: result.setup_status.complete,
-      ...(result.setup_status.complete ? {} : { error: `Setup is still incomplete: ${step.missing.length} beat${step.missing.length !== 1 ? 's' : ''} missing (${step.missing.join(', ')})`, code: 'SETUP_INCOMPLETE' }),
+      ...(result.setup_status.complete ? {} : { error: setupIncompleteError(result), code: 'SETUP_INCOMPLETE' }),
       data: result,
     });
   } catch (err) {

@@ -116,7 +116,7 @@ describe('EventPackagePage money warnings (§8(gg) MB4)', () => {
     // "Who's new" (Task #3202) follows the locations; No one new starts as before.
     fireEvent.click(await screen.findByTestId('wn-none'));
     fireEvent.click(screen.getByTestId('wn-start'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [] }, KEYED));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [], event_scene_set_id: null }, KEYED));
   });
 
   test('no money warning: no block, and a complete event starts directly', async () => {
@@ -130,7 +130,7 @@ describe('EventPackagePage money warnings (§8(gg) MB4)', () => {
     // "Who's new" (Task #3202) follows the locations; No one new starts as before.
     fireEvent.click(await screen.findByTestId('wn-none'));
     fireEvent.click(screen.getByTestId('wn-start'));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [] }, KEYED));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(START_URL, { draft_script: false, locations: [], event_scene_set_id: null }, KEYED));
     expect(screen.queryByTestId('start-confirm')).toBeNull();
   });
 });
