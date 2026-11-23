@@ -62,7 +62,13 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                VALUES (:id, :show, 'Gala', 'invite', 'ready', 5, :sceneSetId, NOW(), NOW())`, { id, show, sceneSetId });
     return id;
   }
-  const start = (eventId, locations) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`)).send({ draft_script: false, locations });
+  // Generation B3: a Start that sends locations says which set the step
+  // showed for the event; here, the set the event has when it is started.
+  const start = async (eventId, locations) => {
+    const [shown] = await rows('SELECT scene_set_id FROM world_events WHERE id = :eventId', { eventId });
+    return auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`))
+      .send({ draft_script: false, locations, event_scene_set_id: shown?.scene_set_id ?? null });
+  };
 
   beforeAll(async () => {
     const qi = sequelize.getQueryInterface();

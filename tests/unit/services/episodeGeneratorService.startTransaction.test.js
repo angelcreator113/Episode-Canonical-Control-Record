@@ -197,36 +197,55 @@ describe('generateEpisodeFromEvent — transactional Start (Task #1906)', () => 
     expect(models.Episode.create).not.toHaveBeenCalled();
   });
 
-  test('the chosen locations are linked in their own transaction after the Start commits (L3, L6)', async () => {
+  // Generation B3 (Evoni, 2026-11-23): the locations are saved after the
+  // commit through the Place finalizer (episodeLocationsService
+  // .applyStartLocations), no longer in a transaction this function opens;
+  // a request that sends locations says which set the step showed.
+  test('the chosen locations are saved after the Start commits, through applyStartLocations (L3, L6; B3)', async () => {
     const { models, store, log } = makeWorld();
     const LOCATIONS = [{ role: 'event', scene_set_id: 'set-venue', name: null }, { role: 'home', scene_set_id: 'set-home', name: null }];
     jest.spyOn(episodeLocations, 'resolveStartLocations').mockResolvedValue(LOCATIONS);
-    const apply = jest.spyOn(episodeLocations, 'applyLocations').mockImplementation(async () => {
+    const apply = jest.spyOn(episodeLocations, 'applyStartLocations').mockImplementation(async () => {
       // The Start has committed by now.
       expect(log.transactions[0].state).toBe('committed');
       expect(store.episodes).toHaveLength(1);
+      return { status: 'complete', count: LOCATIONS.length };
     });
 
-    await generateEpisodeFromEvent(EVENT, models, { showId: 'show-1', locations: LOCATIONS });
+    const result = await generateEpisodeFromEvent(EVENT, models, { showId: 'show-1', locations: LOCATIONS, eventSceneSetId: EVENT.scene_set_id ?? null });
 
-    // Start, then the season slot assignment (A1.1), then the locations.
-    expect(log.transactions).toHaveLength(3);
+    // Start, then the season slot assignment (A1.1); the locations' own
+    // transaction is the finalizer's, inside applyStartLocations.
+    expect(log.transactions).toHaveLength(2);
     expect(apply).toHaveBeenCalledTimes(1);
-    expect(apply.mock.calls[0][1]).toEqual({ episodeId: 'ep-new', locations: LOCATIONS, transaction: log.transactions[2] });
+    expect(apply.mock.calls[0][1]).toEqual({ episodeId: 'ep-new', eventId: 'ev-1', sourceSetId: EVENT.scene_set_id ?? null, locations: LOCATIONS });
     expect(models.Episode.create.mock.calls[0][1]).toEqual({ transaction: log.transactions[0] });
+    expect(result.setup_status.steps.locations).toEqual({ status: 'complete', count: 2 });
   });
 
-  test('a locations link that fails is logged and does not fail the Start', async () => {
+  test('locations sent without the set the step showed are refused before anything is created; a set that is not the event\'s is 409 STALE_SOURCE_SET', async () => {
+    const { models, store, log } = makeWorld();
+    const LOCATIONS = [{ role: 'home', scene_set_id: 'set-home', name: null }];
+    jest.spyOn(episodeLocations, 'resolveStartLocations').mockResolvedValue(LOCATIONS);
+    await expect(generateEpisodeFromEvent(EVENT, models, { showId: 'show-1', locations: LOCATIONS }))
+      .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/^event_scene_set_id is required with locations/) });
+    await expect(generateEpisodeFromEvent(EVENT, models, { showId: 'show-1', locations: LOCATIONS, eventSceneSetId: 'another-set' }))
+      .rejects.toMatchObject({ status: 409, code: 'STALE_SOURCE_SET' });
+    expect(log.transactions).toHaveLength(0);
+    expect(store.episodes).toHaveLength(0);
+  });
+
+  test('a locations step that fails does not fail the Start, and the Start says its setup is not complete', async () => {
     const { models, store } = makeWorld();
     jest.spyOn(episodeLocations, 'resolveStartLocations').mockResolvedValue([{ role: 'home', scene_set_id: 'set-home', name: null }]);
-    jest.spyOn(episodeLocations, 'applyLocations').mockRejectedValue(new Error('link boom'));
+    jest.spyOn(episodeLocations, 'applyStartLocations').mockResolvedValue({ status: 'failed', code: 'PLACE_LOCKED', reason: 'locked' });
 
     const result = await generateEpisodeFromEvent(EVENT, models, { showId: 'show-1' });
 
     expect(result.episode.id).toBe('ep-new');
     expect(store.episodes).toHaveLength(1);
     expect(store.events['ev-1'].used_in_episode_id).toBe('ep-new');
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Episode locations link failed for ep-new'), 'link boom');
+    expect(result.setup_status).toMatchObject({ complete: false, steps: { locations: { status: 'failed', code: 'PLACE_LOCKED', reason: 'locked' } } });
   });
 
   // A1.1: the season slot assignment never fails the Start, and is never

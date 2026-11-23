@@ -58,6 +58,10 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, auth
       // L3 (Evoni, 2026-10-02): the locations confirmed in the Episode
       // Locations step; absent, the show's defaults and the event's set.
       locations: req.body?.locations,
+      // B3 (Evoni, 2026-11-23): the scene set the step showed for the event
+      // (null: none), required with locations; a Start made against another
+      // set than the event has now is refused (409 STALE_SOURCE_SET).
+      eventSceneSetId: req.body?.event_scene_set_id,
       idempotencyKey: idem.key,
       // The explicit offer decision (services/startOfferDecision): asked for
       // with 409 OFFER_DECISION_REQUIRED when the event's opportunity is
@@ -77,6 +81,7 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, auth
         success: true,
         data: result,
         script_drafted: false,
+        setup_complete: result.setup_status?.complete !== false,
         replayed: true,
         message: `Episode "${result.episode?.title || ''}" was already started by this request.`,
       });
@@ -127,11 +132,16 @@ router.post('/world/:showId/events/:eventId/generate-episode', requireAuth, auth
       }
     }
 
+    // B3: the episode is created either way; a locations step that failed
+    // after the commit is said, so this is not read as a complete setup.
+    const locationsStep = result.setup_status?.steps?.locations;
+    const locationsNote = locationsStep?.status === 'failed' ? `. Its locations were not saved: ${locationsStep.reason}` : '';
     return res.status(201).json({
       success: true,
       data: result,
       script_drafted: scriptDrafted,
-      message: `Episode "${result.episode.title}" created with ${result.scenePlan.length} beats, ${result.socialTasks.length} social tasks${scriptDrafted ? ' + draft script' : ''}`,
+      setup_complete: result.setup_status?.complete !== false,
+      message: `Episode "${result.episode.title}" created with ${result.scenePlan.length} beats, ${result.socialTasks.length} social tasks${scriptDrafted ? ' + draft script' : ''}${locationsNote}`,
     });
   } catch (error) {
     if (error.code === EVENT_EPISODE_CONFLICT_CODE) {
@@ -184,7 +194,9 @@ router.get('/world/:showId/events/:eventId/episode-locations', requireAuth, asyn
     // The event's look, shown read-only in the step (Q10), and the angles
     // the planner will ask for that the sets lack (L4, Q19).
     const angleGaps = await locationAngleGaps(models.sequelize, data.locations);
-    return res.json({ success: true, data: { ...data, event_look: readVenueLook(event.venue_look), angle_gaps: angleGaps } });
+    // event_scene_set_id (B3): the event's set as this step is shown it, sent
+    // back with Start Episode so a set changed meanwhile is noticed.
+    return res.json({ success: true, data: { ...data, event_scene_set_id: event.scene_set_id ?? null, event_look: readVenueLook(event.venue_look), angle_gaps: angleGaps } });
   } catch (error) {
     console.error('Episode locations proposal error:', error);
     return res.status(500).json({ success: false, error: error.message });

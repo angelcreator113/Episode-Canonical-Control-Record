@@ -51,7 +51,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                VALUES (:id, :show, 'Gala', 'invite', 'ready', 5, :sceneSetId, NOW(), NOW())`, { id, show, sceneSetId });
     return id;
   }
-  const start = (eventId, body) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`)).send({ draft_script: false, ...body });
+  // Generation B3: a Start that sends locations says which set the step
+  // showed for the event (every event here is held at the glasshouse).
+  const start = (eventId, body) => auth(request(app).post(`/api/v1/world/${show}/events/${eventId}/generate-episode`))
+    .send({ draft_script: false, ...(body?.locations && !('event_scene_set_id' in body) ? { event_scene_set_id: sets.glasshouse } : {}), ...body });
   const links = (ep) => rows(`SELECT scene_set_id, role, role_name, sort_order FROM scene_set_episodes
                                 WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY sort_order`, { ep });
 

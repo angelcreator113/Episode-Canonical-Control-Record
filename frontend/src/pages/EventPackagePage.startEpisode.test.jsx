@@ -130,6 +130,8 @@ describe('EventPackagePage — Start Episode lands on the Overview', () => {
     expect(api.post).toHaveBeenCalledWith(START_URL, {
       draft_script: false,
       locations: [{ role: 'home', scene_set_id: HOME.id, name: null }],
+      // B3: the set the step showed for the event (this event has none).
+      event_scene_set_id: null,
     }, KEYED);
   });
 
@@ -229,6 +231,7 @@ describe('EventPackagePage — the Episode Locations step at Start Episode', () 
         { role: 'closet', scene_set_id: 'set-new', name: null },
         { role: 'extra', scene_set_id: 'set-car', name: 'Car' },
       ],
+      event_scene_set_id: null,
     }, KEYED);
   });
 

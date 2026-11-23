@@ -393,6 +393,12 @@ async function resumeEpisodeSetup(models, episodeId) {
   await require('./beatScenesService').syncBeatScenesQuietly(models.sequelize, episodeId, 'resume setup');
   const steps = { ...(episode.setup_status?.steps || {}), scene_plan: scenePlanStep(result) };
   if (!steps.locations) steps.locations = { status: 'complete' };
+  // A locations step that failed at Start (B3) is done once the episode has
+  // its locations: they are set again from the episode's Locations, and
+  // this is where the step stops reading as failed.
+  if (steps.locations.status === 'failed' && Array.isArray(locations) && locations.length) {
+    steps.locations = { status: 'complete', count: locations.length };
+  }
   const setup_status = await recordSetupStatus(models, episodeId, steps);
   return { episode_id: episodeId, scene_plan: steps.scene_plan, setup_status };
 }
@@ -678,8 +684,19 @@ Return ONLY JSON.` }],
   // anything is created (a bad choice is a 400 and leaves no episode); with
   // none given, the show's defaults and the event's set (B1's oldest home
   // when there is no default).
-  const { resolveStartLocations } = require('./episodeLocationsService');
-  const locations = await resolveStartLocations(models.sequelize, { showId, event, locations: options.locations });
+  // Generation B3 (Evoni, 2026-11-23): the request says which scene set the
+  // Locations step showed for the event (options.eventSceneSetId; null: none
+  // was shown). It is checked here against the event as it was read, before
+  // anything is created, and again under the event lock below. A request
+  // that sends its own locations must send it; one that sends none (a
+  // regenerate, a multi-event Start) takes the event's set as it is under
+  // the lock.
+  const { resolveStartLocations, assertEventSetShown } = require('./episodeLocationsService');
+  const sentLocations = options.locations !== undefined && options.locations !== null;
+  assertEventSetShown({ shown: options.eventSceneSetId, current: event.scene_set_id, hasLocations: sentLocations });
+  let locations = await resolveStartLocations(models.sequelize, { showId, event, locations: options.locations });
+  // The set the event is held at, as read under the event lock in the transaction below.
+  let lockedEventSetId = event.scene_set_id ?? null;
 
   // ── 2. Create the Episode, its Brief and the event link — one transaction ──
   // Task #1906: the Episode, the Brief (which records the source event in
@@ -719,6 +736,21 @@ Return ONLY JSON.` }],
     // share events never wait on each other in opposite orders.
     for (const id of [eventId, ...secondaryEvents.map((e) => e.id)].map(String).sort()) {
       await lockLiveEvent(models.sequelize, id, { transaction });
+    }
+    // B3: the event's set, read again now that its row is held. A request
+    // made against another set is refused here, with nothing created (the
+    // window between the route's read and this lock); a request with no
+    // locations of its own places the event at this set, not the one read
+    // before the lock.
+    const [heldEvent] = await models.sequelize.query(
+      'SELECT scene_set_id FROM world_events WHERE id = :eventId', { replacements: { eventId }, transaction });
+    if (Array.isArray(heldEvent) && heldEvent.length) {
+      const held = heldEvent[0].scene_set_id ?? null;
+      assertEventSetShown({ shown: options.eventSceneSetId, current: held, hasLocations: false });
+      if (!sentLocations && String(held || '') !== String(lockedEventSetId || '')) {
+        locations = await resolveStartLocations(models.sequelize, { showId, event: { scene_set_id: held }, locations: undefined });
+      }
+      lockedEventSetId = held;
     }
     if (replacingEpisodeId) {
       await require('./episodeSecondaryEvents').assertRegenerateHasNoSecondary(models.sequelize, { episodeId: replacingEpisodeId, eventId, transaction });
@@ -1011,19 +1043,17 @@ Return ONLY JSON.` }],
   // (event, home, closet, extras). It never fails the episode: a failure is
   // logged, and the locations can be set again from the episode while it is
   // a draft.
-  try {
-    const { applyLocations } = require('./episodeLocationsService');
-    if (locations.length) {
-      await models.sequelize.transaction((transaction) => applyLocations(models.sequelize, { episodeId: episode.id, locations, transaction }));
-    }
-    setupSteps.locations = { status: 'complete', count: locations.length };
-  } catch (linkErr) {
-    console.error(`[EpisodeGenerator] Episode locations link failed for ${episode.id}:`, linkErr.message);
-    setupSteps.locations = { status: 'failed', reason: linkErr.message };
-  }
+  // B3: saved through the Place finalizer, with the set the event had under
+  // this Start's lock as source. An event moved, locked or deleted since the
+  // commit, or a save that kept losing to a lock, is a failed step with its
+  // reason (never the database's message): the newer choice is not written
+  // over, and the Start does not report its setup as complete.
+  setupSteps.locations = await require('./episodeLocationsService').applyStartLocations(models.sequelize, {
+    episodeId: episode.id, eventId, sourceSetId: lockedEventSetId, locations,
+  });
   // What the setup did (audit STATE-01): the episode stays visibly
   // incomplete until Resume setup repairs it.
-  await recordSetupStatus(models, episode.id, setupSteps);
+  const setupStatus = await recordSetupStatus(models, episode.id, setupSteps);
 
   // ── Parse automation data from event (used by feed moments + social tasks) ──
   const automation = (typeof event.canon_consequences === 'string'
@@ -1323,6 +1353,10 @@ Return ONLY JSON.` }],
     // The two steps that run after the commit and never undo it: the season
     // slot and the primary event's deliverables naming the episode.
     postCommit: { season_slot: seasonSlotStep, deliverable_stamp: deliverableStampStep },
+    // What the setup after the commit did (episodes.setup_status): complete
+    // only when every step is. A failed locations step is said here, so the
+    // page that started the episode can say it too.
+    setup_status: setupStatus,
   };
 }
 
