@@ -114,18 +114,26 @@ async function refuseEventSet(sequelize, { event, setId, showId = null, transact
  * row this transaction already holds, in either mode, is not locked again).
  * Before any event row is locked.
  */
-async function shareLinkedEpisodes(sequelize, eventIds, { transaction, extra = [], mode = 'share' } = {}) {
+async function shareLinkedEpisodes(sequelize, eventIds, { transaction, extra = [], exclusive = [] } = {}) {
   const { lockEpisodes } = require('../utils/episodeLocks');
   const { linkedLiveEpisodes } = require('../utils/eventEpisodeLink');
   const ids = extra.filter(Boolean).map(String);
   for (const eventId of [].concat(eventIds || []).filter(Boolean)) {
     for (const row of await linkedLiveEpisodes(sequelize, eventId, { transaction })) ids.push(String(row.id));
   }
-  // mode 'update': a caller that goes on to lock one of them FOR UPDATE
-  // itself (inject: the episode whose script it saves) takes them all so in
-  // this one statement, as the relink guard does, so that no lock is ever
-  // strengthened in place.
-  return lockEpisodes(sequelize, ids, { transaction, mode });
+  // exclusive: episodes the caller goes on to lock FOR UPDATE itself
+  // (inject: the episode whose script it saves). lockEpisodes takes one
+  // mode per statement, so with any of those the rows are taken one by one
+  // in ascending id order, each in the mode it needs, FOR UPDATE at once
+  // for those (never FOR SHARE first and strengthened later) and FOR SHARE
+  // for the rest, which a clip upload's FOR SHARE does not wait for. One
+  // ascending pass is the same order as one ordered statement.
+  const strong = new Set(exclusive.filter(Boolean).map(String));
+  if (!strong.size) return lockEpisodes(sequelize, ids, { transaction, mode: 'share' });
+  const all = [...new Set([...ids, ...strong])].sort();
+  const held = [];
+  for (const id of all) held.push(...await lockEpisodes(sequelize, [id], { transaction, mode: strong.has(id) ? 'update' : 'share' }));
+  return held;
 }
 
 /**

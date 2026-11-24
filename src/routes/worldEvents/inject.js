@@ -216,13 +216,13 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, authorize(['AD
       // C1 PR 2 (Evoni, 2026-11-24): episode-first for everything this
       // transaction can reach. The episode whose script is saved and the
       // event's other linked episodes (the scene-set link below can give
-      // them a location) are locked in ONE ascending statement, FOR UPDATE
-      // (saveEpisodeScript locks its episode FOR UPDATE itself: taken
-      // together here, no lock is strengthened in place), before the
-      // event row. A transaction that lost to a lock is tried again.
+      // them a location) are locked in one ascending pass before the event
+      // row: this episode FOR UPDATE (saveEpisodeScript locks it FOR UPDATE
+      // itself: taken so here, no lock is strengthened in place), the
+      // others FOR SHARE. A transaction that lost to a lock is tried again.
       const place = require('../../services/eventPlaceSync');
       sceneSet = await place.inEpisodeFirstTransaction(models.sequelize, async (t) => {
-        await place.shareLinkedEpisodes(models.sequelize, eventId, { transaction: t, extra: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(episode_id)) ? [episode_id] : [], mode: 'update' });
+        await place.shareLinkedEpisodes(models.sequelize, eventId, { transaction: t, exclusive: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(episode_id)) ? [episode_id] : [] });
         saved = await saveEpisodeScript(models, episode_id, {
           writer: 'W5',
           source: 'generate',

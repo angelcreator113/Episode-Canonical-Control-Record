@@ -113,8 +113,11 @@ async function linkEventSceneSet(sequelize, { event, episodeId, transaction, cho
     // and is never put in a reason.
     const { isLockConflict, RetryableConflictError } = require('../utils/episodeLocks');
     if (isLockConflict(err) || err instanceof RetryableConflictError) throw err;
-    console.error('[eventSceneSetLink] scene set link failed:', err.message);
-    return { status: STATUS.NEEDS_RECONNECTING, scene_set_id: wanted, reason: `The scene set could not be linked: ${err.message}` };
+    // Any other failure: the link was not made (the savepoint is rolled
+    // back) and the answer says so in a fixed sentence. The error's own
+    // text can be the database's, so only its class is logged.
+    console.error(`[eventSceneSetLink] scene set link failed: event=${event?.id || 'none'} episode=${episodeId || 'none'} error=${require('./sceneGenerationService').errorClassOf(err)}`);
+    return { status: STATUS.NEEDS_RECONNECTING, scene_set_id: wanted, reason: 'The scene set could not be linked. Try again, or choose a scene set.' };
   }
 }
 
