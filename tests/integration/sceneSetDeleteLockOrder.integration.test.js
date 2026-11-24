@@ -1183,6 +1183,29 @@ const observed = [];
   });
 
 
+  // ══ RECORDED GAP (for PR 2 / S1; Evoni, 2026-11-24) ════════════════════
+  // Not changed by PR 1, and not a delete: written down here as it is today.
+  describe('RECORDED GAP (PR 2 / S1, not changed here): the Place of a FILMED, not accepted episode\'s event can still be changed by the event edit and by scene-set-link', () => {
+    test('the event edit (PUT event, a set change) on a filmed episode\'s event: 200, the event and the episode\'s Event location moved', async () => {
+      const { ep, ev } = await eventOnly(w.s);
+      await film(ep);
+      const res = await putEvent(ev, { scene_set_id: w.t });
+      expect(res.status).toBe(200);
+      expect((await eventRow(ev)).scene_set_id).toBe(w.t);
+      expect(await linksOf(ep)).toEqual([{ scene_set_id: w.t, role: 'event' }]);
+      // The delete of that set is refused for the same episode.
+      expect((await del(w.t, ANYWAY)).body.code).toBe('EPISODE_SNAPSHOT_FROZEN');
+    });
+
+    test('scene-set-link (a chosen set) on a filmed episode\'s event: 200, the event moved', async () => {
+      const { ep, ev } = await eventOnly(w.s, { brief: false });
+      await film(ep);
+      const res = await linkSet(ev, w.t);
+      expect(res.status).toBe(200);
+      expect((await eventRow(ev)).scene_set_id).toBe(w.t);
+    });
+  });
+
   describe('the network guard', () => {
     test('no external network attempt in this file', () => {
       const mine = networkGuard.getState().events.slice(guardEventsAtStart);
