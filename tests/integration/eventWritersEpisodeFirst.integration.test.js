@@ -102,6 +102,7 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
   const linkSet = (ev, setId) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/scene-set-link`)).send(setId ? { scene_set_id: setId } : {});
   const inject = (ev, ep) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/inject`)).send({ episode_id: ep });
   const version = (setId, body) => asAdmin(request(app).put(`/api/v1/scene-sets/${setId}/version`)).send(body);
+  const uploadLook = (ev) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/look/upload`)).attach('image', PNG, { filename: 'look.png', contentType: 'image/png' });
   const save = (ep, locations) => asAdmin(request(app).put(`/api/v1/episodes/${ep}/locations`)).send({ locations });
   const start = (ev, body = {}) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`)).send({ draft_script: false, ...body });
   const generateVenue = (ev) => asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-venue`)).send({});
@@ -192,6 +193,7 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
   async function race(first, second, gate = holdsEventRow) {
     const g = gateOn(gate);
     let how = null;
+    let waitedOn = null;
     pause.mockImplementation(async () => {
       how = how || 'paused';
       g.open();
@@ -206,15 +208,19 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
     const end = Date.now() + 8000;
     while (!how && Date.now() < end) {
       if (done) how = 'done';
-      else if (await waiting() > 0) how = 'blocked';
-      else await sleep(15);
+      else if (await waiting() > 0) {
+        // The statement the waiting session is in: which row it waits for.
+        const [q] = await rows("SELECT query FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND wait_event_type = 'Lock'");
+        waitedOn = /FROM episodes|"episodes"/.test(q?.query || '') ? 'episode' : (/world_events/.test(q?.query || '') ? 'event' : (/scene_sets/.test(q?.query || '') ? 'set' : 'other'));
+        how = 'blocked';
+      } else await sleep(15);
     }
     g.open();
     const [a, b] = await Promise.all([p1, p2]);
     const errors = lockErrors();
     trace.uninstall();
     trace = null;
-    return { a, b, how, errors, pauses: pause.mock.calls.length };
+    return { a, b, how, waitedOn, errors, pauses: pause.mock.calls.length };
   }
   /** No deadlock, no 500, no database text; a thrown service error is one of the service's own. */
   const clean = (out) => {
@@ -470,20 +476,83 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       await noReferenceToARemovedSet();
     });
 
-    test('W4 makeEveryday against W1 and W3, both orders', async () => {
-      for (const other of ['W1 the event edit', 'W3 makeEventVersion']) {
-        for (const everydayFirst of [true, false]) {
-          const x = await eventOnly(w.s);
-          const versionSet = await set('Version');
-          expect((await settle(makeEventVersion(sequelize, { setId: versionSet, everydaySetId: w.v, eventId: x.ev }))).ok).toBe(true);
-          await run('UPDATE scene_set_episodes SET deleted_at = NOW() WHERE episode_id = :ep', { ep: x.ep }); // no Event location row again
-          const everyday = () => settle(makeEveryday(sequelize, versionSet, { returnEvent: true }));
-          const writer = () => WRITERS[other](x, w.u);
-          const out = everydayFirst ? await race(everyday, writer) : await race(writer, everyday);
-          clean(out);
-          expect([w.v, w.u]).toContain(await setOf(x.ev));
-        }
+    // W4, each pair its own case. The event is held at a version of the everyday set V, and its episode has no
+    // Event location row. The first writer is held at the event row; the second is seen waiting, then both finish.
+    describe('W4 makeEveryday (the event returned to the everyday set) against each writer', () => {
+      async function versioned() {
+        const x = await eventOnly(w.s);
+        const versionSet = await set('Version');
+        expect((await settle(makeEventVersion(sequelize, { setId: versionSet, everydaySetId: w.v, eventId: x.ev }))).ok).toBe(true);
+        await run('UPDATE scene_set_episodes SET deleted_at = NOW() WHERE episode_id = :ep', { ep: x.ep }); // no Event location row again
+        return { ...x, versionSet, everyday: () => settle(makeEveryday(sequelize, versionSet, { returnEvent: true })) };
       }
+      const versionOf = async (id) => (await rows('SELECT version_of_set_id FROM scene_sets WHERE id = :id', { id }))[0].version_of_set_id;
+
+      test.each(Object.keys(WRITERS))('W4 first, then %s: the writer waits for the event row; the event is returned to the everyday set, then moved by the writer', async (name) => {
+        const x = await versioned();
+        const out = await race(x.everyday, () => WRITERS[name](x, w.u));
+        clean(out);
+        expect([out.how, out.waitedOn]).toEqual(['blocked', 'event']);
+        expect(out.errors).toEqual([]);
+        expect(out.a.ok).toBe(true);
+        expect(out.a.value.returned).toMatchObject({ scene_set_id: w.v, events: [{ id: x.ev }] });
+        expect(okOf(out.b)).toBe(true);
+        expect(await setOf(x.ev)).toBe(w.u);
+        expect(await versionOf(x.versionSet)).toBeNull();
+        expect(await linksOf(x.ep)).toEqual([{ scene_set_id: w.u, role: 'event' }]);
+      });
+
+      test.each(Object.keys(WRITERS))('%s first, then W4: W4 waits for the event row, finds the event gone from its set and returns none; the event stays where the writer put it', async (name) => {
+        const x = await versioned();
+        const out = await race(() => WRITERS[name](x, w.u), x.everyday);
+        clean(out);
+        expect([out.how, out.waitedOn]).toEqual(['blocked', 'event']);
+        expect(out.errors).toEqual([]);
+        expect(okOf(out.a)).toBe(true);
+        expect(out.b.ok).toBe(true);
+        expect(out.b.value).toEqual({ scene_set_id: x.versionSet, version_of: null, returned: null });
+        expect(await setOf(x.ev)).toBe(w.u);
+        expect(await versionOf(x.versionSet)).toBeNull();
+        expect(await linksOf(x.ep)).toEqual([{ scene_set_id: w.u, role: 'event' }]);
+      });
+
+      test('W4 first, then inject (the same event into its own episode): inject waits for the EPISODE row (it needs it FOR UPDATE; W4 holds it FOR SHARE); the event is at the everyday set and the episode\'s location is there', async () => {
+        const x = await versioned();
+        const out = await race(x.everyday, () => send(inject(x.ev, x.ep)));
+        clean(out);
+        expect([out.how, out.waitedOn]).toEqual(['blocked', 'episode']);
+        expect(out.errors).toEqual([]);
+        expect(out.a.ok).toBe(true);
+        expect(out.b.status).toBe(200);
+        expect(out.b.body).toMatchObject({ attached: true, scene_set_linked: true, scene_set: { scene_set_id: w.v } });
+        expect(await setOf(x.ev)).toBe(w.v);
+        expect(await linksOf(x.ep)).toEqual([{ scene_set_id: w.v, role: 'event' }]);
+      });
+
+      test('inject first, then W4: W4 waits for the EPISODE row inject holds FOR UPDATE; inject links the episode at the version, then W4 returns the event and the location follows', async () => {
+        const x = await versioned();
+        const out = await race(() => send(inject(x.ev, x.ep)), x.everyday);
+        clean(out);
+        expect([out.how, out.waitedOn]).toEqual(['blocked', 'episode']);
+        expect(out.errors).toEqual([]);
+        expect(out.a.status).toBe(200);
+        expect(out.a.body.scene_set).toMatchObject({ status: 'linked', scene_set_id: x.versionSet });
+        expect(out.b.ok).toBe(true);
+        expect(await setOf(x.ev)).toBe(w.v);
+        expect(await linksOf(x.ep)).toEqual([{ scene_set_id: w.v, role: 'event' }]);
+      });
+
+      test('W4 twice on one set: the second waits for the event row, then finds the set no longer a version (409 NOT_A_VERSION); the event is returned once', async () => {
+        const x = await versioned();
+        const out = await race(x.everyday, x.everyday);
+        clean(out);
+        expect([out.how, out.waitedOn]).toEqual(['blocked', 'event']);
+        expect(out.errors).toEqual([]);
+        expect(out.a.ok).toBe(true);
+        expect([out.b.ok, out.b.status, out.b.code]).toEqual([false, 409, 'NOT_A_VERSION']);
+        expect(await setOf(x.ev)).toBe(w.v);
+        expect(await linksOf(x.ep)).toEqual([{ scene_set_id: w.v, role: 'event' }]);
+      });
     });
 
     test('two relinking event edits on one event (the relink guard first, FOR UPDATE; then the share locks find those rows held): no deadlock', async () => {
@@ -499,34 +568,70 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
   });
 
   describe('[real lock] inject against the other writers on the same event, both orders', () => {
-    test.each(Object.keys(WRITERS).flatMap((name) => [[name, true], [name, false]]))('%s (inject first: %s)', async (name, injectFirst) => {
-      // The event is already attached to the episode (scene-set-link needs that); injecting it again is allowed.
+    // The event is already attached to the episode (scene-set-link needs that); injecting it again is allowed.
+    test.each(Object.keys(WRITERS))('inject first, then %s: the writer waits for the EPISODE row inject holds FOR UPDATE; inject links the episode at the event\'s set, then the writer moves the event and the location follows', async (name) => {
       const x = await eventOnly(w.s);
-      const { ep, ev } = x;
-      const doInject = () => send(inject(ev, ep));
-      const writer = () => WRITERS[name](x, w.t);
-      const out = injectFirst ? await race(doInject, writer) : await race(writer, doInject);
+      const out = await race(() => send(inject(x.ev, x.ep)), () => WRITERS[name](x, w.t));
       clean(out);
-      expect(out.a.status === undefined ? out.a.ok : out.a.status < 500).toBe(true);
+      expect([out.how, out.waitedOn]).toEqual(['blocked', 'episode']);
+      expect(out.errors).toEqual([]);
+      expect(out.a.status).toBe(200);
+      expect(out.a.body.scene_set).toMatchObject({ status: 'linked', scene_set_id: w.s });
+      expect(okOf(out.b)).toBe(true);
+      expect(await setOf(x.ev)).toBe(w.t);
+      expect(await linksOf(x.ep)).toEqual([{ scene_set_id: w.t, role: 'event' }]);
       await noReferenceToARemovedSet();
-      // Whatever each answered, the episode has at most one Event location, and it is where the event is.
-      const eventLinks = (await linksOf(ep)).filter((l) => l.role === 'event');
-      expect(eventLinks.length).toBeLessThanOrEqual(1);
-      if (eventLinks.length && (await eventRow(ev)).used_in_episode_id === ep) expect(eventLinks[0].scene_set_id).toBe(await setOf(ev));
     });
 
-    test('two injects of one event into two episodes, and W4 against inject: no deadlock', async () => {
+    test.each(Object.keys(WRITERS))('%s first, then inject: inject waits for the EPISODE row the writer holds FOR SHARE; the writer moves the event, then inject links the episode at the set the event has now', async (name) => {
+      const x = await eventOnly(w.s);
+      const out = await race(() => WRITERS[name](x, w.t), () => send(inject(x.ev, x.ep)));
+      clean(out);
+      expect([out.how, out.waitedOn]).toEqual(['blocked', 'episode']);
+      expect(out.errors).toEqual([]);
+      expect(okOf(out.a)).toBe(true);
+      expect(out.b.status).toBe(200);
+      expect(out.b.body.scene_set).toMatchObject({ status: 'linked', scene_set_id: w.t });
+      expect(await setOf(x.ev)).toBe(w.t);
+      expect(await linksOf(x.ep)).toEqual([{ scene_set_id: w.t, role: 'event' }]);
+    });
+
+    test('inject twice, the same event into the same episode: the second waits for the EPISODE row; both answer 200 and the episode has one location', async () => {
+      const x = await eventOnly(w.s);
+      const out = await race(() => send(inject(x.ev, x.ep)), () => send(inject(x.ev, x.ep)));
+      clean(out);
+      expect([out.how, out.waitedOn]).toEqual(['blocked', 'episode']);
+      expect(out.errors).toEqual([]);
+      expect([out.a.status, out.b.status]).toEqual([200, 200]);
+      expect(await linksOf(x.ep)).toEqual([{ scene_set_id: w.s, role: 'event' }]);
+      expect((await eventRow(x.ev)).used_in_episode_id).toBe(x.ep);
+    });
+
+    // The regression test of the two-episode defect (found by this case; on main, and before the fix here, the
+    // second inject answered 200, moved the event to its own episode and left the first with a location for it).
+    test('inject twice, one unattached event into two episodes: the second (past the route\'s early terms-lock check before the first committed) waits for the EVENT row, and is then refused as terms-locked under that lock; the event is attached to the first episode only and nothing of the second is written', async () => {
       const a = await mkEpisode(show);
       const b = await mkEpisode(show);
       const ev = await mkEvent(show, { set: w.s });
+      const episodeB = () => rows('SELECT script_content, updated_at FROM episodes WHERE id = :b', { b });
+      const before = await episodeB();
       const out = await race(() => send(inject(ev, a)), () => send(inject(ev, b)));
       clean(out);
-      const x = await eventOnly(w.s);
-      const versionSet = await set('Version');
-      expect((await settle(makeEventVersion(sequelize, { setId: versionSet, everydaySetId: w.v, eventId: x.ev }))).ok).toBe(true);
-      const late = await mkEpisode(show);
-      const again = await race(() => settle(makeEveryday(sequelize, versionSet, { returnEvent: true })), () => send(inject(x.ev, late)));
-      clean(again);
+      expect([out.how, out.waitedOn]).toEqual(['blocked', 'event']);
+      expect(out.errors).toEqual([]);
+      expect(out.a.status).toBe(200);
+      // Once an event is attached, the route's terms lock refuses another episode before any lock is taken, so
+      // "one event, two episodes" is reachable only like this: the second already past that early check. It is
+      // asked again under the episode and event locks, and answers what the early check would have.
+      expect(out.b.status).toBe(409);
+      expect(out.b.body).toMatchObject({ success: false, code: 'EVENT_TERMS_LOCKED', fields: ['used_in_episode_id'], episode: { id: a } });
+      expect(JSON.stringify(out.b.body)).not.toMatch(/SELECT|UPDATE|INSERT|world_events|scene_set_episodes|SQLSTATE|deadlock|could not obtain lock/i);
+      // Nothing of the refused inject: the event is the first episode's, counted once; the second episode has no
+      // location for it and its row (the script) is as it was.
+      expect(await eventRow(ev)).toMatchObject({ used_in_episode_id: a, times_used: 1, status: 'used', scene_set_id: w.s });
+      expect(await linksOf(a)).toEqual([{ scene_set_id: w.s, role: 'event' }]);
+      expect(await linksOf(b)).toEqual([]);
+      expect(await episodeB()).toEqual(before);
     });
   });
 
@@ -837,11 +942,24 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
   });
 
   // ══ The finalizer's callers ════════════════════════════════════════════
-  describe('[real lock] against the writers that already took the Place order (the finalizer): both orders, no deadlock', () => {
+  describe('[real lock] against the writers that already took the Place order (the finalizer and Start Episode), both orders', () => {
+    const STALE_CODE = 'STALE_SOURCE_SET';
     const FINALIZERS = {
       'a Locations save that moves the event': async () => {
         const x = await eventOnly();
-        return { x, go: () => send(save(x.ep, [loc('event', w.u), loc('home', w.home)])) };
+        return {
+          x, from: w.s, go: () => send(save(x.ep, [loc('event', w.u), loc('home', w.home)])),
+          won: (r) => expect(r.status).toBe(200),
+          lost: (r) => expect([r.status, r.body.code]).toEqual([409, STALE_CODE]),
+        };
+      },
+      'an uploaded look (the venue-look image finalizer)': async () => {
+        const x = await eventOnly();
+        return {
+          x, from: w.s, go: () => send(uploadLook(x.ev)),
+          won: (r) => expect([r.status, r.body.data.scene_set_id]).toEqual([200, w.s]),
+          lost: (r) => expect([r.status, r.body.code]).toEqual([409, STALE_CODE]),
+        };
       },
       'generate-venue (a base for the event\'s own set, which has none)': async () => {
         const place = await mkLocation('PR 2 venue');
@@ -849,33 +967,73 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
         const ep = await mkEpisode(show);
         const ev = await mkEvent(show, { stamp: ep, set: bare, loc: place });
         await mkBrief(show, ep, ev);
-        return { x: { ep, ev }, go: () => send(generateVenue(ev)) };
+        return {
+          x: { ep, ev }, from: bare, go: () => send(generateVenue(ev)),
+          won: (r) => expect([r.status, r.body.outcome, r.body.data.scene_set_id]).toEqual([200, 'generated', bare]),
+          lost: (r) => expect([r.status, r.body.outcome, r.body.code]).toEqual([409, 'generated_not_saved', STALE_CODE]),
+        };
       },
     };
-    test.each(Object.keys(FINALIZERS).flatMap((f) => ['W1 the event edit', 'W3 makeEventVersion'].flatMap((wr) => [[f, wr, true], [f, wr, false]])))(
-      '%s against %s (the finalizer first: %s)', async (f, name, finalizerFirst) => {
-        const { x, go } = await FINALIZERS[f]();
-        const writer = () => WRITERS[name](x, w.t);
-        const out = finalizerFirst ? await race(go, writer) : await race(writer, go);
-        clean(out);
-        expect(out.errors.filter((e) => e === '40P01')).toEqual([]);
-        await noReferenceToARemovedSet();
-        // The event is at one of the sets a serial order leaves it at, and the episode's Event location is there too.
-        const at = await setOf(x.ev);
-        const eventLinks = (await linksOf(x.ep)).filter((l) => l.role === 'event');
-        if (eventLinks.length) expect(eventLinks).toEqual([{ scene_set_id: at, role: 'event' }]);
-      });
+    const CELLS = Object.keys(FINALIZERS).flatMap((f) => ['W1 the event edit', 'W3 makeEventVersion'].map((wr) => [f, wr]));
 
-    test('Start Episode against W1 on its event, both orders: no deadlock; Start is refused as stale or starts on the set it was shown', async () => {
-      for (const startFirst of [true, false]) {
-        const ev = await mkEvent(show, { set: w.s });
-        const doStart = () => send(start(ev, { locations: [loc('event', w.s), loc('home', w.home)], event_scene_set_id: w.s }));
-        const edit = () => send(putEvent(ev, { scene_set_id: w.t }));
-        const out = startFirst ? await race(doStart, edit) : await race(edit, doStart);
-        clean(out);
-        expect([200, 201, 409]).toContain(out.a.status);
-        expect([200, 201, 409]).toContain(out.b.status);
-      }
+    test.each(CELLS)('%s first, then %s: the writer waits for the event row; the finalizer\'s save commits, then the writer moves the event', async (f, name) => {
+      const { x, go, won } = await FINALIZERS[f]();
+      const out = await race(go, () => WRITERS[name](x, w.t));
+      clean(out);
+      expect([out.how, out.waitedOn]).toEqual(['blocked', 'event']);
+      expect(out.errors).toEqual([]);
+      won(out.a);
+      expect(okOf(out.b)).toBe(true);
+      expect(await setOf(x.ev)).toBe(w.t);
+      expect((await linksOf(x.ep)).filter((l) => l.role === 'event')).toEqual([{ scene_set_id: w.t, role: 'event' }]);
+      await noReferenceToARemovedSet();
+    });
+
+    test.each(CELLS)('%s second, after %s holds the event row: the finalizer waits for the event row, then finds the event moved and saves nothing (STALE_SOURCE_SET)', async (f, name) => {
+      const { x, go, lost, from } = await FINALIZERS[f]();
+      const out = await race(() => WRITERS[name](x, w.t), go);
+      clean(out);
+      expect([out.how, out.waitedOn]).toEqual(['blocked', 'event']);
+      expect(out.errors).toEqual([]);
+      expect(okOf(out.a)).toBe(true);
+      lost(out.b);
+      expect(await setOf(x.ev)).toBe(w.t);
+      expect((await linksOf(x.ep)).filter((l) => l.role === 'event')).toEqual([{ scene_set_id: w.t, role: 'event' }]);
+      // Nothing of the refused save: no look, and no base on the set the event left.
+      expect(await rows('SELECT id FROM scene_set_looks WHERE event_id = :ev AND deleted_at IS NULL', { ev: x.ev })).toEqual([]);
+      if (from !== w.s) expect((await rows('SELECT base_still_url FROM scene_sets WHERE id = :from', { from }))[0].base_still_url).toBeNull();
+    });
+
+    const startBody = () => ({ locations: [loc('event', w.s), loc('home', w.home)], event_scene_set_id: w.s });
+    test.each(['W1 the event edit', 'W3 makeEventVersion'])('%s first (holding the event row), then Start Episode: Start waits for the event row, finds the set it was shown is no longer the event\'s, and creates nothing (409 STALE_SOURCE_SET)', async (name) => {
+      const ev = await mkEvent(show, { set: w.s });
+      const out = await race(() => WRITERS[name]({ ev }, w.t), () => send(start(ev, startBody())));
+      clean(out);
+      expect([out.how, out.waitedOn]).toEqual(['blocked', 'event']);
+      expect(out.errors).toEqual([]);
+      expect(okOf(out.a)).toBe(true);
+      expect([out.b.status, out.b.body.code]).toEqual([409, STALE_CODE]);
+      expect(await eventRow(ev)).toMatchObject({ scene_set_id: w.t, used_in_episode_id: null });
+      expect(await rows('SELECT id FROM episodes WHERE show_id = :show', { show })).toEqual([]);
+    });
+
+    test.each(['W1 the event edit', 'W3 makeEventVersion'])('Start Episode first (its main transaction holding the event row), then %s: the writer waits for the event row; the episode is started, and the writer then moves the event with the new episode\'s location', async (name) => {
+      const ev = await mkEvent(show, { set: w.s });
+      const out = await race(() => send(start(ev, startBody())), () => WRITERS[name]({ ev }, w.t));
+      clean(out);
+      expect([out.how, out.waitedOn]).toEqual(['blocked', 'event']);
+      expect(out.a.status).toBe(201);
+      expect(okOf(out.b)).toBe(true);
+      const ep = out.a.body.data.episode.id;
+      // Past the gate the order is NOT gated: Start saves its locations after its commit, in a transaction of its
+      // own, and the writer (which found the new episode linked and started again) moves the event before or after
+      // that. Either way the event ends at the writer's set and the episode's Event location with it; what differs
+      // is whether Start's own locations step was saved first (complete) or refused as stale (not complete).
+      expect(await eventRow(ev)).toMatchObject({ scene_set_id: w.t, used_in_episode_id: ep });
+      expect((await linksOf(ep)).filter((l) => l.role === 'event')).toEqual([{ scene_set_id: w.t, role: 'event' }]);
+      const step = out.a.body.data.setup_status.steps.locations;
+      expect([['complete', undefined], ['failed', STALE_CODE]]).toContainEqual([step.status, step.code]);
+      expect(out.a.body.setup_complete).toBe(step.status === 'complete');
     });
   });
 
