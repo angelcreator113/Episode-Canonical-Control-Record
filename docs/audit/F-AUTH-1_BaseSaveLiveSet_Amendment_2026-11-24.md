@@ -3,7 +3,7 @@
 
 **Document version**
 
-v1.0. This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
+v1.1 (v1.0 plus Evoni's ruling on the claim overwrite, §7; edited before merge). This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
 - The FD tail, XK tail and PE tail are unchanged.
 - No earlier register file is edited, and no banner is added to one.
 
@@ -102,7 +102,7 @@ None writes `deleted_at`: a removed row is never restored by them. None deletes 
 
 # §7. Limits and open points
 
-- **A newer claim can be overwritten (§5).** Awaiting a decision.
+- **A newer claim can be overwritten (§5).** Ruled by Evoni, 2026-11-24 (as relayed through the coordinating session): accepted as a recorded limitation of this change, which stays narrow and takes no claim-ownership redesign. This change does **not** provide ownership-safe status restoration and must not be read as doing so. The overwrite predates it (every B1 refusal); the new `SET_NOT_FOUND` refusal makes it reachable in one more case. It is added as a required dependency of the held generation-protection design, whose invariant is: an older generation run must never restore, clear, complete or overwrite the status or saved image belonging to a newer generation run. No claim-ownership implementation is authorized.
 - **The stored picture of a refusal stays in storage**, referenced by no row and named in the log line, as for every generated-not-saved outcome. No cleanup exists.
 - **A delete that commits after the save** is answered as saved, because it was: the picture is on the removed row. With "delete anyway" the event still points at that removed set; with a replacement the event is moved and the picture stays behind on the removed set (the "look row left on a removed set" kind of gap, for a base).
 - **The venue-look base step** shares the same work through its own finalizer and its own handling of `PlaceFinalizeRefusal` (`venueLookImageService`); it was read, and Generation B2's suite passes, but no new case drives a delete through it.
