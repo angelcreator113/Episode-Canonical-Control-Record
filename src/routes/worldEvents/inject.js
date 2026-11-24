@@ -239,6 +239,19 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, authorize(['AD
         await lockLiveEvent(models.sequelize, eventId, { transaction: t });
         // An episode linked to the event since the locks above is not held: start again.
         await place.assertLinkedEpisodesHeld(models.sequelize, eventId, { transaction: t });
+        // The terms lock asked again under the episode and event locks (the
+        // answer before this transaction is the early one; this is the one
+        // that counts): another inject that attached the event to its own
+        // episode meanwhile has committed by now, and this one is refused
+        // exactly as it would have been a moment later. Nothing is written.
+        {
+          const lockNow = await findTermsLockEpisode(models.sequelize, eventId, { transaction: t });
+          if (lockNow && String(lockNow.id) !== String(episode_id)) {
+            const refusal = new Error('terms locked');
+            refusal.termsLockEpisode = lockNow;
+            throw refusal;
+          }
+        }
         const frozenNow = await findFrozenDeletedEpisode(models.sequelize, eventId, { transaction: t });
         if (frozenNow) throw restartRefusal(eventId, frozenNow);
         // Asked again under the episode and event locks: another event
@@ -271,6 +284,13 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, authorize(['AD
         return linkEventSceneSet(models.sequelize, { event: { ...event, scene_set_id: held?.scene_set_id ?? null }, episodeId: episode_id, transaction: t });
       });
     } catch (err) {
+      if (err && err.termsLockEpisode) {
+        // The same answer as the check before the transaction.
+        const lockNow = err.termsLockEpisode;
+        console.warn('[inject] refused (terms locked): the event was attached to another episode while this one was being injected');
+        return res.status(409).json(termsLockedBody(lockNow, ['used_in_episode_id'],
+          `This event started ${episodeLabel(lockNow)}, so it can't be moved to another episode. Its terms and episode link are locked.`));
+      }
       if (sendScriptSaveError(res, err)) return undefined;
       if (require('../../services/episodeSecondaryEvents').isSecondaryEventError(err)) {
         console.warn(`[inject] refused (${err.code}):`, err.message);
