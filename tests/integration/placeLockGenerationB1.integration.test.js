@@ -1141,18 +1141,33 @@ const send = (req) => req.then((res) => res);
       expect(falCalls()).toHaveLength(1);
     });
 
-    test('the save holding the event row and the set row first: makeEventVersion waits for the set row holding nothing, then commits; no lock conflict', async () => {
+    // C1 PR 2 (Evoni, 2026-11-24): makeEventVersion takes the event's
+    // linked episodes and the event row before its set rows. This case
+    // pinned it waiting for the set row; it now waits for the event row the
+    // save holds, holding no set row. The outcome asserted is the same.
+    test('the save holding the event row and the set row first: makeEventVersion waits for the event row (not for the set row), then commits; no lock conflict', async () => {
       const { set, everyday, ev } = await versionFixture();
       const g = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'scene_sets');
       const pending = send(generate(ev));
       await g.reached;
       const version = settle(makeEventVersion(sequelize, { setId: set, everydaySetId: everyday, eventId: ev }));
-      await waitForLockWait(sequelize, `%FROM scene_sets%${set}%FOR UPDATE%`);
+      await waitForLockWait(sequelize, `%FROM world_events WHERE id = %${ev}%FOR UPDATE%`);
+      // Nothing waits for a set row, and the everyday set's row is not held by the version.
+      expect(await rows(
+        "SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE '%FROM scene_sets%'")).toEqual([]);
       g.open();
       const [res, v] = await Promise.all([pending, version]);
       if (!v.ok) throw v.error;
       expect(res.status).toBe(200);
-      expect(lockErrors(trace.records)).toEqual([]);
+      // No deadlock. The version takes its set rows without waiting, once it
+      // has the event row: generate-venue's own writes to the set after its
+      // save (the description review, the style) can still be touching the
+      // row, and the version then steps back (55P03) and tries again after
+      // one pause, twice at most. It never waits for a set row.
+      const errors = lockErrors(trace.records);
+      expect(errors.filter((e) => e !== '55P03')).toEqual([]);
+      expect(errors.length).toBeLessThanOrEqual(2);
+      expect(pause.mock.calls).toHaveLength(errors.length);
       expect(await setRow(set)).toMatchObject({ version_of_set_id: everyday, generation_status: 'complete', base_still_url: res.body.data.venue_image_url });
     });
   });
