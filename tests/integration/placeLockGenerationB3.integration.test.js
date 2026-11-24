@@ -448,60 +448,120 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
   });
 
   // ══ The set rows: FOR KEY SHARE NOWAIT ═════════════════════════════════
-  describe('[real lock] the set rows against writers that hold a set row and then wait for the event row', () => {
-    test('makeEventVersion holding the set and waiting for the event the save holds: no deadlock; the save steps back (55P03 at once), the version commits, and the save is then refused as stale', async () => {
+  // C1 PR 2 (Evoni, 2026-11-24;
+  // docs/audit/F-AUTH-1_EventWritersEpisodeFirst_Amendment_2026-11-24.md):
+  // makeEventVersion and makeEveryday no longer take a set row and then wait
+  // for the event row. They take the event's linked episodes (FOR SHARE),
+  // then the event row, then their set rows without waiting. The four cases
+  // below pinned the old order (the writer seen waiting for the event while
+  // holding a set row, the save stepping back from that set row with one
+  // 55P03, or the writer waiting for a set row). They now hold the same two
+  // real writers against each other and assert what the new order does:
+  // the version writer waits for the EVENT row, holding no set row; the two
+  // take turns; a set row held elsewhere is stepped back from, never waited
+  // for. The safety they asserted is kept: no deadlock, and the state one
+  // serial order leaves.
+  describe('[real lock] the set rows against the version writers, which take the event row before their set rows', () => {
+    /** Whether another session can take this row lock right now (NOWAIT, rolled back at once). */
+    async function free(table, id, how = 'FOR UPDATE') {
+      const t = await sequelize.transaction();
+      try {
+        await sequelize.query(`SELECT id FROM ${table} WHERE id = :id ${how} NOWAIT`, { replacements: { id }, transaction: t });
+        return true;
+      } catch (err) {
+        if (isLockConflict(err)) return false;
+        throw err;
+      } finally {
+        await t.rollback();
+      }
+    }
+    const versionOf = async (id) => (await rows('SELECT version_of_set_id FROM scene_sets WHERE id = :id', { id }))[0].version_of_set_id;
+    const waitsForEvent = (ev) => waitForLockWait(sequelize, `%FROM world_events WHERE id = %${ev}%FOR UPDATE%`);
+
+    test('makeEventVersion against a save that moves the event (the finalizer), the save holding the event row: the version waits for the event row holding no set row; no deadlock and no lock conflict; the save commits, then the version', async () => {
       const { ep, ev } = await primary();
       const g = holdsEventRow();
       const pending = send(save(ep, [loc('event', w.b), loc('home', w.home)])); // the finalizer path
       await g.reached;
       const version = settle(makeEventVersion(sequelize, { setId: w.b, everydaySetId: w.c, eventId: ev }));
-      await waitForLockWait(sequelize, `%FROM world_events WHERE id = %${ev}%FOR UPDATE%`); // it holds set B FOR UPDATE
+      await waitsForEvent(ev); // episode-first: it holds the episode FOR SHARE (as the save does) and waits here
+      // It holds neither of its set rows while it waits.
+      expect(await free('scene_sets', w.b)).toBe(true);
+      expect(await free('scene_sets', w.c)).toBe(true);
       g.open();
       const [res, v] = await Promise.all([pending, version]);
       expect(v.lock).toBeFalsy();
       if (!v.ok) throw v.error;
-      expect(trace.records.filter((r) => r.error === '40P01')).toEqual([]);
-      expect(trace.records.filter((r) => r.error === '55P03')).toHaveLength(1);
-      expect(pause.mock.calls).toEqual([[DELAY]]);
-      // The version moved the event to B itself: the save's source (A) is stale.
-      expect(res.status).toBe(409);
-      expect(res.body).toEqual(STALE);
+      expect(lockErrors(trace.records)).toEqual([]); // no 40P01, and no 55P03 either
+      expect(pause).not.toHaveBeenCalled();
+      // In turn: the save moved the event to B; the version then made B that event's version of C.
+      expect(res.status).toBe(200);
       expect((await eventRow(ev)).scene_set_id).toBe(w.b);
+      expect(await versionOf(w.b)).toBe(w.c);
+      expect(await links(ep)).toEqual([{ scene_set_id: w.b, role: 'event', role_name: null }, { scene_set_id: w.home, role: 'home', role_name: null }]);
     });
 
-    test('the same against a save that leaves the event\'s set (its own transaction): no deadlock; stale after the version commits', async () => {
+    test('the same against a save that leaves the event\'s set (its own transaction): the version waits for the event row; no deadlock; the save commits, then the version moves the event', async () => {
       const { ep, ev } = await primary();
       const g = holdsEventRow();
       const pending = send(save(ep, [loc('event', w.a), loc('home', w.home2)]));
       await g.reached;
       const version = settle(makeEventVersion(sequelize, { setId: w.home2, everydaySetId: w.c, eventId: ev }));
-      await waitForLockWait(sequelize, `%FROM world_events WHERE id = %${ev}%FOR UPDATE%`); // it holds the new home FOR UPDATE
+      await waitsForEvent(ev);
+      expect(await free('scene_sets', w.home2)).toBe(true);
       g.open();
       const [res, v] = await Promise.all([pending, version]);
       if (!v.ok) throw v.error;
-      expect(trace.records.filter((r) => r.error === '40P01')).toEqual([]);
-      expect(trace.records.filter((r) => r.error === '55P03')).toHaveLength(1);
-      expect(pause.mock.calls).toEqual([[DELAY]]);
-      expect(res.status).toBe(409);
-      expect(res.body).toEqual(STALE);
+      expect(lockErrors(trace.records)).toEqual([]);
+      expect(pause).not.toHaveBeenCalled();
+      expect(res.status).toBe(200);
+      // Then the version: the event is held at the set it was made the version of.
+      expect((await eventRow(ev)).scene_set_id).toBe(w.home2);
+      expect(await versionOf(w.home2)).toBe(w.c);
     });
 
-    test('the save holding the event row and its set rows first: makeEventVersion waits for the set row holding nothing, then commits; no lock conflict', async () => {
+    test('the save holding the event row and its set rows first: makeEventVersion waits for the event row (not for a set row), then commits; no lock conflict. And a set row held by another episode\'s save: the version steps back from it (55P03, never a wait) and commits on its second try', async () => {
       const { ep, ev } = await primary();
       const g = holdsSetRows();
       const pending = send(save(ep, [loc('event', w.a), loc('home', w.home2)]));
       await g.reached;
       const version = settle(makeEventVersion(sequelize, { setId: w.home2, everydaySetId: w.c, eventId: ev }));
-      await waitForLockWait(sequelize, `%FROM scene_sets%${w.home2}%FOR UPDATE%`); // FOR UPDATE waits for the save's FOR KEY SHARE
+      await waitsForEvent(ev);
+      expect(await rows(
+        "SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE '%FROM scene_sets%'")).toEqual([]);
       g.open();
       const [res, v] = await Promise.all([pending, version]);
       if (!v.ok) throw v.error;
       expect(res.status).toBe(200);
       expect(lockErrors(trace.records)).toEqual([]);
       expect(pause).not.toHaveBeenCalled();
+      expect((await eventRow(ev)).scene_set_id).toBe(w.home2);
+      trace.uninstall();
+      trace = null;
+
+      // Another episode's Locations save holds a set row (FOR KEY SHARE) the version needs FOR UPDATE.
+      const other = await primary();
+      const mine = await primary();
+      const held = holdsSetRows();
+      const saving = send(save(other.ep, [loc('event', w.a), loc('home', w.b)]));
+      await held.reached;
+      let during = null;
+      pause.mockImplementation(async () => {
+        during = lockErrors(trace.records);
+        held.open();
+        await saving;
+      });
+      const stepped = await settle(makeEventVersion(sequelize, { setId: w.b, everydaySetId: w.c, eventId: mine.ev }));
+      if (!stepped.ok) throw stepped.error;
+      expect(during).toEqual(['55P03']); // the set row was not waited for
+      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(lockErrors(trace.records)).toEqual(['55P03']);
+      expect((await saving).status).toBe(200);
+      expect((await eventRow(mine.ev)).scene_set_id).toBe(w.b);
+      expect(await versionOf(w.b)).toBe(w.c);
     });
 
-    test('makeEveryday (return to the everyday set) holding the version and waiting for the event the save holds: no deadlock; stale after it commits. And the save first: it waits, then commits', async () => {
+    test('makeEveryday (return to the everyday set) against a save, the save holding the event row, and then the save holding its set rows too: it waits for the event row both times, holding no set row; no deadlock, no lock conflict; the save commits, then the event is returned', async () => {
       const { ep, ev } = await primary();
       // Set A is the event's own version of the everyday set C.
       expect((await settle(makeEventVersion(sequelize, { setId: w.a, everydaySetId: w.c, eventId: ev }))).ok).toBe(true);
@@ -509,15 +569,17 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       const pending = send(save(ep, [loc('event', w.a), loc('home', w.home2)]));
       await g.reached;
       const everyday = settle(makeEveryday(sequelize, w.a, { returnEvent: true }));
-      await waitForLockWait(sequelize, `%UPDATE world_events SET scene_set_id = %${w.a}%`); // it holds A FOR UPDATE
+      await waitsForEvent(ev);
+      expect(await free('scene_sets', w.a)).toBe(true); // it has not taken the version's row yet
       g.open();
       const [res, e] = await Promise.all([pending, everyday]);
       if (!e.ok) throw e.error;
-      expect(trace.records.filter((r) => r.error === '40P01')).toEqual([]);
-      expect(trace.records.filter((r) => r.error === '55P03')).toHaveLength(1);
-      expect(res.status).toBe(409);
-      expect(res.body).toEqual(STALE);
+      expect(lockErrors(trace.records)).toEqual([]);
+      expect(pause).not.toHaveBeenCalled();
+      expect(res.status).toBe(200);
       expect((await eventRow(ev)).scene_set_id).toBe(w.c); // returned to the everyday set
+      expect(await versionOf(w.a)).toBeNull();
+      expect((await links(ep)).find((l) => l.role === 'event')).toEqual({ scene_set_id: w.c, role: 'event', role_name: null });
       trace.uninstall();
       trace = null;
 
@@ -527,12 +589,13 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       const saving = send(save(second.ep, [loc('event', w.b), loc('home', w.home2)]));
       await held.reached;
       const later = settle(makeEveryday(sequelize, w.b, { returnEvent: true }));
-      await waitForLockWait(sequelize, `%FROM scene_sets%${w.b}%FOR UPDATE%`);
+      await waitsForEvent(second.ev);
       held.open();
       const [saved, done] = await Promise.all([saving, later]);
       if (!done.ok) throw done.error;
       expect(saved.status).toBe(200);
       expect(lockErrors(trace.records)).toEqual([]);
+      expect((await eventRow(second.ev)).scene_set_id).toBe(w.c);
     });
 
     test('a plain update of a set held open in another transaction does not conflict with FOR KEY SHARE: the save commits at once, with no conflict and no pause; a FOR UPDATE on the same row does conflict', async () => {

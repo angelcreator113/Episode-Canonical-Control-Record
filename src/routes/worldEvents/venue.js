@@ -145,19 +145,24 @@ router.post('/world/:showId/events/:eventId/generate-venue', requireAuth, author
       // The base is saved through the Place finalizer (Generation B1): only
       // while the Place is still not locked and the event is still at this set.
       const { finalizePlaceWrite } = require('../../utils/placeLock');
-      await sceneGenService.generateBaseScene(attached, models, {
+      const generated = await sceneGenService.generateBaseScene(attached, models, {
         overrides: briefOverrides.value || {},
         eventId: event.id,
         finalize: (work) => finalizePlaceWrite(models.sequelize, event.id, {
           sourceSetId: attached.id, work, retryDelayMs: sceneGenService.PLACE_FINALIZE_RETRY_DELAY_MS,
         }),
       });
-      await attached.reload();
-      if (!attached.base_still_url) throw new Error(`No base image was stored for "${attached.name}"`);
+      // The answer is what that save committed (Evoni, 2026-11-24): the
+      // image it wrote onto the live set, as generateBaseScene returns it.
+      // The set is not read again: a delete that commits after the save
+      // made that read throw, and a paid, saved picture answered 500.
+      // generateBaseScene resolves only when the save committed on a live
+      // set; with no image in what it returns, nothing was stored.
+      if (!generated?.stillUrl) throw new Error(`No base image was stored for "${attached.name}"`);
       return res.json({
         success: true,
         outcome: 'generated',
-        data: { kind: 'base', scene_set_id: attached.id, venue_image_url: attached.base_still_url, venue_name: attached.name },
+        data: { kind: 'base', scene_set_id: attached.id, venue_image_url: generated.stillUrl, venue_name: attached.name },
         message: `Venue image generated for "${attached.name}"`,
       });
     }
