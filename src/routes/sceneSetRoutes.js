@@ -764,11 +764,17 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), a
 //                            { everyday_set_id, event_id } makes it that
 //                            everyday set's version for that event
 //                            (sceneSetVersionService).
+const VERSION_FAILED = 'The scene set version could not be read or changed. Nothing was changed.';
 const sendVersionError = (res, err, label) => {
   const { SceneSetVersionError } = require('../services/sceneSetVersionService');
   if (err instanceof SceneSetVersionError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
-  console.error(`${label} error:`, err);
-  return res.status(500).json({ success: false, error: err.message });
+  // A lock conflict that reached here (C1 PR 2): the retryable answer, never the database's words.
+  const { asRetryable, RetryableConflictError } = require('../utils/episodeLocks');
+  const retry = asRetryable(err);
+  if (retry instanceof RetryableConflictError) return res.status(409).json({ success: false, code: retry.code, error: retry.message });
+  // Anything else: a fixed sentence, the error's class in the log; its own text can be the database's.
+  console.error(`${label} error: ${require('../services/sceneGenerationService').errorClassOf(err)}`);
+  return res.status(500).json({ success: false, error: VERSION_FAILED });
 };
 
 router.get('/:id/version-options', validateUUIDParam('id'), requireAuth, async (req, res) => {

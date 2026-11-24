@@ -94,4 +94,102 @@ async function refuseEventSet(sequelize, { event, setId, showId = null, transact
   return null;
 }
 
-module.exports = { syncEpisodeEventLocation, refuseEventSet };
+// ─── EPISODE-FIRST FOR THE WRITERS OF AN EVENT'S PLACE (C1 PR 2; Evoni, 2026-11-24) ──
+//
+// The writers that move an event to a set (the event edit, scene-set-link,
+// inject, makeEventVersion, makeEveryday) locked the event row first and
+// reached an episode row afterwards: the location row the sync above inserts
+// for an episode takes a key-share lock on that episode through its foreign
+// key. Every other writer of the Place (utils/placeLock finalizePlaceWrite,
+// an acceptance, a clip's attachment) takes the episode first. Two orders
+// are a deadlock. These helpers give those writers the same order: the
+// event's linked live episodes FOR SHARE, in one ascending statement, before
+// the event row; then the proof, under the event's lock, that none was
+// added meanwhile; then a set's row, live only, never waited for while an
+// event row is held.
+
+/**
+ * The live episodes the events are linked to, and any `extra` ids, locked
+ * FOR SHARE in one ascending statement (utils/episodeLocks lockEpisodes; a
+ * row this transaction already holds, in either mode, is not locked again).
+ * Before any event row is locked.
+ */
+async function shareLinkedEpisodes(sequelize, eventIds, { transaction, extra = [], exclusive = [] } = {}) {
+  const { lockEpisodes } = require('../utils/episodeLocks');
+  const { linkedLiveEpisodes } = require('../utils/eventEpisodeLink');
+  const ids = extra.filter(Boolean).map(String);
+  for (const eventId of [].concat(eventIds || []).filter(Boolean)) {
+    for (const row of await linkedLiveEpisodes(sequelize, eventId, { transaction })) ids.push(String(row.id));
+  }
+  // exclusive: episodes the caller goes on to lock FOR UPDATE itself
+  // (inject: the episode whose script it saves). lockEpisodes takes one
+  // mode per statement, so with any of those the rows are taken one by one
+  // in ascending id order, each in the mode it needs, FOR UPDATE at once
+  // for those (never FOR SHARE first and strengthened later) and FOR SHARE
+  // for the rest, which a clip upload's FOR SHARE does not wait for. One
+  // ascending pass is the same order as one ordered statement.
+  const strong = new Set(exclusive.filter(Boolean).map(String));
+  if (!strong.size) return lockEpisodes(sequelize, ids, { transaction, mode: 'share' });
+  const all = [...new Set([...ids, ...strong])].sort();
+  const held = [];
+  for (const id of all) held.push(...await lockEpisodes(sequelize, [id], { transaction, mode: strong.has(id) ? 'update' : 'share' }));
+  return held;
+}
+
+/**
+ * After the event rows are locked: every live episode they are linked to
+ * must be one this transaction holds. One that is not was linked after the
+ * episodes were locked; locking it now would break the order, so the
+ * transaction stops with a retryable conflict (nothing written).
+ */
+async function assertLinkedEpisodesHeld(sequelize, eventIds, { transaction } = {}) {
+  const { holdsEpisode, RetryableConflictError } = require('../utils/episodeLocks');
+  const { linkedLiveEpisodes } = require('../utils/eventEpisodeLink');
+  for (const eventId of [].concat(eventIds || []).filter(Boolean)) {
+    for (const row of await linkedLiveEpisodes(sequelize, eventId, { transaction })) {
+      if (!holdsEpisode(transaction, row.id, { mode: 'any' })) throw new RetryableConflictError();
+    }
+  }
+}
+
+/**
+ * The set rule for a set a write is about to reference: its row, live only,
+ * FOR KEY SHARE in the writing transaction (NOWAIT when an event row is
+ * held: a held row is a lock conflict, never a wait). False when the set is
+ * not there or was removed: the caller refuses with its own answer.
+ */
+async function holdLiveSet(sequelize, setId, { transaction, nowait = false } = {}) {
+  if (!setId) return true;
+  const [rows] = await sequelize.query(
+    `SELECT id FROM scene_sets WHERE id = :id AND deleted_at IS NULL FOR KEY SHARE${nowait ? ' NOWAIT' : ''}`,
+    { replacements: { id: setId }, transaction });
+  return rows.length > 0;
+}
+
+/**
+ * work(transaction) in a transaction, tried again when it lost to a lock
+ * (40P01, 55P03) or stopped with the plain retryable conflict above: rolled
+ * back, a pause outside any transaction, a new transaction; the Place
+ * finalizer's bounds (PLACE_FINALIZE_MAX_ATTEMPTS tries, its pause). After
+ * the last try: RetryableConflictError (409 RETRY). Any other error, and a
+ * retryable conflict with a code of its own, is thrown as it is.
+ */
+async function inEpisodeFirstTransaction(sequelize, work) {
+  const { isLockConflict, RetryableConflictError } = require('../utils/episodeLocks');
+  const { finalizePlaceWrite, PLACE_FINALIZE_MAX_ATTEMPTS } = require('../utils/placeLock');
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await sequelize.transaction(work);
+    } catch (err) {
+      const again = isLockConflict(err) || (err instanceof RetryableConflictError && err.code === 'RETRY');
+      if (!again) throw err;
+      if (attempt >= PLACE_FINALIZE_MAX_ATTEMPTS) throw new RetryableConflictError();
+      await finalizePlaceWrite.retryPause.sleep(require('./sceneGenerationService').PLACE_FINALIZE_RETRY_DELAY_MS);
+    }
+  }
+}
+
+module.exports = {
+  syncEpisodeEventLocation, refuseEventSet,
+  shareLinkedEpisodes, assertLinkedEpisodesHeld, holdLiveSet, inEpisodeFirstTransaction,
+};

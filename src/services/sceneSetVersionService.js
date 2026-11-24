@@ -44,6 +44,30 @@ async function liveSet(sequelize, id, transaction = null, lock = false) {
 
 const sameShow = (a, b) => !a || !b || String(a) === String(b);
 
+// C1 PR 2 (Evoni, 2026-11-24): the two writers below move an event to a set,
+// so they take the Place order (services/eventPlaceSync): the event's linked
+// episodes FOR SHARE, the event row, then their set rows without waiting.
+// A transaction that lost to a lock, or found an episode or event it does
+// not hold, is tried again; after the last try it is the retryable 409.
+async function episodeFirst(sequelize, work) {
+  const { isLockConflict, RetryableConflictError } = require('../utils/episodeLocks');
+  try {
+    return await require('./eventPlaceSync').inEpisodeFirstTransaction(sequelize, work);
+  } catch (err) {
+    if (isLockConflict(err) || (err instanceof RetryableConflictError && err.code === 'RETRY')) {
+      const retry = new RetryableConflictError();
+      throw new SceneSetVersionError(retry.message, 409, retry.code);
+    }
+    throw err;
+  }
+}
+/** The set rows a version change writes, live only, in id order, never waited for (an event row is held). */
+async function takeSetRows(sequelize, ids, transaction) {
+  await sequelize.query(
+    'SELECT id FROM scene_sets WHERE id IN (:ids) AND deleted_at IS NULL ORDER BY id FOR UPDATE NOWAIT',
+    { replacements: { ids: [...new Set(ids.filter(Boolean).map(String))] }, transaction });
+}
+
 /**
  * What a set's version chooser offers: the everyday sets it can be a
  * version of (same show or no show, not itself, not a version) and the
@@ -87,7 +111,20 @@ async function makeEventVersion(sequelize, { setId, everydaySetId, eventId }) {
   assertId('event_id', eventId);
   if (String(setId) === String(everydaySetId)) throw new SceneSetVersionError('A set cannot be a version of itself');
   const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
-  return sequelize.transaction(async (transaction) => {
+  const place = require('./eventPlaceSync');
+  return episodeFirst(sequelize, async (transaction) => {
+    // Episode-first: the event's linked episodes, the event row, the proof
+    // that no episode was linked meanwhile, then both set rows (live only,
+    // in id order, not waited for). The reads below find them already held.
+    await place.shareLinkedEpisodes(sequelize, eventId, { transaction });
+    try {
+      await require('../utils/eventEpisodeLink').lockLiveEvent(sequelize, eventId, { transaction });
+    } catch (err) {
+      // Not there, or deleted: answered below as it always was (EVENT_NOT_FOUND).
+      if (err?.code !== require('../utils/eventEpisodeLink').EVENT_DELETED_CODE) throw err;
+    }
+    await place.assertLinkedEpisodesHeld(sequelize, eventId, { transaction });
+    await takeSetRows(sequelize, [setId, everydaySetId], transaction);
     const set = await liveSet(sequelize, setId, transaction, true);
     if (!set) throw new SceneSetVersionError('Scene set not found', 404, 'SET_NOT_FOUND');
     // Locked too, so a set made a version meanwhile cannot become this
@@ -127,7 +164,7 @@ async function makeEventVersion(sequelize, { setId, everydaySetId, eventId }) {
       throw new SceneSetVersionError(
         `"${set.name}" is used by ${others.map((o) => o.name).join(', ')}: an event version is for one event`, 409, 'USED_BY_OTHER_EVENTS');
     }
-    if (String(event.scene_set_id || '') !== String(set.id) && await isPlaceLocked(sequelize, event.id)) {
+    if (String(event.scene_set_id || '') !== String(set.id) && await isPlaceLocked(sequelize, event.id, { transaction })) {
       throw new SceneSetVersionError(PLACE_LOCKED_MESSAGE, 409, PLACE_LOCKED_CODE);
     }
     // A shared set other shows use is not claimed for this one (seventh
@@ -169,7 +206,33 @@ async function makeEventVersion(sequelize, { setId, everydaySetId, eventId }) {
 async function makeEveryday(sequelize, setId, { returnEvent = false } = {}) {
   assertId('id', setId);
   const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../utils/placeLock');
-  return sequelize.transaction(async (transaction) => {
+  const place = require('./eventPlaceSync');
+  const { lockLiveEvent, EVENT_DELETED_CODE } = require('../utils/eventEpisodeLink');
+  const { RetryableConflictError } = require('../utils/episodeLocks');
+  return episodeFirst(sequelize, async (transaction) => {
+    // Returning the events is rooted at the set: the events held at it are
+    // read, their linked episodes locked in one ascending statement, then
+    // each event (ascending), the proof that no episode was linked
+    // meanwhile, and only then the set row, without waiting.
+    let heldEvents = null;
+    if (returnEvent) {
+      const [seen] = await sequelize.query(
+        'SELECT id FROM world_events WHERE scene_set_id = :id AND deleted_at IS NULL ORDER BY id', { replacements: { id: setId }, transaction });
+      const eventIds = seen.map((e) => String(e.id));
+      await place.shareLinkedEpisodes(sequelize, eventIds, { transaction });
+      for (const id of eventIds) {
+        try {
+          await lockLiveEvent(sequelize, id, { transaction });
+        } catch (err) {
+          // Deleted since it was read: what was discovered is stale.
+          if (err?.code === EVENT_DELETED_CODE) throw new RetryableConflictError();
+          throw err;
+        }
+      }
+      await place.assertLinkedEpisodesHeld(sequelize, eventIds, { transaction });
+      await takeSetRows(sequelize, [setId], transaction);
+      heldEvents = new Set(eventIds);
+    }
     const set = await liveSet(sequelize, setId, transaction, true);
     if (!set) throw new SceneSetVersionError('Scene set not found', 404, 'SET_NOT_FOUND');
     const everydayId = set.version_of_set_id || null;
@@ -183,13 +246,18 @@ async function makeEveryday(sequelize, setId, { returnEvent = false } = {}) {
       // A deleted everyday set cannot take its event back (fifth audit): its
       // version kept pointing at it after a delete, and the event was moved
       // onto a removed set.
-      const everyday = await liveSet(sequelize, everydayId, transaction);
+      // The everyday set's row is held, live only, before it is read: the
+      // events are about to reference it (the set rule).
+      const everydayHeld = await place.holdLiveSet(sequelize, everydayId, { transaction, nowait: true });
+      const everyday = everydayHeld ? await liveSet(sequelize, everydayId, transaction) : null;
       if (!everyday) {
         throw new SceneSetVersionError('Its everyday set was deleted: choose where the event is held on the event\'s page', 409, 'EVERYDAY_GONE');
       }
       const [events] = await sequelize.query(
         'SELECT id, name, show_id FROM world_events WHERE scene_set_id = :id AND deleted_at IS NULL',
         { replacements: { id: set.id }, transaction });
+      // An event that came to the set after the events were locked is not held: start again.
+      if (events.some((e) => !heldEvents.has(String(e.id)))) throw new RetryableConflictError();
       // An everyday set moved to another show does not take this show's
       // event (seventh audit).
       const crossing = events.find((e) => !sameShow(e.show_id, everyday.show_id));
@@ -197,7 +265,7 @@ async function makeEveryday(sequelize, setId, { returnEvent = false } = {}) {
         throw new SceneSetVersionError(`"${everyday.name}" now belongs to another show: choose where ${crossing.name} is held on the event's page`, 409, 'OTHER_SHOW');
       }
       for (const e of events) {
-        if (await isPlaceLocked(sequelize, e.id)) throw new SceneSetVersionError(PLACE_LOCKED_MESSAGE, 409, PLACE_LOCKED_CODE);
+        if (await isPlaceLocked(sequelize, e.id, { transaction })) throw new SceneSetVersionError(PLACE_LOCKED_MESSAGE, 409, PLACE_LOCKED_CODE);
       }
       if (events.length) {
         await sequelize.query(
