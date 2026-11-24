@@ -1121,54 +1121,70 @@ const send = (req) => req.then((res) => res);
       return { set, everyday, ev };
     }
 
-    test('the save holding the event row while makeEventVersion holds the set row and waits for the event: no deadlock; the save steps back, the version commits, the save commits on its next try', async () => {
+    // C1 PR 2 (Evoni, 2026-11-24;
+    // docs/audit/F-AUTH-1_EventWritersEpisodeFirst_Amendment_2026-11-24.md).
+    // makeEventVersion takes the event's linked episodes and the event row
+    // before its set rows, and takes the set rows without waiting. The two
+    // cases below pinned the old order: the version holding the set row and
+    // waiting for the event (so the save stepped back from the set row with
+    // one 55P03), and the version waiting for the set row. They hold the
+    // same two real writers and assert the new order exactly.
+    //
+    // The version is also held, by a second gate, just after it gets the
+    // event row and until generate-venue has answered: generate-venue goes
+    // on writing its set's row after its save (the description review), and
+    // the version's NOWAIT lock on that row is only decided once those
+    // writes are over. So the number of lock conflicts is exact: none.
+    async function saveThenVersion(saveHolds) {
       const { set, everyday, ev } = await versionFixture();
-      const g = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'world_events');
+      let saveTx = null;
+      const g = gateOn((rec) => {
+        const hit = Boolean(rec.txId) && rec.kind === 'lock' && rec.table === saveHolds;
+        if (hit && !saveTx) saveTx = rec.txId;
+        return hit;
+      });
+      // The version, just after it has locked the event row (a transaction that is not the save's).
+      const versionHasEvent = gateOn((rec) => Boolean(rec.txId) && Boolean(saveTx) && rec.txId !== saveTx && rec.kind === 'lock' && rec.table === 'world_events');
       const pending = send(generate(ev));
-      await g.reached; // the finalizer holds the episode and the event row
+      await g.reached; // the finalizer holds the episode and the event row (and, in the second case, its set row)
       const version = settle(makeEventVersion(sequelize, { setId: set, everydaySetId: everyday, eventId: ev }));
-      await waitForLockWait(sequelize, `%FROM world_events WHERE id = %${ev}%FOR UPDATE%`); // it holds the set row
+      await waitForLockWait(sequelize, `%FROM world_events WHERE id = %${ev}%FOR UPDATE%`); // it waits for the EVENT row
+      // Nothing waits for a set row, and the version holds neither of its set rows.
+      expect(await rows(
+        "SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE '%FROM scene_sets%'")).toEqual([]);
+      const heldSets = await holdTransaction();
+      await sequelize.query('SELECT id FROM scene_sets WHERE id = :id FOR KEY SHARE NOWAIT', { replacements: { id: everyday }, transaction: heldSets });
+      await heldSets.rollback();
+      const before = await setRow(set);
+      expect(before.base_still_url).toBeNull(); // nothing is saved yet
       g.open();
-      const [res, v] = await Promise.all([pending, version]);
+      const res = await pending; // generate-venue has saved, answered, and finished its writes to the set
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ success: true, outcome: 'generated', data: { kind: 'base', scene_set_id: set } });
+      // The save committed whole before the version wrote anything: a base, and not yet a version.
+      expect(await setRow(set)).toMatchObject({ version_of_set_id: null, generation_status: 'complete', base_still_url: res.body.data.venue_image_url });
+      await versionHasEvent.reached;
+      versionHasEvent.open();
+      const v = await version;
       expect(v.lock).toBeFalsy();
       if (!v.ok) throw v.error;
-      expect(res.status).toBe(200);
-      expect(trace.records.filter((r) => r.error === '40P01')).toEqual([]);
-      expect(trace.records.filter((r) => r.error === '55P03')).toHaveLength(1); // NOWAIT, at once
-      expect(pause.mock.calls).toEqual([[DELAY]]); // then the pause, and the version is through
+      expect(v.value).toMatchObject({ scene_set_id: set, version_of: { id: everyday }, event: { id: ev } });
+      // Exactly: no deadlock, no lock conflict, no pause.
+      expect(lockErrors(trace.records)).toEqual([]);
+      expect(pause).not.toHaveBeenCalled();
+      expect(JSON.stringify(res.body)).not.toMatch(/deadlock|violates|constraint|could not obtain lock|Sequelize/i);
+      // One serial order: the base saved, then the set made that event's version; the event is held there.
       expect(await setRow(set)).toMatchObject({ version_of_set_id: everyday, generation_status: 'complete', base_still_url: res.body.data.venue_image_url });
       expect((await eventRow(ev)).scene_set_id).toBe(set);
       expect(falCalls()).toHaveLength(1);
+    }
+
+    test('the save holding the event row, then makeEventVersion: it waits for the event row holding no set row; no deadlock and no lock conflict; the save commits, then the version', async () => {
+      await saveThenVersion('world_events');
     });
 
-    // C1 PR 2 (Evoni, 2026-11-24): makeEventVersion takes the event's
-    // linked episodes and the event row before its set rows. This case
-    // pinned it waiting for the set row; it now waits for the event row the
-    // save holds, holding no set row. The outcome asserted is the same.
     test('the save holding the event row and the set row first: makeEventVersion waits for the event row (not for the set row), then commits; no lock conflict', async () => {
-      const { set, everyday, ev } = await versionFixture();
-      const g = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'scene_sets');
-      const pending = send(generate(ev));
-      await g.reached;
-      const version = settle(makeEventVersion(sequelize, { setId: set, everydaySetId: everyday, eventId: ev }));
-      await waitForLockWait(sequelize, `%FROM world_events WHERE id = %${ev}%FOR UPDATE%`);
-      // Nothing waits for a set row, and the everyday set's row is not held by the version.
-      expect(await rows(
-        "SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE '%FROM scene_sets%'")).toEqual([]);
-      g.open();
-      const [res, v] = await Promise.all([pending, version]);
-      if (!v.ok) throw v.error;
-      expect(res.status).toBe(200);
-      // No deadlock. The version takes its set rows without waiting, once it
-      // has the event row: generate-venue's own writes to the set after its
-      // save (the description review, the style) can still be touching the
-      // row, and the version then steps back (55P03) and tries again after
-      // one pause, twice at most. It never waits for a set row.
-      const errors = lockErrors(trace.records);
-      expect(errors.filter((e) => e !== '55P03')).toEqual([]);
-      expect(errors.length).toBeLessThanOrEqual(2);
-      expect(pause.mock.calls).toHaveLength(errors.length);
-      expect(await setRow(set)).toMatchObject({ version_of_set_id: everyday, generation_status: 'complete', base_still_url: res.body.data.venue_image_url });
+      await saveThenVersion('scene_sets');
     });
   });
 
