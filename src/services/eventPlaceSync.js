@@ -167,6 +167,25 @@ async function holdLiveSet(sequelize, setId, { transaction, nowait = false } = {
 }
 
 /**
+ * holdLiveSet for every set a write names (C2 PR 3; Evoni, 2026-11-24): the
+ * distinct ids in ascending order, so two writers that name the same two
+ * sets take them in one order. Resolves null when every one of them is
+ * live and now held, else the FIRST id that is not there or was removed —
+ * the caller refuses with its own answer and writes nothing.
+ *
+ * nowait as holdLiveSet: NOWAIT whenever an episode or event row is already
+ * held (the set rows are never waited for under one of those), waited when
+ * this is the transaction's first lock.
+ */
+async function holdLiveSets(sequelize, setIds, { transaction, nowait = false } = {}) {
+  const ids = [...new Set([].concat(setIds || []).filter(Boolean).map(String))].sort();
+  for (const id of ids) {
+    if (!await holdLiveSet(sequelize, id, { transaction, nowait })) return id;
+  }
+  return null;
+}
+
+/**
  * work(transaction) in a transaction, tried again when it lost to a lock
  * (40P01, 55P03) or stopped with the plain retryable conflict above: rolled
  * back, a pause outside any transaction, a new transaction; the Place
@@ -191,5 +210,5 @@ async function inEpisodeFirstTransaction(sequelize, work) {
 
 module.exports = {
   syncEpisodeEventLocation, refuseEventSet,
-  shareLinkedEpisodes, assertLinkedEpisodesHeld, holdLiveSet, inEpisodeFirstTransaction,
+  shareLinkedEpisodes, assertLinkedEpisodesHeld, holdLiveSet, holdLiveSets, inEpisodeFirstTransaction,
 };

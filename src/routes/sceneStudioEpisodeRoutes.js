@@ -14,6 +14,21 @@ const { requireAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/auth');
 const { ScenePlan, SceneSet, SceneAngle, SceneSetEpisode } = require('../models');
 
+// C2 PR 3 (Evoni, 2026-11-24): these two beat writers answered 500 with
+// err.message, so a deadlock, a lock timeout or a constraint reached the
+// browser in the database's own words. A lock conflict that survived the
+// bounded retries is the repo's retryable 409; anything else is a fixed
+// sentence, with the error's class (never its message) in the log.
+function beatWriteError(res, err, label) {
+  const { RetryableConflictError } = require('../utils/episodeLocks');
+  if (err instanceof RetryableConflictError) {
+    console.error(`[SceneStudioEpisode] ${label} gave up after retries:`, err.name);
+    return res.status(409).json({ error: err.message, code: err.code });
+  }
+  console.error(`[SceneStudioEpisode] ${label} failed:`, err?.name || 'Error', err);
+  return res.status(500).json({ error: 'This beat could not be saved. Nothing was changed: try again.' });
+}
+
 // ── GET VISUAL SEQUENCE FOR EPISODE ──────────────────────────────────────────
 // Returns all 14 beats with their scene set images and angles
 // GET /api/v1/scene-studio-episodes/:episodeId/visual-sequence
@@ -136,20 +151,25 @@ router.put('/:episodeId/beat/:beatNumber/angle', requireAuth, authorize(['ADMIN'
     const angle = await SceneAngle.findByPk(angle_id);
     if (!angle) return res.status(404).json({ error: 'Angle not found' });
 
-    // Update the beat's angle
-    await plan.update({
-      angle_label: angle.angle_label,
-      scene_set_id: angle.scene_set_id,
-      ai_suggested: false,
-    });
-
-    // Load updated scene context
-    const sceneSet = await SceneSet.findByPk(angle.scene_set_id);
-    if (sceneSet) {
+    // C2 PR 3: the episode first, then the angle's set, live only and never
+    // waited for under the episode's lock; then the beat's two updates as
+    // one commit. This route took angle.scene_set_id with no liveness check
+    // of any kind, so it moved a beat onto a set that had been removed.
+    const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
+    const { lockEpisodes } = require('../utils/episodeLocks');
+    const sceneSet = await inEpisodeFirstTransaction(ScenePlan.sequelize, async (transaction) => {
+      await lockEpisodes(ScenePlan.sequelize, [episodeId], { transaction, mode: 'share' });
+      if (!await holdLiveSet(ScenePlan.sequelize, angle.scene_set_id, { transaction, nowait: true })) return null;
+      const set = await SceneSet.findByPk(angle.scene_set_id, { transaction });
       await plan.update({
-        scene_context: sceneSet.script_context || sceneSet.canonical_description?.slice(0, 400),
-      });
-    }
+        angle_label: angle.angle_label,
+        scene_set_id: angle.scene_set_id,
+        ai_suggested: false,
+        ...(set ? { scene_context: set.script_context || set.canonical_description?.slice(0, 400) } : {}),
+      }, { transaction });
+      return set;
+    });
+    if (angle.scene_set_id && !sceneSet) return res.status(404).json({ error: 'Scene set not found' });
 
     return res.json({
       success: true,
@@ -162,8 +182,7 @@ router.put('/:episodeId/beat/:beatNumber/angle', requireAuth, authorize(['ADMIN'
       },
     });
   } catch (err) {
-    console.error('[SceneStudioEpisode] Change angle error:', err);
-    return res.status(500).json({ error: err.message });
+    return beatWriteError(res, err, 'Change angle');
   }
 });
 
@@ -199,20 +218,31 @@ router.put('/:episodeId/beat/:beatNumber/scene-set', requireAuth, authorize(['AD
       Array.isArray(a.beat_affinity) && a.beat_affinity.includes(parseInt(beatNumber, 10))
     ) || sceneSet.angles?.[0];
 
-    await plan.update({
-      scene_set_id: sceneSet.id,
-      angle_label: bestAngle?.angle_label || null,
-      scene_context: sceneSet.script_context || sceneSet.canonical_description?.slice(0, 400),
-      ai_suggested: false,
-    });
-
-    // Ensure scene set is linked to episode
-    try {
+    // C2 PR 3: the episode first, then the set's row, live only and never
+    // waited for under the episode's lock; then the beat and its episode
+    // link as ONE commit. The set was read above without a lock, so it
+    // could be removed in between, and the link's failure was swallowed
+    // into a 200 (the beat moved and the link silently did not).
+    const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
+    const { lockEpisodes } = require('../utils/episodeLocks');
+    const saved = await inEpisodeFirstTransaction(ScenePlan.sequelize, async (transaction) => {
+      await lockEpisodes(ScenePlan.sequelize, [episodeId], { transaction, mode: 'share' });
+      if (!await holdLiveSet(ScenePlan.sequelize, sceneSet.id, { transaction, nowait: true })) return false;
+      await plan.update({
+        scene_set_id: sceneSet.id,
+        angle_label: bestAngle?.angle_label || null,
+        scene_context: sceneSet.script_context || sceneSet.canonical_description?.slice(0, 400),
+        ai_suggested: false,
+      }, { transaction });
+      // Ensure scene set is linked to episode
       await SceneSetEpisode.findOrCreate({
         where: { scene_set_id: sceneSet.id, episode_id: episodeId },
         defaults: { scene_set_id: sceneSet.id, episode_id: episodeId },
+        transaction,
       });
-    } catch { /* non-blocking */ }
+      return true;
+    });
+    if (!saved) return res.status(404).json({ error: 'Scene set not found' });
 
     return res.json({
       success: true,
@@ -234,8 +264,7 @@ router.put('/:episodeId/beat/:beatNumber/scene-set', requireAuth, authorize(['AD
       },
     });
   } catch (err) {
-    console.error('[SceneStudioEpisode] Change scene set error:', err);
-    return res.status(500).json({ error: err.message });
+    return beatWriteError(res, err, 'Change scene set');
   }
 });
 

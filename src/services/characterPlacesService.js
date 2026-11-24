@@ -144,6 +144,33 @@ async function setLead(sequelize, { showId, characterId }) {
   const next = characterId || null;
   if (String(oldLead || '') === String(next || '')) return { lead_character_id: next };
   await sequelize.transaction(async (transaction) => {
+    // C2 PR 3 (Evoni, 2026-11-24): the sets of the show's current home and
+    // closet defaults, live only, FIRST — before the show's row and before
+    // any character_places row. character_places has no foreign key, so
+    // the hand-over below could RESTORE a reference onto a set that had
+    // been removed (the defaults still name it after "Delete Anyway").
+    // WAITED: these are the transaction's first locks. The order matters:
+    // the delete path writes set rows, then `shows`, then
+    // `character_places` (sceneSetUsesService moveUses), so the set rows
+    // must be taken before the show's.
+    //
+    // A default naming a removed set is OMITTED from the hand-over rather
+    // than refused: the set ids here are the show's own stored state, not
+    // anything the caller asked for, and there is no name to refuse. The
+    // hand-over clears both defaults anyway, so the removed set simply
+    // becomes nobody's instead of the old lead's.
+    // The candidate set ids come from the show's metadata, so they are
+    // taken from the read `loadShow` already made above, WITHOUT the show's
+    // lock; their rows are held here, and then the show's row is locked and
+    // its metadata read again. A default that changed meanwhile to a set
+    // this transaction does not hold is omitted the same way.
+    const { holdLiveSets } = require('./eventPlaceSync');
+    const beforeDefaults = readSceneDefaults(show.metadata);
+    const candidates = Object.values(LEAD_DEFAULT_KEY).map((key) => beforeDefaults[key]).filter(Boolean);
+    const held = new Set();
+    for (const setId of [...new Set(candidates.map(String))].sort()) {
+      if (!await holdLiveSets(sequelize, [setId], { transaction })) held.add(String(setId));
+    }
     const [[locked]] = await sequelize.query('SELECT metadata FROM shows WHERE id = :showId FOR UPDATE', { replacements: { showId }, transaction });
     const defaults = readSceneDefaults(parseMetadata(locked.metadata));
     // With no lead before, the show's home and closet were nobody's: the
@@ -159,6 +186,13 @@ async function setLead(sequelize, { showId, characterId }) {
         // stays her home (the closet's row replaced its role, audit
         // 2026-10-15).
         if (role === 'closet' && String(defaults.closet_set_id) === String(defaults.home_set_id)) continue;
+        // C2 PR 3: no reference is restored onto a set that was removed (or
+        // onto one chosen since the rows above were held). The default is
+        // cleared either way, so the set becomes nobody's.
+        if (!held.has(String(defaults[key]))) {
+          console.warn(`[CharacterPlaces] the show's ${role} default is no longer a live scene set: it becomes nobody's instead of the old lead's.`);
+          continue;
+        }
         await sequelize.query(
           `INSERT INTO character_places (id, registry_character_id, scene_set_id, role, created_at, updated_at)
            VALUES (gen_random_uuid(), :characterId, :setId, :role, NOW(), NOW())
@@ -208,6 +242,17 @@ async function linkPlace(sequelize, { showId, characterId, sceneSetId, role, lab
     return listPlaces(sequelize, showId);
   }
   await sequelize.transaction(async (transaction) => {
+    // C2 PR 3 (Evoni, 2026-11-24): the set's row FIRST, live only, before
+    // the advisory lock and before any character_places row. The set was
+    // read above (liveSet) without a lock, and character_places has no
+    // foreign key, so a place could be linked to a set that had been
+    // removed in between. WAITED: this is the transaction's first lock, and
+    // the delete path takes set rows before `character_places`
+    // (sceneSetUsesService moveUses), so this is its order too.
+    const { holdLiveSet } = require('./eventPlaceSync');
+    if (!await holdLiveSet(sequelize, set.id, { transaction })) {
+      throw new CharacterPlacesError('Scene set not found', 404, 'SCENE_SET_NOT_FOUND');
+    }
     // One link at a time per character, so two homes saved at once do not
     // both stay (seventh audit).
     await sequelize.query("SELECT pg_advisory_xact_lock(hashtext('character-places:' || :characterId))",

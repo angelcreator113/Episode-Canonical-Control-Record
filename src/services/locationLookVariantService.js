@@ -185,7 +185,19 @@ async function startVariant(sequelize, { setId, kind, value }) {
   const set = await loadEveryday(sequelize, setId);
   // One run per slot: a slot already generating (and not stuck) is refused,
   // so a second click is never a second paid run.
-  const [[row]] = await sequelize.query(
+  // C2 PR 3 (Evoni, 2026-11-24): the set's row first, live only and WAITED
+  // (the transaction's first and only lock, and the delete path takes set
+  // rows before these). location_look_variants has no foreign key to
+  // scene_sets, so this claim waited on nothing and could be written for a
+  // set that had been removed since loadEveryday read it. The paid run
+  // below is NOT in this transaction: it is returned to the route and runs
+  // after the answer, as it always did.
+  const { holdLiveSet } = require('./eventPlaceSync');
+  const [[row]] = await sequelize.transaction(async (transaction) => {
+    if (!await holdLiveSet(sequelize, set.id, { transaction })) {
+      throw new LookVariantError('Scene set not found', 404, 'SET_NOT_FOUND');
+    }
+    return sequelize.query(
     `INSERT INTO location_look_variants (id, world_location_id, scene_set_id, kind, value, status, source, source_image_url, source_angle_id, prompt, estimate_usd, error, created_at, updated_at)
      VALUES (gen_random_uuid(), :loc, :setId, :kind, :value, 'generating', 'generated', :src, :angleId, :prompt, :estimate, NULL, NOW(), NOW())
      ON CONFLICT (scene_set_id, kind, value) WHERE deleted_at IS NULL
@@ -197,7 +209,8 @@ async function startVariant(sequelize, { setId, kind, value }) {
        WHERE location_look_variants.status <> 'generating'
           OR location_look_variants.updated_at < NOW() - INTERVAL '10 minutes'
      RETURNING id, updated_at::text AS claimed_at`,
-    { replacements: { loc: set.world_location_id, setId: set.id, kind, value, src: plan.source_image_url, angleId: plan.source_angle_id, prompt: plan.prompt, estimate: plan.estimate?.usd ?? null } });
+      { replacements: { loc: set.world_location_id, setId: set.id, kind, value, src: plan.source_image_url, angleId: plan.source_angle_id, prompt: plan.prompt, estimate: plan.estimate?.usd ?? null }, transaction });
+  });
   if (!row) throw new LookVariantError(`${LABELS[value]} is already being generated`, 409, 'VARIANT_GENERATING');
   // The run's result lands only on its own generation: an upload, a removal
   // or a newer run made meanwhile is never overwritten.
@@ -236,8 +249,15 @@ async function uploadVariant(sequelize, { setId, kind, value, storeImage }) {
   // A season shows the Front view it stands for (the set's current one),
   // so the beat planner swaps that view only.
   const angleId = kind === 'season' ? (await frontView(sequelize, set.id))?.id || null : null;
+  // storeImage puts the file in S3: a nontransactional side effect, so it
+  // stays BEFORE the transaction below and is never inside a retry (C2 PR 3).
   const url = await storeImage(set);
-  const [[row]] = await sequelize.query(
+  const { holdLiveSet } = require('./eventPlaceSync');
+  const [[row]] = await sequelize.transaction(async (transaction) => {
+    if (!await holdLiveSet(sequelize, set.id, { transaction })) {
+      throw new LookVariantError('Scene set not found', 404, 'SET_NOT_FOUND');
+    }
+    return sequelize.query(
     `INSERT INTO location_look_variants (id, world_location_id, scene_set_id, kind, value, status, source, image_url, source_angle_id, cost_usd, generated_at, created_at, updated_at)
      VALUES (gen_random_uuid(), :loc, :setId, :kind, :value, 'complete', 'uploaded', :url, :angleId, 0, NOW(), NOW(), NOW())
      ON CONFLICT (scene_set_id, kind, value) WHERE deleted_at IS NULL
@@ -245,7 +265,8 @@ async function uploadVariant(sequelize, { setId, kind, value, storeImage }) {
                    source_angle_id = EXCLUDED.source_angle_id, prompt = NULL, estimate_usd = NULL, cost_usd = 0,
                    error = NULL, generated_at = NOW(), updated_at = NOW()
      RETURNING id, kind, value, status, source, image_url`,
-    { replacements: { loc: set.world_location_id, setId: set.id, kind, value, url, angleId } });
+      { replacements: { loc: set.world_location_id, setId: set.id, kind, value, url, angleId }, transaction });
+  });
   return row;
 }
 

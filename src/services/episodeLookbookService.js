@@ -239,21 +239,34 @@ async function setVenueImage(models, episodeId, { source, ref_id: refId, in_look
   if (!opt) throw new LookbookError("That image is not one of this episode's venue images.", 404, 'VENUE_IMAGE_NOT_FOUND');
   const col = refColumn(source);
   const { EpisodeLookbookImage } = models;
-  const existing = await EpisodeLookbookImage.findOne({ where: { lookbook_id: lookbook.id, episode_id: ep.id, source, [col]: refId } });
-  if (existing) {
-    await EpisodeLookbookImage.update({ in_lookbook: inLookbook, category: 'venue' }, { where: { id: existing.id, episode_id: ep.id } });
-  } else {
-    await EpisodeLookbookImage.create({
-      lookbook_id: lookbook.id,
-      episode_id: ep.id,
-      category: 'venue',
-      source,
-      image_url: opt.image_url,
-      scene_set_id: opt.scene_set_id,
-      [col]: refId,
-      in_lookbook: inLookbook,
-    });
-  }
+  // C2 PR 3 (Evoni, 2026-11-24): the episode first, then the set's row,
+  // live only and never waited for under the episode's lock, then the row.
+  // The venue options were read above without a lock, and
+  // episode_lookbook_images.scene_set_id has a foreign key, so the insert
+  // waited on the delete and was then satisfied by the soft-deleted row.
+  const { inEpisodeFirstTransaction, holdLiveSet } = require('./eventPlaceSync');
+  const { lockEpisodes } = require('../utils/episodeLocks');
+  const made = await inEpisodeFirstTransaction(models.sequelize, async (transaction) => {
+    await lockEpisodes(models.sequelize, [ep.id], { transaction, mode: 'share' });
+    if (!await holdLiveSet(models.sequelize, opt.scene_set_id, { transaction, nowait: true })) return false;
+    const existing = await EpisodeLookbookImage.findOne({ where: { lookbook_id: lookbook.id, episode_id: ep.id, source, [col]: refId }, transaction });
+    if (existing) {
+      await EpisodeLookbookImage.update({ in_lookbook: inLookbook, category: 'venue' }, { where: { id: existing.id, episode_id: ep.id }, transaction });
+    } else {
+      await EpisodeLookbookImage.create({
+        lookbook_id: lookbook.id,
+        episode_id: ep.id,
+        category: 'venue',
+        source,
+        image_url: opt.image_url,
+        scene_set_id: opt.scene_set_id,
+        [col]: refId,
+        in_lookbook: inLookbook,
+      }, { transaction });
+    }
+    return true;
+  });
+  if (!made) throw new LookbookError("That image is not one of this episode's venue images.", 404, 'VENUE_IMAGE_NOT_FOUND');
   return getLookbook(models, episodeId);
 }
 

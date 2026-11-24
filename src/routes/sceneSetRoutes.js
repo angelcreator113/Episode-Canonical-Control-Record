@@ -2877,14 +2877,34 @@ router.post('/:id/episodes', validateUUIDParam('id'), requireAuth, authorize(['A
     const badEpisodes = await episodesError(episode_ids, set.show_id);
     if (badEpisodes) return res.status(400).json({ success: false, error: badEpisodes });
 
-    const results = [];
-    for (const episodeId of episode_ids) {
-      const [link] = await SceneSetEpisode.findOrCreate({
-        where: { scene_set_id: set.id, episode_id: episodeId },
-        defaults: { scene_set_id: set.id, episode_id: episodeId },
+    // C2 PR 3: the episodes first, in one ascending statement, then the
+    // set's row, live only and never waited for while an episode row is
+    // held. The set was read above without a lock, so it could be removed
+    // between that read and these links.
+    const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
+    const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+    let setGone = false;
+    try {
+      await inEpisodeFirstTransaction(SceneSet.sequelize, async (transaction) => {
+        setGone = false;
+        await lockEpisodes(SceneSet.sequelize, episode_ids, { transaction, mode: 'share' });
+        if (!await holdLiveSet(SceneSet.sequelize, set.id, { transaction, nowait: true })) { setGone = true; return; }
+        for (const episodeId of episode_ids) {
+          await SceneSetEpisode.findOrCreate({
+            where: { scene_set_id: set.id, episode_id: episodeId },
+            defaults: { scene_set_id: set.id, episode_id: episodeId },
+            transaction,
+          });
+        }
       });
-      results.push(link);
+    } catch (err) {
+      if (err instanceof RetryableConflictError) {
+        console.error(`Scene Sets POST /${req.params.id}/episodes gave up after retries:`, err.name);
+        return res.status(409).json({ success: false, code: err.code, error: err.message });
+      }
+      throw err;
     }
+    if (setGone) return res.status(404).json({ success: false, error: 'Scene set not found' });
 
     // Return updated episodes list
     const episodes = await Episode.findAll({

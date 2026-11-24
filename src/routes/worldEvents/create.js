@@ -106,8 +106,27 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
       ...(savedSourceProfileId ? { source_profile_id: savedSourceProfileId } : {}),
     };
 
+    // C2 PR 3 (Evoni, 2026-11-24): a new event's scene_set_id was saved
+    // straight from the request with no check of any kind, so an event
+    // could be created at a set that had been removed. One short
+    // transaction takes the set's row first, live only and WAITED (nothing
+    // else is held here, so waiting inverts no order), then inserts the
+    // event. A removed set is INVALID_SCENE_SET_ID, the code the event's
+    // own set rule already answers with (services/eventPlaceSync
+    // refuseEventSet).
+    const { holdLiveSet } = require('../../services/eventPlaceSync');
+    const INVALID_SET = { success: false, code: 'INVALID_SCENE_SET_ID', error: 'That scene set does not exist.' };
+    // An event that names no scene set holds nothing and needs no
+    // transaction: the insert runs exactly as it always did.
+    const inLiveSet = (work) => (resolvedSceneSetId
+      ? models.sequelize.transaction(async (transaction) => {
+        if (!await holdLiveSet(models.sequelize, resolvedSceneSetId, { transaction })) return null;
+        return work(transaction);
+      })
+      : work(undefined));
+
     if (models.WorldEvent) {
-      const event = await models.WorldEvent.create({
+      const event = await inLiveSet((transaction) => models.WorldEvent.create({
         show_id: showId,
         season_id: season_id || null,
         arc_id: arc_id || null,
@@ -139,7 +158,8 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
         chain_reason: chain_reason || null,
         status: 'draft',
         ...savedLinks,
-      });
+      }, { transaction }));
+      if (!event) return res.status(400).json(INVALID_SET);
       // The deal type's first draft (Task #2330; dealTypeDraftService).
       const dealDraft = await syncDraftedDealType(models.sequelize, event.id, { initial: true });
       if (dealDraft.deal_type) {
@@ -156,7 +176,7 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
     const linkCols = linkColumns.map((c) => `, ${c}`).join('');
     const linkVals = linkColumns.map((c) => `, :${c}`).join('');
     const id = uuidv4();
-    await models.sequelize.query(
+    const inserted = await inLiveSet((transaction) => models.sequelize.query(
       `INSERT INTO world_events
         (id, show_id, season_id, arc_id, name, event_type, category, format, host, host_brand, description,
         prestige, cost_coins, strictness, deadline_type, deadline_minutes,
@@ -215,8 +235,10 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
           chain_reason: chain_reason || null,
           ...savedLinks,
         },
+        transaction,
       }
-    );
+    ));
+    if (!inserted) return res.status(400).json(INVALID_SET);
 
     // The deal type's first draft (Task #2330; dealTypeDraftService).
     await syncDraftedDealType(models.sequelize, id, { initial: true });

@@ -103,12 +103,18 @@ async function approveBase(sequelize, sceneSet) {
     // A base being generated is about to be replaced: approving it now would
     // let the run overwrite the approved picture. A claim older than the
     // generation stale window is a run that died and does not block.
+    // C2 PR 3 (Evoni, 2026-11-24): `AND deleted_at IS NULL`. Without it this
+    // lock waited for the delete that held the set's row FOR UPDATE and then
+    // found the SOFT-DELETED row, so a removed set's base was approved onto
+    // its World Location. With it the row no longer matches once the delete
+    // has committed: no row, and the set-not-found answer below.
     const [setRows] = await sequelize.query(
       `SELECT name, (generation_status = 'generating'
                      AND updated_at > NOW() - make_interval(mins => :stale)) AS generating
-         FROM scene_sets WHERE id = :id LIMIT 1 FOR UPDATE`,
+         FROM scene_sets WHERE id = :id AND deleted_at IS NULL LIMIT 1 FOR UPDATE`,
       { replacements: { id: sceneSet.id, stale: GENERATION_STALE_MINUTES }, transaction }
     );
+    if (!setRows?.length) return { status: 404, error: 'Scene set not found' };
     if (setRows?.[0]?.generating) {
       return { status: 409, error: `The base of "${setRows[0].name}" is being generated. Approve it when it is done.` };
     }
