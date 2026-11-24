@@ -1002,60 +1002,79 @@ router.get('/:id/uses', validateUUIDParam('id'), requireAuth, async (req, res) =
   }
 });
 
+// C1, PR 1 (Evoni, 2026-11-24): every check and every write of the delete
+// runs in one transaction that holds the set's references in the Place
+// order (sceneSetUsesService.withSetLocks: every affected episode FOR
+// UPDATE, then its events, then the set rows). Read under those locks, in
+// this order: the set still there, the approved base, a locked Place, an
+// accepted episode that uses the set, a filmed one. The last two refuse a
+// delete with a replacement and "delete anyway" alike. Then the writes, as
+// they were. A lock conflict is tried again (three tries, a pause between
+// them outside any transaction) and then answers the retryable 409; any
+// other failure answers a fixed sentence, never the database's text.
+const DELETE_FAILED = 'The scene set could not be deleted. Nothing was changed.';
 router.delete('/:id', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
+  const uses = require('../services/sceneSetUsesService');
   try {
     const set = await SceneSet.findByPk(req.params.id);
     if (!set) return res.status(404).json({ success: false, error: 'Scene set not found' });
-    const { countUses, moveUses, SceneSetUsesError, lockedEventsAt, releaseVersions } = require('../services/sceneSetUsesService');
-    // The location's approved base (S6) is un-approved before its set is
-    // deleted: deleting it left the location pointing at a removed set, and
-    // no other set there could be approved (audit, 2026-10-15).
-    if (await refuseApprovedBase(res, set)) return;
-    // An event whose episode is accepted keeps its Place: deleting its set,
-    // or moving it to a replacement, changed a locked place (seventh audit).
-    const locked = await lockedEventsAt(SceneSet.sequelize, set.id);
-    if (locked.length) {
-      const { PLACE_LOCKED_CODE } = require('../utils/placeLock');
-      return res.status(409).json({
-        success: false, code: PLACE_LOCKED_CODE, locked_events: locked,
-        error: `${locked.map((e) => e.name).join(', ')} ${locked.length === 1 ? 'is' : 'are'} held here and ${locked.length === 1 ? 'its episode is' : 'their episodes are'} accepted: the place is locked, so this set stays.`,
-      });
-    }
+    const sequelize = SceneSet.sequelize;
     const replacementId = req.query.replacement_id || req.body?.replacement_id || null;
     const confirmOrphan = String(req.query.confirm_orphan || req.body?.confirm_orphan || '') === 'true';
-    if (replacementId) {
-      try {
-        const moved = await SceneSet.sequelize.transaction(async (transaction) => {
-          const counts = await moveUses(SceneSet.sequelize, set.id, replacementId, { transaction });
-          await set.destroy({ transaction });
-          return counts;
+    const reply = (status, body) => ({ status, body });
+    const answer = await uses.withSetLocks(sequelize, { setId: set.id, replacementId }, async ({ transaction, refs }) => {
+      // Deleted by another request while this one waited for its locks.
+      const [[now]] = await sequelize.query('SELECT deleted_at FROM scene_sets WHERE id = :id', { replacements: { id: set.id }, transaction });
+      if (!now || now.deleted_at) return reply(404, { success: false, error: 'Scene set not found' });
+      // The location's approved base (S6) is un-approved before its set is
+      // deleted: deleting it left the location pointing at a removed set, and
+      // no other set there could be approved (audit, 2026-10-15).
+      const base = await approvedBase.baseReplaceRefusal(sequelize, set.id, { transaction });
+      if (base) return reply(base.status, { success: false, error: base.error, approved_base_of: base.approved_base_of });
+      // An event whose episode is accepted keeps its Place: deleting its set,
+      // or moving it to a replacement, changed a locked place (seventh audit).
+      const locked = await uses.lockedEventsAt(sequelize, set.id, { transaction });
+      if (locked.length) {
+        const { PLACE_LOCKED_CODE } = require('../utils/placeLock');
+        return reply(409, {
+          success: false, code: PLACE_LOCKED_CODE, locked_events: locked,
+          error: `${locked.map((e) => e.name).join(', ')} ${locked.length === 1 ? 'is' : 'are'} held here and ${locked.length === 1 ? 'its episode is' : 'their episodes are'} accepted: the place is locked, so this set stays.`,
         });
-        return res.json({ success: true, message: 'Scene set deleted; its uses moved to the replacement', moved });
-      } catch (moveErr) {
-        if (moveErr instanceof SceneSetUsesError) return res.status(moveErr.status).json({ success: false, code: moveErr.code, error: moveErr.message });
-        throw moveErr;
       }
-    }
-    const uses = await countUses(SceneSet.sequelize, set.id);
-    if (uses.total > 0 && !confirmOrphan) {
-      return res.status(409).json({
-        success: false, code: 'SET_IN_USE', uses,
-        error: `This scene set is used ${uses.total} time(s). Choose a replacement to move them to, or delete anyway and leave them pointing at a removed set.`,
-      });
-    }
-    // Deleted anyway: its beats keep pointing at it (the Scenes tab names
-    // them), but episode links no beat uses are dropped (Evoni, 2026-10-07).
-    const { dropRemovedSetLinks } = require('../services/sceneSetUsesService');
-    const linksDropped = await SceneSet.sequelize.transaction(async (transaction) => {
+      // An accepted or a filmed episode that uses the set keeps it (throws).
+      await uses.assertNoAcceptedOrFilmedUses(sequelize, set.id, { refs, transaction });
+      if (replacementId) {
+        const moved = await uses.moveUses(sequelize, set.id, replacementId, { transaction });
+        await set.destroy({ transaction });
+        return reply(200, { success: true, message: 'Scene set deleted; its uses moved to the replacement', moved });
+      }
+      const count = await uses.countUses(sequelize, set.id, { transaction });
+      if (count.total > 0 && !confirmOrphan) {
+        return reply(409, {
+          success: false, code: 'SET_IN_USE', uses: count,
+          error: `This scene set is used ${count.total} time(s). Choose a replacement to move them to, or delete anyway and leave them pointing at a removed set.`,
+        });
+      }
+      // Deleted anyway: its beats keep pointing at it (the Scenes tab names
+      // them), but episode links no beat uses are dropped (Evoni, 2026-10-07).
       await set.destroy({ transaction });
       // Its event versions read as everyday sets again (seventh audit).
-      await releaseVersions(SceneSet.sequelize, set.id, { transaction });
-      return dropRemovedSetLinks(SceneSet.sequelize, { setId: set.id, transaction });
+      await uses.releaseVersions(sequelize, set.id, { transaction });
+      const linksDropped = await uses.dropRemovedSetLinks(sequelize, { setId: set.id, transaction });
+      return reply(200, { success: true, message: 'Scene set deleted', uses_left: count, links_dropped: linksDropped });
     });
-    res.json({ success: true, message: 'Scene set deleted', uses_left: uses, links_dropped: linksDropped });
+    return res.status(answer.status).json(answer.body);
   } catch (err) {
-    console.error('Scene Sets DELETE /:id error:', err);
-    sendFail(res, err);
+    if (err instanceof uses.SceneSetUsesError) {
+      return res.status(err.status).json({ success: false, code: err.code, error: err.message, ...(err.episodes ? { episodes: err.episodes } : {}) });
+    }
+    const { isFrozenEpisodeError } = require('../utils/frozenEpisode');
+    if (isFrozenEpisodeError(err)) return res.status(409).json(err.toJSON());
+    const { asRetryable, RetryableConflictError } = require('../utils/episodeLocks');
+    const retry = asRetryable(err);
+    if (retry instanceof RetryableConflictError) return res.status(409).json({ success: false, code: retry.code, error: retry.message });
+    console.error(`Scene Sets DELETE /:id error: set=${req.params.id} error=${require('../services/sceneGenerationService').errorClassOf(err)}`);
+    return res.status(500).json({ success: false, error: DELETE_FAILED });
   }
 });
 
