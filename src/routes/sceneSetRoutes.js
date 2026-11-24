@@ -1013,6 +1013,11 @@ router.get('/:id/uses', validateUUIDParam('id'), requireAuth, async (req, res) =
 // them outside any transaction) and then answers the retryable 409; any
 // other failure answers a fixed sentence, never the database's text.
 const DELETE_FAILED = 'The scene set could not be deleted. Nothing was changed.';
+const DELETE_REFUSED_BY_GENERATION_GUARD = 'This scene set, or one of its angles, has a generation that is in flight or whose outcome is not known yet: it cannot be deleted until that is settled. Nothing was changed.';
+// The guard raises SQLSTATE 23514 with a message that begins with its name;
+// an ordinary check constraint shares the SQLSTATE but not the prefix.
+const isGenerationGuardRefusal = (err) => (err?.original?.code || err?.parent?.code || err?.code) === '23514'
+  && /^scene generation guard: /.test(String(err?.original?.message || err?.message || ''));
 router.delete('/:id', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), async (req, res) => {
   const uses = require('../services/sceneSetUsesService');
   try {
@@ -1073,11 +1078,13 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, authorize(['ADMIN'])
     const { asRetryable, RetryableConflictError } = require('../utils/episodeLocks');
     const retry = asRetryable(err);
     if (retry instanceof RetryableConflictError) return res.status(409).json({ success: false, code: retry.code, error: retry.message });
-    // The scene generation guard (migration 20261108210100) refuses the
-    // removal of a set whose generation outcome is uncertain or in flight,
-    // with a sentence of its own written for the user. That refusal is
-    // answered as it always was (sendFail), not as the fixed sentence.
-    if (/^scene generation guard: /.test(String(err?.message || ''))) return sendFail(res, err);
+    // The scene generation guard (migration 20261108210100) is the database's
+    // own refusal to remove a set, or a set with an angle, whose generation
+    // outcome is uncertain or in flight. It stays the authority; its refusal
+    // is known by its SQLSTATE and its prefix, and answered with this
+    // route's own sentence at the status it always had (500). The trigger's
+    // text, which names row ids, is not sent.
+    if (isGenerationGuardRefusal(err)) return res.status(500).json({ success: false, error: DELETE_REFUSED_BY_GENERATION_GUARD });
     console.error(`Scene Sets DELETE /:id error: set=${req.params.id} error=${require('../services/sceneGenerationService').errorClassOf(err)}`);
     return res.status(500).json({ success: false, error: DELETE_FAILED });
   }

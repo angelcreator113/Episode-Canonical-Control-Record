@@ -3,7 +3,7 @@
 
 **Document version**
 
-v1.0. This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
+v1.1 (v1.0 was this file at `3f252c3d`, on the same unmerged branch; the scene generation guard in §2, §4 and §9, and the generate-venue symptom in §9 and §10, are what changed). This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
 - The FD tail, XK tail and PE tail are unchanged.
 - No earlier register file is edited, and no banner is added to one.
 
@@ -48,6 +48,8 @@ Evoni authorized PR 1 on 2026-11-24 as one change. Her terms, as given to this w
 
 **Standing terms.** The helpers are exported and parameterised so that the later correction of "Move my beats" (C2) can reuse them with an episode scope. `moveRemovedSetsForEpisode` and its route are not changed. Not in scope, and several of them held: PR 2 (the event-first writers), PR 3, the active-generation refusal on delete, claim-side generation rules, a late base on a removed set, editor-clip references, the acceptance guard, two-part acceptance, S1, recovery; no change to `placeLock.js`, `eventEpisodeLink.js` or `episodeLocks.js`; no migration; no authorization change; no frontend change unless the Scene Sets page could not show the new refusals.
 
+**The scene generation guard (her ruling on review of this change, as given to this work).** The database's generation guard stays authoritative. The delete route must not pass the trigger's raw sentence through: it maps that one known condition (SQLSTATE 23514 with the prefix "scene generation guard: ") to a fixed sentence of its own at the existing status (500), and keeps the generic sentence for unrelated database failures.
+
 **To be stated, not fixed.** With exclusive episode locks, PR 1 alone deadlocks against today's event-first writers when the writer goes first. PR 1 must not be deployed without PR 2. The incompatibility is to be reproduced in the tests as it is, not hidden, and the exclusive lock is not to be weakened to make it disappear.
 
 **Also recorded today (her decision).** The event edit and scene-set-link change the Place of a filmed, not accepted episode's event today. It is recorded against PR 2 / S1 (§8), not implemented.
@@ -84,10 +86,22 @@ One `withSetLocks` call. Inside the work, in this order: the set still there (40
 | A filmed episode uses the set, directly or through an event held at it | deleted, or its uses moved | 409 `{ success: false, code: 'EPISODE_SNAPSHOT_FROZEN', error: 'Episode 12 "Title" has been filmed (since 2026-11-24) and uses this scene set: it stays. Nothing was changed.', episode_id, frozen_at }` |
 | Those two, with no choice made (neither a replacement nor "delete anyway") | 409 `SET_IN_USE` | the refusal above (it is asked before the uses are counted) |
 | A lock conflict that outlasts three tries | 500 with the database's message | 409 `{ success: false, code: 'RETRY', error: 'Someone else changed this at the same moment. Nothing was saved: try again.' }` |
+| The scene generation guard refuses the removal (below) | 500 with the trigger's sentence, which names row ids | 500 `{ success: false, error: 'This scene set, or one of its angles, has a generation that is in flight or whose outcome is not known yet: it cannot be deleted until that is settled. Nothing was changed.' }` |
 | Any other failure | 500 with the error's message | 500 `{ success: false, error: 'The scene set could not be deleted. Nothing was changed.' }`; one error line with the set id and the error's class |
 | The set deleted by another request while this one waited | (it ran on the stale row) | 404 `Scene set not found` |
 
 A deleted episode's rows do not hold a set, unless the deleted episode was filmed (its clips are its history, as `frozenEpisode.js` treats them everywhere).
+
+## The scene generation guard
+
+An existing database protection (migration `20261108210100`, a trigger): it refuses the removal of a set, or of a set with an angle, whose generation is in flight or whose outcome is uncertain, by raising SQLSTATE 23514 with a message that begins "scene generation guard: " and names row ids. It is not changed and it stays the authority: the route does not ask the question itself, and it is the trigger that stops the delete, inside the delete's transaction, which is rolled back.
+
+What changed is only how the route answers it. Three versions on this branch:
+1. v1.0 of this change (`3f39f904`) answered every non-lock failure with the generic fixed sentence, the guard's refusal included. That lost the one thing the user needs to know (a generation is unsettled), and `sceneGenerationLegacyCompat` pins the guard's refusal on this route.
+2. `e74c2ff6` passed the guard's own sentence through (`sendFail`), as before PR 1. That kept the meaning but sent the trigger's text, with row ids, against §2's "no raw PostgreSQL text in any response of this route".
+3. Now (`isGenerationGuardRefusal` and `DELETE_REFUSED_BY_GENERATION_GUARD`, `src/routes/sceneSetRoutes.js`): the refusal is recognised by its SQLSTATE and its prefix together and answered with the route's own sentence, at 500 as it always was. An ordinary check-constraint failure shares the SQLSTATE and not the prefix: it gets the generic sentence. Neither is tried again.
+
+**Recorded, not changed:** the other scene-set routes the guard can refuse (the angle delete and status routes, the generate and regenerate routes) and generate-venue still relay the guard's text in their 500. That is outside this change.
 
 # §5. The lock order
 
@@ -150,7 +164,7 @@ Source: the prototype's PR 2 part and its round 4 (the incompatible cells: 40P01
 
 On a private, migrated local PostgreSQL test database, through the real app and services. The image provider, the storage and the model are doubles. No test sends DDL. The network guard reports 0 external attempts. "Real lock" below: two real writers, one held open at a statement by the lock trace's gate with its locks really held, or a real row lock held by another transaction; "injected": one statement made to throw.
 
-`tests/integration/sceneSetDeleteLockOrder.integration.test.js` (75 cases):
+`tests/integration/sceneSetDeleteLockOrder.integration.test.js` (77 cases):
 
 - **Unchanged behaviour (6).** A set nothing uses; `SET_IN_USE` with its exact body; "delete anyway" (uses left, a link no beat uses dropped, versions released); a replacement (every kind of use moved, with the exact counts); the four bad-replacement answers; the approved base first.
 - **The order (3, real locks).** Five episodes (two direct, two through events, one both), three events and a version: one episode statement naming all five, the events ascending, one set-row statement, no write before it; each row probed from another session at the strength claimed. A reference set that grows after discovery: rolled back with nothing written, one pause with no session inside a transaction, a second transaction holding the larger set. A set that keeps growing: three tries, two pauses, 409 `RETRY`.
@@ -160,6 +174,7 @@ On a private, migrated local PostgreSQL test database, through the real app and 
 - **The Place-order writers, both orders each (5 tests, 10 races, real locks).** The Locations save that leaves the event's set; the one that moves it; Start's locations write; an uploaded look; generate-venue. The writer first: the delete waits (or steps back once from a set row) and then moves the uses, the writer's included. The delete first: the writer waits, then answers `STALE_SOURCE_SET` (generate-venue: with `generated_not_saved`), and the state is the delete's alone. No 40P01.
 - **Acceptance (6, real locks).** A real `completeEpisode` first, on a direct and on an event-linked episode: the delete waits, then `EPISODE_ACCEPTED` or `PLACE_LOCKED`, Place rows identical. The delete first: the acceptance waits, then succeeds. A real two-part completion, both orders. The gap of a real two-part completion (stopped just after Part 1's commit): the event's set stays by either delete, nothing changes; and the **known gap** of §10.
 - **The first clip (4, real locks).** `createClip` first, direct and event-linked: the delete waits, then `EPISODE_SNAPSHOT_FROZEN`, nothing changed but the clip. The delete first: the clip waits, then attaches.
+- **The generation guard (2, injected; in the "held rows and failures" group, which makes it 23).** The guard's error as the trigger raises it: 500 with the route's own sentence, nothing of the trigger's text, its ids or the SQLSTATE, every row as it was, not tried again; the same case fails against `e74c2ff6`'s route (run once to confirm, then restored). An ordinary 23514 without the prefix: the generic sentence.
 - **KNOWN INCOMPATIBILITY (5).** §7's four, and the delete first against the same writers.
 - **RECORDED GAP (2).** §8's two.
 
@@ -171,11 +186,11 @@ On a private, migrated local PostgreSQL test database, through the real app and 
 
 Also run on that database and passing: `placeLockStrict` (53), `sceneSetsAudit7` (7), `p2aSceneAdmin` (335), `p2bSceneSetAdmin` (243), `placeLockGenerationB1` (56), `placeLockGenerationB2` (69), `placeLockFinalizer` (52), `looksFixes4` (6, 1 skipped as before). The unit directory: 745 suites, 11287 tests.
 
-**Not run locally, by the rule that a local run sends no DDL** (CI runs them): `sceneSetUses`, `sceneRoutesAudit3`, `approvedBase`, `venuePhoto`, `sceneGenerationLegacyCompat`. They were read against this change: their deletes are of sets used by draft, unfilmed episodes or by nothing, and assert `SET_IN_USE`, the moved counts, the bad-replacement answers and the approved-base refusal, none of which changes (INFERRED from reading, not run). None was edited.
+**Not run locally, by the rule that a local run sends no DDL** (CI runs them): `sceneSetUses`, `sceneRoutesAudit3`, `approvedBase`, `venuePhoto`, `sceneGenerationLegacyCompat`. They were read against this change: their deletes are of sets used by draft, unfilmed episodes or by nothing, and assert `SET_IN_USE`, the moved counts, the bad-replacement answers and the approved-base refusal, none of which changes (INFERRED from reading, not run). One was edited, by reading: `sceneGenerationLegacyCompat` asserted the guard's raw sentence on two set deletes; those two now assert the route's fixed sentence and that no trigger text, id or database word is sent (its other guard assertions, on routes not changed here, are as they were). `sceneGenerationGuards` and `sceneGenerationPlannedFlows` were read: neither asserts the guard's sentence on `DELETE /scene-sets/:id`.
 
 **Frontend:** no file changed; the Vitest suite was not run for this change.
 
-**One intermittent failure.** In the local runs of the new file made while it was written, one run failed one case and every other run passed; the failing run's log was overwritten before it was read. It is not explained (§10).
+**One intermittent failure, identified.** 25 further runs without load passed; under CPU load 3 of 10 runs failed, always the generate-venue case, "generate-venue first": generate-venue answered 500 `{ outcome: 'failed', error: 'Instance could not be reloaded because it does not exist anymore (find call returned null)' }`. After its finalization commits, the route reloads the set (`src/routes/worldEvents/venue.js`, `attached.reload()`); a delete that was waiting for that finalization can commit first, and the reload of a removed set throws. It is a behaviour of the generate-venue route, which this change does not touch, and it was possible before this change; the delete now queues directly behind the finalization, which makes it likelier. The assertion is not weakened and the route is not changed: it awaits a decision (§10).
 
 # §10. Known remaining gaps and limits
 
@@ -189,7 +204,7 @@ Also run on that database and passing: `placeLockStrict` (53), `sceneSetsAudit7`
 - **Writers of references that take no lock.** The beat editor's save, `linkBeatSet`, Start's beats, the show's scene defaults and characters' places write a reference to a set without the set rule of §8. A delete does not wait for them and they do not see an uncommitted delete: such a reference can be committed to a set as it is removed. "Delete anyway" and `moveUses` then run on what they read under their own locks; a reference committed after their read is left on the removed set.
 - **"Move my beats"** (`moveRemovedSetsForEpisode`) is unchanged: it still writes with no lock and no accepted or filmed check (C2).
 - **Deleted, filmed episodes** hold a set their live rows still name. That follows `frozenEpisode.js`; it was not ruled on separately.
-- **The intermittent failure** of §9 is unexplained.
+- **generate-venue answers 500 with the ORM's text when a delete commits just after its save** (§9). The base was generated, paid for and saved, and the delete then moved the event to the replacement. Not changed here; the test case that meets it fails intermittently until it is.
 - **The live schema and the running processes were not verified.** No server was contacted. **No migration; no stored row is changed.**
 
 ---

@@ -776,6 +776,36 @@ const observed = [];
       expect(await snapshot()).toEqual(before);
     });
 
+    test.each([
+      ['the scene generation guard refusing the removal (SQLSTATE 23514 and its prefix): this route\'s own sentence, nothing of the trigger\'s text or its ids',
+        (id) => `scene generation guard: set ${id} has an angle with an uncertain outcome and cannot be deleted`,
+        { success: false, error: 'This scene set, or one of its angles, has a generation that is in flight or whose outcome is not known yet: it cannot be deleted until that is settled. Nothing was changed.' }],
+      ['an ordinary check-constraint failure, which shares the guard\'s SQLSTATE (23514) but not its prefix: the generic fixed sentence',
+        () => 'new row for relation "scene_sets" violates check constraint "scene_sets_some_check"',
+        DELETE_FAILED],
+    ])('[injected] %s; 500 as before, every row as it was, not tried again', async (_name, textOf, body) => {
+      await placed();
+      const before = await snapshot();
+      const real = sequelize.query.bind(sequelize);
+      const text = textOf(w.s);
+      const removal = /^UPDATE "scene_sets" SET "deleted_at"/;
+      jest.spyOn(sequelize, 'query').mockImplementation((sql, options) => {
+        if (options?.transaction && removal.test(flat(typeof sql === 'string' ? sql : sql?.query || sql))) {
+          return Promise.reject(Object.assign(new Error(text), { name: 'SequelizeDatabaseError', original: Object.assign(new Error(text), { code: '23514' }) }));
+        }
+        return real(sql, options);
+      });
+      const res = await del(w.s, ANYWAY);
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual(body);
+      const sent = JSON.stringify(res.body);
+      expect(sent).not.toMatch(/scene generation guard|23514/);
+      expect(sent).not.toContain(String(w.s));
+      expect(sent).not.toMatch(NOT_DATABASE_TEXT);
+      expect(await snapshot()).toEqual(before);
+      expect(pause).not.toHaveBeenCalled();
+    });
+
     test('a deadlock reported inside the delete (40P01) is tried again and never reaches the answer as text', async () => {
       await placed();
       const real = sequelize.query.bind(sequelize);
