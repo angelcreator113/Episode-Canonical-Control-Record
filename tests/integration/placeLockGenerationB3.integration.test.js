@@ -1073,11 +1073,31 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
   // page's "delete anyway" sends). Each ordering's outcome is what was
   // observed; the last two are NOT prevented by this change and are written
   // down as they are.
+  //
+  // C1 PR 1 (Evoni, 2026-11-24;
+  // docs/audit/F-AUTH-1_SceneSetDeleteLockOrder_Amendment_2026-11-24.md)
+  // changed the delete route: it now takes the episodes and events that
+  // reference the set, and the set's row FOR UPDATE, before it writes. So
+  // the route can no longer commit inside Start's locations write, and the
+  // two orderings this file recorded as known remaining races are closed:
+  // the removal and the write take turns. The cases below are rewritten to
+  // what happens now. The write's own check stays, and is shown with a set
+  // removed by a statement (as any path other than that route leaves it).
   describe('a scene set removed from Scene Sets around Start\'s locations write', () => {
     const startable = (setId = w.a) => mkEvent(show, { set: setId });
     const remove = (id, confirm = true) => asAdmin(request(app).delete(`/api/v1/scene-sets/${id}${confirm ? '?confirm_orphan=true' : ''}`)).send({});
     const resume = (ep) => asAdmin(request(app).post(`/api/v1/episode-brief/${ep}/setup/resume`)).send({});
     const removedAt = async (id) => (await rows('SELECT deleted_at FROM scene_sets WHERE id = :id', { id }))[0].deleted_at;
+    /** A set removed without the delete route (a soft delete, as the row is left by it). */
+    const softRemove = (id) => run('UPDATE scene_sets SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id', { id });
+    const waitingForLock = async () => (await rows(
+      "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND wait_event_type = 'Lock'"))[0].n;
+    /** [real lock] Until another session really waits for a row lock. */
+    async function untilWaiting() {
+      const end = Date.now() + 8000;
+      while (await waitingForLock() === 0 && Date.now() < end) await new Promise((resolve) => setTimeout(resolve, 15));
+      expect(await waitingForLock()).toBeGreaterThan(0);
+    }
     const NOT_SAVED = "The episode's locations were not saved: set them in the episode's Locations.";
     /**
      * What a locations write writes, for the whole show: every link, each
@@ -1113,12 +1133,11 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       return { ev, ep, res, before };
     }
 
-    test('the event\'s set removed after Start\'s commit and before its locations write: nothing written by the write, a failed step with the check\'s code, not tried again; the Start, its replay and Resume say incomplete', async () => {
+    test('the event\'s set found removed by the locations write\'s check (removed after Start\'s commit, by a statement): nothing written by the write, a failed step with the check\'s code, not tried again; the Start, its replay and Resume say incomplete', async () => {
       const key = `genb3-${fx.uuid()}`;
       const locations = [loc('event', w.a), loc('home', w.home)];
       const { ev, ep, res, before } = await startWith(locations, async () => {
-        const gone = await remove(w.a);
-        expect(gone.status).toBe(200);
+        await softRemove(w.a);
         expect(await removedAt(w.a)).not.toBeNull();
         return placeState();
       }, { key });
@@ -1154,12 +1173,15 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
     });
 
     test.each([
-      ['home', () => [loc('event', w.a), loc('home', w.home2)], () => w.home2, 'home'],
-      ['closet', () => [loc('event', w.a), loc('home', w.home), loc('closet', w.closet)], () => w.closet, 'closet'],
-      ['extra', () => [loc('event', w.a), loc('home', w.home), loc('extra', w.b, 'Car')], () => w.b, 'extra'],
-    ])('a removed %s set (not the event\'s) among Start\'s locations: the same refusal, and nothing partial (no link at all, the event not written)', async (_name, locationsOf, setOf, role) => {
+      // Home and closet: Start's beats already name them, so the route would wait for the write (below); removed by a statement.
+      ['home', () => [loc('event', w.a), loc('home', w.home2)], () => w.home2, 'home', softRemove],
+      ['closet', () => [loc('event', w.a), loc('home', w.home), loc('closet', w.closet)], () => w.closet, 'closet', softRemove],
+      // An extra nothing of the episode names yet: the real route removes it at once.
+      ['extra', () => [loc('event', w.a), loc('home', w.home), loc('extra', w.b, 'Car')], () => w.b, 'extra', async (id) => expect((await remove(id)).status).toBe(200)],
+    ])('a removed %s set (not the event\'s) among Start\'s locations: the same refusal, and nothing partial (no link at all, the event not written)', async (_name, locationsOf, setOf, role, removeIt) => {
       const { ep, res, before } = await startWith(locationsOf(), async () => {
-        expect((await remove(setOf())).status).toBe(200);
+        await removeIt(setOf());
+        expect(await removedAt(setOf())).not.toBeNull();
         return placeState();
       });
       expect(res.status).toBe(201);
@@ -1208,53 +1230,63 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       expect((await eventRow(ev)).scene_set_id).toBe(w.a);
     });
 
-    test('KNOWN REMAINING RACE (the delete route\'s side, held work C2) [real lock]: a removal in flight (its UPDATE done, not committed) while Start runs: FOR KEY SHARE NOWAIT does not conflict with it, the check still reads the set as live, the locations are saved, and when the removal commits the episode\'s link, its event and its beats are on a removed set', async () => {
+    test('[real lock] the real delete route during Start\'s locations write (after its commit, before the write locks a set): the removal waits for the write, which is saved; then "delete anyway" removes the set and leaves the episode\'s uses on it, as that route does (C1 PR 1: the two take turns)', async () => {
       const ev = await startable();
-      // The real route, stopped just after its soft delete ran inside its transaction (the set row is updated and not committed).
+      const gate = savingLocations();
+      const pending = send(start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a }));
+      await gate.reached;
+      const removal = send(remove(w.a));
+      await untilWaiting(); // the delete needs the episode and event rows the write holds
+      expect(await removedAt(w.a)).toBeNull();
+      gate.open();
+      const [res, removed] = await Promise.all([pending, removal]);
+      expect(res.status).toBe(201);
+      expect(res.body.setup_complete).toBe(true);
+      expect(removed.status).toBe(200);
+      expect(lockErrors(trace.records)).toEqual([]);
+      const ep = res.body.data.episode.id;
+      expect(await removedAt(w.a)).not.toBeNull();
+      // "Delete anyway": the uses are left on the removed set (existing behaviour of that choice).
+      expect((await rows('SELECT role FROM scene_set_episodes WHERE episode_id = :ep AND scene_set_id = :a AND deleted_at IS NULL', { ep, a: w.a }))).toEqual([{ role: 'event' }]);
+      expect((await eventRow(ev)).scene_set_id).toBe(w.a);
+    });
+
+    test('[real lock] a removal in flight when Start begins (the real route, held after its soft delete, its locks held): Start waits for the event row; its locations write then finds the set removed and saves nothing (was a KNOWN REMAINING RACE before C1 PR 1: closed)', async () => {
+      const ev = await startable();
       const softDeleted = gateOn((rec, sql) => Boolean(rec.txId) && /^UPDATE "scene_sets" SET "deleted_at"/.test(sql));
       const removal = send(remove(w.a));
       await softDeleted.reached;
-      expect(await removedAt(w.a)).toBeNull(); // not committed: every other session still reads it live
-
-      const res = await start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a });
-      expect(res.status).toBe(201);
-      expect(res.body.setup_complete).toBe(true);
-      expect(res.body.data.setup_status.steps.locations).toEqual({ status: 'complete', count: 2 });
-      // No lock conflict and no wait: a key-share lock and a plain update's lock do not conflict.
-      expect(lockErrors(trace.records)).toEqual([]);
-      expect(pause).not.toHaveBeenCalled();
-      const ep = res.body.data.episode.id;
-
+      expect(await removedAt(w.a)).toBeNull(); // not committed
+      const pending = send(start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a }));
+      await untilWaiting(); // Start waits for the event row the delete holds
       softDeleted.open();
-      const removed = await removal;
+      const [removed, res] = await Promise.all([removal, pending]);
       expect(removed.status).toBe(200);
-      expect(await removedAt(w.a)).not.toBeNull();
-      // The outcome this change does not prevent: references on a removed set.
-      expect((await rows('SELECT role FROM scene_set_episodes WHERE episode_id = :ep AND scene_set_id = :a AND deleted_at IS NULL', { ep, a: w.a }))).toEqual([{ role: 'event' }]);
-      expect((await eventRow(ev)).scene_set_id).toBe(w.a);
-      const atRemoved = await rows('SELECT beat_number FROM scene_plans WHERE episode_id = :ep AND scene_set_id = :a AND deleted_at IS NULL ORDER BY beat_number', { ep, a: w.a });
-      expect(atRemoved.map((b) => b.beat_number)).toEqual([10, 11, 12]);
-      expect((await episodeRow(ep)).setup_status.complete).toBe(true);
+      expect(res.status).toBe(201);
+      expect(res.body.setup_complete).toBe(false);
+      expect(res.body.data.setup_status.steps.locations).toMatchObject({ status: 'failed', code: 'SCENE_SET_NOT_FOUND', reason: `The event scene set no longer exists. ${NOT_SAVED}` });
+      expect(lockErrors(trace.records).filter((e) => e === '40P01')).toEqual([]);
+      expect(await links(res.body.data.episode.id)).toEqual([]);
     });
 
-    test('KNOWN REMAINING RACE (C2) [real lock]: the removal committing after the write has checked its sets, before the write commits: the write is not blocked and commits; the references are on a removed set', async () => {
+    test('[real lock] the removal arriving after the write has checked its sets, before the write commits: it waits for the write, then "delete anyway" removes the set (was a KNOWN REMAINING RACE before C1 PR 1: the two now take turns)', async () => {
       const ev = await startable();
       // Start's locations write stopped after its check read the sets as live (its first link written, not committed).
       const checked = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'insert' && rec.table === 'scene_set_episodes');
       const pending = send(start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a }));
       await checked.reached;
       const ep = await episodeOf(ev);
-      // The removal is not blocked by the write's key-share lock on the set's row: it commits now.
-      const removed = await remove(w.a);
-      expect(removed.status).toBe(200);
-      expect(await removedAt(w.a)).not.toBeNull();
+      const removal = send(remove(w.a));
+      await untilWaiting();
+      expect(await removedAt(w.a)).toBeNull();
       checked.open();
-      const res = await pending;
+      const [res, removed] = await Promise.all([pending, removal]);
       expect(res.status).toBe(201);
       expect(res.body.data.setup_status.steps.locations).toEqual({ status: 'complete', count: 2 });
+      expect(removed.status).toBe(200);
       expect(lockErrors(trace.records)).toEqual([]);
+      expect(await removedAt(w.a)).not.toBeNull();
       expect((await rows('SELECT role FROM scene_set_episodes WHERE episode_id = :ep AND scene_set_id = :a AND deleted_at IS NULL', { ep, a: w.a }))).toEqual([{ role: 'event' }]);
-      expect((await eventRow(ev)).scene_set_id).toBe(w.a);
     });
 
     test('a valid Start and its replay are as they were: the sets checked in the write\'s transaction, after their rows are locked and before the first write', async () => {
