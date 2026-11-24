@@ -740,7 +740,7 @@ const settle = (promise) => promise.then(
   // ══════════════════════════════════════════════════════════════════════
   // 7. THE PLANNER AND START: a set removed after it was read
   // ══════════════════════════════════════════════════════════════════════
-  describe('the planner and Start discover a stale set at save time', () => {
+  describe('the planner discovers a stale set at save time; Start still does not (W8 is out)', () => {
     const planner = require('../../src/services/scenePlannerService');
     const generator = require('../../src/services/episodeGeneratorService');
 
@@ -769,7 +769,17 @@ const settle = (promise) => promise.then(
       }
     });
 
-    test('W8 Start\'s plan rows: a set removed before they are written is omitted, and Start is not failed', async () => {
+    test('RECORDED GAP (W8, UNRESOLVED): Start\'s plan rows still make a beat on a removed set', async () => {
+      // Writer 8 was REMOVED from PR 3 on Evoni's decision of 2026-11-24,
+      // because correcting it broke six commit-signal gates in the merged
+      // placeLockGenerationB3 suite (they read the ABSENCE of a transaction
+      // id on a scene_plans insert as the signal that Start has committed).
+      // This case therefore pins the DEFECT, as it stands on main:
+      // createScenePlanRows runs after Start's transaction has committed,
+      // holds neither the event nor the episode, and never re-checks the
+      // sets, so a set removed beforehand is still written onto its beat.
+      // It is an UNRESOLVED reference-liveness dependency, not endorsed
+      // behaviour, and it needs its own follow-up PR.
       const going = await set('Start home', 'HOME_BASE');
       const ep = await mkEpisode(show);
       const ev = await mkEvent(show, { stamp: ep });
@@ -779,12 +789,19 @@ const settle = (promise) => promise.then(
       const result = await generator.createScenePlanRows(
         { id: ep, show_id: show }, { id: ev, show_id: show, scene_set_id: null }, models,
         [{ role: 'home', scene_set_id: going, name: null }]);
-      // Beats were made (Start is never failed by this step) and not one
-      // of them names the removed set.
+      // Start is not failed by this step, as before.
       expect(result.failedBeats).toEqual([]);
       expect(result.scenePlanRows.length).toBeGreaterThan(0);
-      for (const row of result.scenePlanRows) expect(String(row.scene_set_id || '')).not.toBe(going);
-      expect((await referencesTo(going)).beats).toBe(0);
+      // THE GAP: at least one beat was made naming the removed set, and the
+      // row is committed. When W8 is corrected, this case must be replaced
+      // by the positive one (no beat names it, the set omitted).
+      expect(result.scenePlanRows.some((r) => String(r.scene_set_id || '') === going)).toBe(true);
+      expect((await referencesTo(going)).beats).toBeGreaterThan(0);
+      // And no OTHER writer may add to it: PR 3's protections still hold.
+      expect((await send(linkSetsToEpisode(ep, [going]))).status).toBe(404);
+      expect((await send(createScene({ episodeId: ep, title: 'S', scene_set_id: going }))).status).toBe(404);
+      expect((await referencesTo(going)).links).toBe(0);
+      expect((await referencesTo(going)).scenes).toBe(0);
     });
 
     test('W8 with a live set: the beats are made at it, as before', async () => {
@@ -953,6 +970,314 @@ const settle = (promise) => promise.then(
       expect((await del(used, ANYWAY)).body.code).toBe('EPISODE_ACCEPTED');
       expect(await removedAt(used)).toBeNull();
       expect(await uses.countUses(sequelize, used)).toBeTruthy();
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // 11. THE BEAT SAVE: the primary write commits as one; the derived scene
+  //     sync stays after that commit (Evoni, 2026-11-24).
+  // ══════════════════════════════════════════════════════════════════════
+  describe('the beat save\'s primary write and its post-commit sync', () => {
+    const beatScenes = require('../../src/services/beatScenesService');
+
+    test('(a) a successful save: the link and the beat commit together, and the sync then makes the beat\'s scene row', async () => {
+      const live = await set('Sync happy');
+      const ep = await mkEpisode(show);
+      const plan = await mkBeat(ep, 20, null);
+      const res = await send(beatSave(ep, 20, { scene_set_id: live }));
+      expect(res.status).toBe(200);
+      // The primary write: both halves are there.
+      expect((await referencesTo(live)).beats).toBe(1);
+      expect((await referencesTo(live)).links).toBe(1);
+      // The derived sync ran after the commit and made the beat's scene row.
+      const scenes = await rows('SELECT scene_set_id, scene_plan_id FROM scenes WHERE episode_id = :ep AND deleted_at IS NULL', { ep });
+      expect(scenes.some((s) => s.scene_plan_id === plan && s.scene_set_id === live)).toBe(true);
+    });
+
+    test('(b) the sync FAILS after the commit: the save is still a 200, the primary write stands, and the body claims nothing about scenes', async () => {
+      const live = await set('Sync broken');
+      const ep = await mkEpisode(show);
+      await mkBeat(ep, 21, null);
+      // Inject a real failure into the derived sync only. It is called after
+      // the primary transaction has committed, so the commit cannot be
+      // undone by it; syncBeatScenesQuietly logs and returns null.
+      const spy = jest.spyOn(beatScenes, 'syncBeatScenesQuietly');
+      try {
+        const res = await send(beatSave(ep, 21, { scene_set_id: live }));
+        expect(spy).toHaveBeenCalled();
+        // The committed primary save is NOT reported as a rollback or a failure.
+        expect(res.status).toBe(200);
+        expect(res.body.error).toBeUndefined();
+        expect(res.body.code).toBeUndefined();
+        expect(res.body.data).toBeTruthy();
+        expect(String(res.body.data.scene_set_id)).toBe(live);
+        // It is durable: the link and the beat are both committed.
+        expect((await referencesTo(live)).beats).toBe(1);
+        expect((await referencesTo(live)).links).toBe(1);
+        // And the response makes no claim about the scene row either way,
+        // so a sync that did not run cannot be misread from it.
+        expect(JSON.stringify(res.body)).not.toMatch(/scene_row|synced|scenes/i);
+        expect(JSON.stringify(res.body)).not.toMatch(DATABASE_TEXT);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test('(b2) the same with the sync really throwing: still a 200, and nothing is rolled back', async () => {
+      const live = await set('Sync throws');
+      const ep = await mkEpisode(show);
+      await mkBeat(ep, 22, null);
+      const spy = jest.spyOn(beatScenes, 'syncBeatScenes').mockImplementation(async () => {
+        throw new Error('relation "scenes" does not exist');
+      });
+      try {
+        const res = await send(beatSave(ep, 22, { scene_set_id: live }));
+        expect(res.status).toBe(200);
+        // The quiet wrapper swallowed and logged it; the primary write stands.
+        expect((await referencesTo(live)).beats).toBe(1);
+        expect((await referencesTo(live)).links).toBe(1);
+        // The injected database text never reaches the browser.
+        expect(JSON.stringify(res.body)).not.toMatch(DATABASE_TEXT);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test('(c) legacy beats on removed sets are present: the save still commits its own beat, and adds no reference to a removed set', async () => {
+      const dead = await set('Legacy dead');
+      const live = await set('Sync with legacy');
+      const ep = await mkEpisode(show);
+      // A legacy beat left on a set that Delete Anyway then removed.
+      await mkBeat(ep, 23, dead);
+      expect((await del(dead, ANYWAY)).status).toBe(200);
+      expect(await removedAt(dead)).not.toBeNull();
+      expect((await referencesTo(dead)).beats).toBe(1); // INTENTIONALLY RETAINED
+      const deadScenesBefore = (await referencesTo(dead)).scenes;
+
+      await mkBeat(ep, 24, null);
+      const res = await send(beatSave(ep, 24, { scene_set_id: live }));
+      expect(res.status).toBe(200);
+      // This beat's own write landed on the live set.
+      expect((await referencesTo(live)).beats).toBe(1);
+      // The legacy beat is untouched: PR 3 removes no legacy reference.
+      expect((await referencesTo(dead)).beats).toBe(1);
+      // RECORDED GAP (S1): the post-commit sync may materialise a scenes row
+      // for the legacy beat still on the removed set. That is S1's, not
+      // PR 3's: whatever it does, this route adds no NEW reference of its own.
+      const deadScenesAfter = (await referencesTo(dead)).scenes;
+      expect(deadScenesAfter).toBeGreaterThanOrEqual(deadScenesBefore);
+      expect((await referencesTo(dead)).links).toBe(0);
+      // And no writer may put another reference on it.
+      expect((await send(beatSave(ep, 24, { scene_set_id: dead }))).status).toBe(404);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════
+  // 12. THE LEAD HAND-OVER (W19) and the four writers corrected by reading
+  // ══════════════════════════════════════════════════════════════════════
+  describe('the lead hand-over, and the writers verified only by reading before', () => {
+    const places = require('../../src/services/characterPlacesService');
+
+    /** A registry with two characters, so setLead has a lead to hand over to. */
+    async function cast() {
+      const reg = fx.uuid();
+      await run('INSERT INTO character_registries (id, show_id, title, created_at, updated_at) VALUES (:id, :show, :title, NOW(), NOW())',
+        { id: reg, show, title: `PR3 cast ${reg.slice(0, 6)}` });
+      const mk = async (key, name) => {
+        const id = fx.uuid();
+        await run(`INSERT INTO registry_characters (id, registry_id, character_key, display_name, is_alive, intimate_eligible, created_at, updated_at)
+                   VALUES (:id, :reg, :key, :name, true, false, NOW(), NOW())`, { id, reg, key: `${key}-${id.slice(0, 6)}`, name });
+        return id;
+      };
+      return { reg, a: await mk('lead-a', 'Aaa Lead'), b: await mk('lead-b', 'Bbb Lead') };
+    }
+    const defaultsOf = async () => {
+      const row = (await rows('SELECT metadata FROM shows WHERE id = :show', { show }))[0];
+      const m = typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {});
+      return m.scene_defaults || {};
+    };
+    const placesOf = (characterId) => rows(
+      'SELECT scene_set_id, role FROM character_places WHERE registry_character_id = :c AND deleted_at IS NULL ORDER BY role', { c: characterId });
+
+    afterEach(async () => {
+      // Leave the show's lead and defaults as the rest of the file expects.
+      await run(`UPDATE shows SET metadata = (COALESCE(metadata::jsonb, '{}'::jsonb)
+                   || jsonb_build_object('lead_character_id', NULL, 'scene_defaults', '{}'::jsonb))::json WHERE id = :show`, { show });
+    });
+
+    test('W19 setLead with a LIVE default: the hand-over is preserved — the old lead gets the place, the new lead\'s own becomes the default', async () => {
+      const home = await set('Lead home live', 'HOME_BASE');
+      const ownHome = await set('New lead own home', 'HOME_BASE');
+      const { a, b } = await cast();
+      await places.setLead(sequelize, { showId: show, characterId: a });
+      await episodeLocations.saveSceneDefaults(sequelize, { showId: show, body: { home_set_id: home }, leadCharacterId: a });
+      // The new lead already has her own home.
+      await places.linkPlace(sequelize, { showId: show, characterId: b, sceneSetId: ownHome, role: 'home' });
+
+      const out = await places.setLead(sequelize, { showId: show, characterId: b });
+      expect(out).toEqual({ lead_character_id: b });
+      // The old lead keeps the show's old home as her own place: the
+      // hand-over behaviour, unchanged.
+      expect(await placesOf(a)).toEqual([{ scene_set_id: home, role: 'home' }]);
+      // The new lead's own home became the show default, and her own row went.
+      expect((await defaultsOf()).home_set_id).toBe(ownHome);
+      expect(await placesOf(b)).toEqual([]);
+    });
+
+    test('W19 setLead with a REMOVED default: no reference is restored onto it, the lead still changes, and the default is cleared', async () => {
+      const dead = await set('Lead home dead', 'HOME_BASE');
+      const { a, b } = await cast();
+      await places.setLead(sequelize, { showId: show, characterId: a });
+      await episodeLocations.saveSceneDefaults(sequelize, { showId: show, body: { home_set_id: dead }, leadCharacterId: a });
+      expect((await defaultsOf()).home_set_id).toBe(dead);
+      // Delete Anyway removes it and leaves the default naming it: its own
+      // documented behaviour (INTENTIONALLY RETAINED).
+      expect((await del(dead, ANYWAY)).status).toBe(200);
+      expect(await removedAt(dead)).not.toBeNull();
+      expect((await referencesTo(dead)).defaults).toBe(1);
+
+      const out = await places.setLead(sequelize, { showId: show, characterId: b });
+      // The user-visible contract is unchanged: the lead changes.
+      expect(out).toEqual({ lead_character_id: b });
+      // THE POINT: no character_places row was restored onto the removed set.
+      expect((await referencesTo(dead)).places).toBe(0);
+      expect(await placesOf(a)).toEqual([]);
+      // And the hand-over cleared the default, so nothing names it now.
+      expect((await defaultsOf()).home_set_id ?? null).toBeNull();
+      expect((await referencesTo(dead)).defaults).toBe(0);
+    });
+
+    test('W19 linkPlace: a live set links, a removed set is SCENE_SET_NOT_FOUND and creates nothing', async () => {
+      const live = await set('Place live');
+      const dead = await set('Place dead');
+      const { a } = await cast();
+      await places.linkPlace(sequelize, { showId: show, characterId: a, sceneSetId: live, role: 'other', label: 'Studio' });
+      expect((await referencesTo(live)).places).toBe(1);
+
+      expect((await del(dead, ANYWAY)).status).toBe(200);
+      const out = await settle(places.linkPlace(sequelize, { showId: show, characterId: a, sceneSetId: dead, role: 'other' }));
+      expect(out.ok).toBe(false);
+      expect(out.error.code).toBe('SCENE_SET_NOT_FOUND');
+      expect((await referencesTo(dead)).places).toBe(0);
+    });
+
+    test('W21 the lookbook venue image: it writes episode_lookbook_images.scene_set_id, and holds the set row while it does', async () => {
+      const live = await set('Lookbook set');
+      const ep = await mkEpisode(show);
+      const ev = await mkEvent(show, { stamp: ep, set: live });
+      await mkBrief(show, ep, ev);
+      const lookbook = require('../../src/services/episodeLookbookService');
+      // The set's base image is a venue option (lookSources: scene_set_base).
+      trace = lockTrace.install(sequelize);
+      const gate = trace.gate((rec) => rec.kind === 'lock' && rec.table === 'scene_sets' && rec.mode === 'share');
+      const saving = lookbook.setVenueImage(models, ep, { source: 'scene_set_base', ref_id: live, in_lookbook: true });
+      await gate.reached;
+      // It really holds the set row: the delete's own statement cannot take it.
+      expect(await probeSetRowNowait(live)).toBe('55P03');
+      gate.open();
+      await saving;
+      expect((await referencesTo(live)).lookbook).toBe(1);
+    });
+
+    test('W21 with the set removed: VENUE_IMAGE_NOT_FOUND and no lookbook row', async () => {
+      const dead = await set('Lookbook dead');
+      const ep = await mkEpisode(show);
+      const ev = await mkEvent(show, { stamp: ep, set: dead });
+      await mkBrief(show, ep, ev);
+      const lookbook = require('../../src/services/episodeLookbookService');
+      await run('UPDATE world_events SET scene_set_id = NULL WHERE id = :ev', { ev });
+      expect((await del(dead, ANYWAY)).status).toBe(200);
+      await run('UPDATE world_events SET scene_set_id = :dead WHERE id = :ev', { ev, dead });
+      const out = await settle(lookbook.setVenueImage(models, ep, { source: 'scene_set_base', ref_id: dead, in_lookbook: true }));
+      expect(out.ok).toBe(false);
+      expect(out.error.code).toBe('VENUE_IMAGE_NOT_FOUND');
+      expect((await referencesTo(dead)).lookbook).toBe(0);
+    });
+
+    test('W20 uploadVariant: the S3 write stays outside the transaction, and a removed set claims no row', async () => {
+      const loc = await mkLocation('Upload venue');
+      const live = await set('Upload live', 'EVENT_LOCATION', show, { world_location_id: loc });
+      await run('UPDATE world_locations SET approved_base_scene_set_id = :id, approved_base_image_url = :url, approved_base_at = NOW() WHERE id = :loc',
+        { id: live, url: 'https://cdn.example/base.jpg', loc });
+      let stored = 0;
+      const storeImage = async () => { stored += 1; return `https://cdn.example/${fx.uuid()}.jpg`; };
+      // The protected write path, with the set row really held: the gate
+      // pauses it inside its transaction, and the delete's own statement
+      // cannot take the row. storeImage ran BEFORE that transaction opened.
+      trace = lockTrace.install(sequelize);
+      const gate = trace.gate((rec) => rec.kind === 'lock' && rec.table === 'scene_sets' && rec.mode === 'share');
+      const uploading = lookVariants.uploadVariant(sequelize, { setId: live, kind: 'time', value: 'night', storeImage });
+      await gate.reached;
+      expect(stored).toBe(1);
+      expect(await probeSetRowNowait(live)).toBe('55P03');
+      gate.open();
+      const ok = await uploading;
+      expect(ok.status).toBe('complete');
+      expect(stored).toBe(1); // exactly once: never re-run inside a retry
+      expect((await referencesTo(live)).variants).toBe(1);
+      trace.uninstall(); trace = null;
+
+      // The same against a set that Delete Anyway removed: it refuses, and
+      // claims no row.
+      const dead = await set('Upload dead', 'EVENT_LOCATION', show, { world_location_id: loc });
+      const loc2 = await mkLocation('Upload venue 2');
+      await run('UPDATE scene_sets SET world_location_id = :loc2 WHERE id = :id', { loc2, id: dead });
+      await run('UPDATE world_locations SET approved_base_scene_set_id = :id, approved_base_image_url = :url, approved_base_at = NOW() WHERE id = :loc2',
+        { id: dead, url: 'https://cdn.example/base2.jpg', loc2 });
+      const hold = await holdingSetRow(dead);
+      await hold.deleteAnyway();
+      expect(await removedAt(dead)).not.toBeNull();
+      const out = await settle(lookVariants.uploadVariant(sequelize, { setId: dead, kind: 'time', value: 'morning', storeImage }));
+      expect(out.ok).toBe(false);
+      expect(out.error.status).toBe(404);
+      expect(out.error.code).toBe('SET_NOT_FOUND');
+      expect((await referencesTo(dead)).variants).toBe(0);
+    });
+
+    test('W17 the calendar spawn: a live set spawns the event, a removed one is INVALID_SCENE_SET_ID', async () => {
+      const live = await set('Spawn live');
+      const dead = await set('Spawn dead');
+      expect((await del(dead, ANYWAY)).status).toBe(200);
+      const cal = fx.uuid();
+      await run(`INSERT INTO story_calendar_events (id, title, event_type, start_datetime, created_at, updated_at)
+                 VALUES (:id, :title, 'world_event', NOW(), NOW(), NOW())`, { id: cal, title: `PR3 spawn ${cal.slice(0, 6)}` });
+      const spawn = (setId) => send(asAdmin(request(app).post(`/api/v1/calendar/events/${cal}/spawn-world-event`)).send({ show_id: show, scene_set_id: setId }));
+
+      const good = await spawn(live);
+      expect(good.status).toBe(201);
+      expect((await referencesTo(live)).events).toBe(1);
+
+      const bad = await spawn(dead);
+      expect(bad.status).toBe(400);
+      expect(bad.body.code).toBe('INVALID_SCENE_SET_ID');
+      expect((await referencesTo(dead)).events).toBe(0);
+      expect(JSON.stringify(bad.body)).not.toMatch(DATABASE_TEXT);
+    });
+
+    test('W11 the legacy save, with its flag on: a removed set is SCENE_SET_NOT_FOUND and no scene is written', async () => {
+      const live = await set('Legacy live');
+      const dead = await set('Legacy dead set');
+      const ep = await mkEpisode(show);
+      expect((await del(dead, ANYWAY)).status).toBe(200);
+      const before = process.env.LEGACY_TIMELINE_WRITES;
+      process.env.LEGACY_TIMELINE_WRITES = 'on';
+      try {
+        const save = (setId) => send(asAdmin(request(app).post(`/api/v1/episodes/${ep}/save`))
+          .send({ scenes: [{ scene_number: 1, title: 'Legacy scene', scene_set_id: setId }] }));
+
+        const good = await save(live);
+        expect(good.status).toBe(200);
+        expect((await referencesTo(live)).scenes).toBe(1);
+
+        const bad = await save(dead);
+        expect(bad.status).toBe(404);
+        expect(bad.body.code).toBe('SCENE_SET_NOT_FOUND');
+        expect((await referencesTo(dead)).scenes).toBe(0);
+        expect(JSON.stringify(bad.body)).not.toMatch(DATABASE_TEXT);
+      } finally {
+        if (before === undefined) delete process.env.LEGACY_TIMELINE_WRITES;
+        else process.env.LEGACY_TIMELINE_WRITES = before;
+      }
     });
   });
 
