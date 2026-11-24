@@ -116,10 +116,14 @@ router.post('/world/:showId/events', requireAuth, async (req, res) => {
     // refuseEventSet).
     const { holdLiveSet } = require('../../services/eventPlaceSync');
     const INVALID_SET = { success: false, code: 'INVALID_SCENE_SET_ID', error: 'That scene set does not exist.' };
-    const inLiveSet = (work) => models.sequelize.transaction(async (transaction) => {
-      if (!await holdLiveSet(models.sequelize, resolvedSceneSetId, { transaction })) return null;
-      return work(transaction);
-    });
+    // An event that names no scene set holds nothing and needs no
+    // transaction: the insert runs exactly as it always did.
+    const inLiveSet = (work) => (resolvedSceneSetId
+      ? models.sequelize.transaction(async (transaction) => {
+        if (!await holdLiveSet(models.sequelize, resolvedSceneSetId, { transaction })) return null;
+        return work(transaction);
+      })
+      : work(undefined));
 
     if (models.WorldEvent) {
       const event = await inLiveSet((transaction) => models.WorldEvent.create({

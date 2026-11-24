@@ -227,11 +227,18 @@ exports.createScene = async (req, res) => {
     const wantedSetId = sceneSetId || scene_set_id || null;
     const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
     const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
-    let scene;
-    try {
-      scene = await inEpisodeFirstTransaction(Scene.sequelize, async (transaction) => {
+    // A scene created without a scene set references none, so it holds
+    // nothing and needs no transaction: it is created as it always was.
+    const inLiveSet = (work) => (wantedSetId
+      ? inEpisodeFirstTransaction(Scene.sequelize, async (transaction) => {
         await lockEpisodes(Scene.sequelize, [resolvedEpisodeId], { transaction, mode: 'share' });
         if (!await holdLiveSet(Scene.sequelize, wantedSetId, { transaction, nowait: true })) return null;
+        return work(transaction);
+      })
+      : work(undefined));
+    let scene;
+    try {
+      scene = await inLiveSet(async (transaction) => {
         return Scene.create({
           episode_id: resolvedEpisodeId,
           scene_number,
@@ -373,15 +380,21 @@ exports.updateScene = async (req, res) => {
     // scene could be moved onto a set that had been removed.
     const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
     const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+    // An update that does not name a scene set references none, so it holds
+    // nothing and needs no transaction: it saves exactly as it always did.
     const namesSet = 'scene_set_id' in updates || 'sceneSetId' in updates;
     let saved = true;
     try {
-      await inEpisodeFirstTransaction(Scene.sequelize, async (transaction) => {
-        saved = true;
-        await lockEpisodes(Scene.sequelize, [scene.episode_id], { transaction, mode: 'share' });
-        if (namesSet && !await holdLiveSet(Scene.sequelize, scene.scene_set_id, { transaction, nowait: true })) { saved = false; return; }
-        await scene.save({ transaction });
-      });
+      if (!namesSet) {
+        await scene.save();
+      } else {
+        await inEpisodeFirstTransaction(Scene.sequelize, async (transaction) => {
+          saved = true;
+          await lockEpisodes(Scene.sequelize, [scene.episode_id], { transaction, mode: 'share' });
+          if (!await holdLiveSet(Scene.sequelize, scene.scene_set_id, { transaction, nowait: true })) { saved = false; return; }
+          await scene.save({ transaction });
+        });
+      }
     } catch (err) {
       if (err instanceof RetryableConflictError) {
         console.error('Updating a scene gave up after retries:', err.name);

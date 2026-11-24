@@ -554,8 +554,15 @@ router.post('/events/:id/spawn-world-event', requireAuth, async (req, res) => {
     const spawnSetId = req.body.scene_set_id || null;
     if (WorldEvent) {
       const { holdLiveSet } = require('../services/eventPlaceSync');
-      const worldEvent = await models.sequelize.transaction(async (transaction) => {
-        if (!await holdLiveSet(models.sequelize, spawnSetId, { transaction })) return null;
+      // A spawn that names no scene set holds nothing and needs no
+      // transaction: the insert runs exactly as it always did.
+      const inLiveSet = (work) => (spawnSetId
+        ? models.sequelize.transaction(async (transaction) => {
+          if (!await holdLiveSet(models.sequelize, spawnSetId, { transaction })) return null;
+          return work(transaction);
+        })
+        : work(undefined));
+      const worldEvent = await inLiveSet(async (transaction) => {
         return WorldEvent.create({
           show_id,
           name: req.body.name || calendarEvent.title,
