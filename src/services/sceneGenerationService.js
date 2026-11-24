@@ -842,15 +842,36 @@ async function imageStillUsed(sequelize, url, { setId = null } = {}) {
   try {
     // Another set whose base is the same picture (a base_still_url edited
     // to point at it) still shows it too (audit, 2026-10-15).
+    // A saved scene whose background is this picture still shows it too
+    // (Evoni, 2026-11-24): a beat's scene row copies its set's base into
+    // scenes.background_url (beatScenesService), and Scene Studio saves the
+    // background it was shown. Deleting the file left that scene, an
+    // accepted or filmed episode's included, with a broken image. Live
+    // scenes only: nothing restores a removed scene.
+    // The same stored object is matched whatever the address around it: the
+    // exact URL, or any URL whose path is this object's key, with a query
+    // string or fragment left off (a signed or cache-busting copy, another
+    // host for the same bucket). A different key never matches.
+    const marker = '.amazonaws.com/';
+    const plain = String(url).split(/[?#]/)[0];
+    const at = plain.indexOf(marker);
+    const rawPath = at === -1 ? null : plain.slice(at + marker.length);
+    const key = storageKeyOf(url);
     const [[row]] = await sequelize.query(
       `SELECT (EXISTS (SELECT 1 FROM scene_angles WHERE still_image_url = :url AND deleted_at IS NULL)
             OR EXISTS (SELECT 1 FROM world_locations WHERE approved_base_image_url = :url AND deleted_at IS NULL)
             OR EXISTS (SELECT 1 FROM scene_sets WHERE base_still_url = :url AND deleted_at IS NULL
-                         AND id IS DISTINCT FROM CAST(:setId AS uuid))) AS used`,
-      { replacements: { url, setId } });
+                         AND id IS DISTINCT FROM CAST(:setId AS uuid))
+            OR EXISTS (SELECT 1 FROM scenes sc
+                        WHERE sc.deleted_at IS NULL AND sc.background_url IS NOT NULL
+                          AND (sc.background_url = :url
+                               OR right(split_part(split_part(sc.background_url, '?', 1), '#', 1), char_length(CAST(:rawSuffix AS text))) = CAST(:rawSuffix AS text)
+                               OR right(split_part(split_part(sc.background_url, '?', 1), '#', 1), char_length(CAST(:keySuffix AS text))) = CAST(:keySuffix AS text)))) AS used`,
+      { replacements: { url, setId, rawSuffix: rawPath ? `/${rawPath}` : null, keySuffix: key ? `/${key}` : null } });
     return Boolean(row?.used);
   } catch (err) {
-    console.warn(`[SceneGen] could not check whether ${url} is still used; it is kept: ${err.message}`);
+    // A check that could not be read is never "unused": the file is kept.
+    console.warn(`[SceneGen] could not check whether an old base image is still used; it is kept (set=${setId || 'none'} key=${storageKeyOf(url) || 'unknown'} error=${errorClassOf(err)})`);
     return true;
   }
 }
