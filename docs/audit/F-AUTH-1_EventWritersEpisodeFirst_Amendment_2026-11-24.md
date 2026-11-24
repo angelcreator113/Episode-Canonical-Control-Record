@@ -3,7 +3,7 @@
 
 **Document version**
 
-v1.0. This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
+v1.1 (not yet merged; v1.0 was the first local draft: v1.1 adds §4a, the two-episode inject defect and its fix, the cases added to the suite, the limitations in §8a, and restates §7 and §9 for what is now run). This is an additive amendment, written as a new file because the register is append-only. **Mints nothing.**
 - The FD tail, XK tail and PE tail are unchanged.
 - No earlier register file is edited, and no banner is added to one.
 
@@ -59,7 +59,7 @@ Evoni's, as given to this work on 2026-11-24:
 | Writer | Order on the branch |
 |---|---|
 | W1 (`update.js`) | the relink guard, when it runs → `shareLinkedEpisodes` when the save carries `scene_set_id` (`:605`) → the event row → `assertLinkedEpisodesHeld` (`:610`) → the existing checks, the Place lock among them (already in the transaction) → `holdLiveSet(new set, NOWAIT)` (`:678`) → the writes. Both transactions run in `inEpisodeFirstTransaction` (`:715`, `:790`). |
-| W2 (`inject.js:369-372`) | `shareLinkedEpisodes(event, extra: the attached episode)` → `lockLiveEvent` → `assertLinkedEpisodesHeld` → the event's set and attachment read again → the Place lock in the transaction → the savepoint: `holdLiveSet(set, NOWAIT)` (`eventSceneSetLinkService.js:93`) → the writes. The checks before the transaction are kept as early answers. |
+| W2 (`inject.js:389-392`) | `shareLinkedEpisodes(event, extra: the attached episode)` → `lockLiveEvent` → `assertLinkedEpisodesHeld` → the event's set and attachment read again → the Place lock in the transaction → the savepoint: `holdLiveSet(set, NOWAIT)` (`eventSceneSetLinkService.js:93`) → the writes. The checks before the transaction are kept as early answers. |
 | inject (`inject.js:224-241`) | `shareLinkedEpisodes(event, exclusive: its episode)`: its episode FOR UPDATE, any other linked episode FOR SHARE, ascending → the script save (its own FOR UPDATE finds the row held so) → `lockLiveEvent` → `assertLinkedEpisodesHeld` → the event's set read again → the link. `saveEpisodeScript` is not changed. |
 | W3 (`sceneSetVersionService.js:119-127`) | `shareLinkedEpisodes` → `lockLiveEvent` → `assertLinkedEpisodesHeld` → both set rows, live only, `ORDER BY id FOR UPDATE NOWAIT` (`takeSetRows`, `:65`) → the existing checks → the Place lock in the transaction → the writes |
 | W4 (`:222-251`) | the events at the set read → `shareLinkedEpisodes(all)` → each event, ascending → `assertLinkedEpisodesHeld` → the set row NOWAIT → `holdLiveSet(everyday, NOWAIT)` → the events read again (one not held: retry) → the Place lock in the transaction → the writes |
@@ -90,6 +90,20 @@ Not changed, traced as already episode-first: `approveInvitation`, `makeSpecial`
 `POST …/inject` read the event before its transaction and passed that row to `linkEventSceneSet`, which links the episode at `event.scene_set_id`. An event moved by another request between that read and inject's event lock left the episode with an Event location at the set the event had left. Found by the new suite's first run; present at the basis.
 
 Now, after `lockLiveEvent`, the event's `scene_set_id` is read in the transaction and that value is given to the link. Tested: inject held after it locked its episode; a real event edit moves the event and commits; inject then links the episode at the new set; no row names the old one. Against the basis's `inject.js` the case fails (the link is made at the old set): `/root/pr2-evidence/new-suite/inject-stale-set-main-inject.*`.
+
+# §4a. One event injected into two episodes (a second defect found in the same authorized writer)
+
+**Found** by a case added to the new suite at Evoni's request ("inject twice, one unattached event into two episodes"), and fixed on her ruling of 2026-11-24, given to this work as: the fix is approved within PR 2, in `inject.js` only and inside the existing inject transaction.
+
+**The defect.** The route asks the terms lock once, before its transaction (`src/routes/worldEvents/inject.js:148`): an event that started a live episode is never moved to another. Two injects of one unattached event into two episodes could both pass that check. The first attached the event to its episode and committed; the second, waiting for the event row, then answered 200, set `used_in_episode_id` to its own episode (`times_used` 2) and gave that episode an Event location, and the first episode kept an Event location for an event no longer its own. One request after the other, the second is refused 409 `EVENT_TERMS_LOCKED`.
+
+**Present at the basis.** By reading: the basis's `inject.js` has the same single check at :148 and none under the event lock. By test: the regression case run with the basis's `inject.js` put back for one run fails with 200 received where 409 is expected, and likewise with this branch's `inject.js` as it was before the fix (`/root/pr2-evidence/two-episode-inject/fail-before-main-inject.log`, `fail-before-d90467ab-inject.log`; with the fix, `pass-after-fix.log`).
+
+**The fix** (`src/routes/worldEvents/inject.js:242-254`, answered at :287-293). Inside the inject transaction, after the episode locks, `lockLiveEvent` and `assertLinkedEpisodesHeld`, `findTermsLockEpisode` is asked again with the transaction. Another episode than the one being injected into: the transaction is rolled back and the answer is the route's existing terms-lock refusal, the same status, code, fields and sentence as the early check (409 `EVENT_TERMS_LOCKED`, `fields: ['used_in_episode_id']`, built by the same `termsLockedBody`). No lock is added, strengthened or reordered: the re-check is a read. In the race, the second inject's first try is rolled back by `assertLinkedEpisodesHeld` (the first episode is now linked and was not held), it pauses once, takes both episodes in one ascending pass (its own FOR UPDATE, the other FOR SHARE), then the event row, and is refused there.
+
+**Contract note.** The early check stays as the early answer; the one in the transaction is the one that counts. The only user-visible change is that a race which wrongly answered 200 now answers what the same two requests answer one after the other. Injecting an event into the episode it is already attached to is allowed as before. Because `findTermsLockEpisode` reads a live brief before the event's own link, an inject that lost to a Start Episode of the same event is refused the same way; the merged lock-matrix suite has that pair ("Start × inject of the same event", CI-only, its setup runs a migration) and asserts no lock conflict and a consistent season, not the inject's status: read, not run (§9).
+
+**Tested** (the regression case): the second inject seen waiting for the event row; no lock error; first 200, second 409 `EVENT_TERMS_LOCKED` naming the first episode; no database text in the body; the event attached to the first episode only, `times_used` 1; the second episode has no Event location and its row (script, `updated_at`) is as it was.
 
 # §5. The six existing tests rewritten
 
@@ -132,13 +146,37 @@ Why each old assertion is obsolete: none of the three mechanisms (the version ho
 
 # §7. Concurrency results
 
-**In the repository's suite** (`tests/integration/eventWritersEpisodeFirst.integration.test.js`, 63 cases; MEASURED): no 40P01 in any case. The lock order of each writer by trace; W4 with three episodes through two events (one episode statement before any event lock); writer against writer on one event in both orders (W1, W2 and W3 with each other and themselves; W4 against W1 and W3; two relinking edits); inject against W1, W2 and W3 in both orders, two injects, W4 against inject; an episode linked after discovery (one rollback, one pause with no session in a transaction, the second try holds it; on every try: 409 `RETRY`, nothing written); the destination set held (three tries, two pauses, the retryable answer, nothing changed) and removed (each route's existing refusal; no event or location on a removed set); accepted episodes (409 `PLACE_LOCKED`, W2's decided inside the transaction with its early check passed; a real `completeEpisode` racing W1 and W3 in both orders); the filmed gap pinned; W2's savepoint; the version routes; a Locations save and generate-venue against W1 and W3 in both orders; Start Episode against W1.
+**In the repository's suite** (`tests/integration/eventWritersEpisodeFirst.integration.test.js`, 79 cases; MEASURED): no 40P01 in any case. The lock order of each writer by trace; W4 with three episodes through two events (one episode statement before any event lock); an episode linked after discovery (one rollback, one pause with no session in a transaction, the second try holds it; on every try: 409 `RETRY`, nothing written); the destination set held (three tries, two pauses, the retryable answer, nothing changed) and removed (each route's existing refusal; no event or location on a removed set); accepted episodes (409 `PLACE_LOCKED`, W2's decided inside the transaction with its early check passed; a real `completeEpisode` racing W1 and W3 in both orders); the filmed gap pinned; W2's savepoint; the version routes.
+
+**The pairs, each its own case, gated** (MEASURED). The first writer is held after the statement that takes the event row; the test waits until the second is seen waiting, reads from `pg_stat_activity` which row it waits for, then releases. Each case asserts that row, an empty list of lock errors, and each side's exact outcome and the rows left.
+
+| Pair | Orders | The second waits for | Outcome |
+| --- | --- | --- | --- |
+| W1, W2, W3 with each other and themselves; two relinking edits (the cases of v1.0, unchanged) | both | seen waiting; the row is not asserted in these | no lock error, no 500, the event at one of the two sets and its locations with it |
+| W4 then W1 / W2 / W3 | W4 first | the event row | the event is returned to the everyday set, then moved by the writer |
+| W1 / W2 / W3 then W4 | writer first | the event row | W4 finds the event gone from its set and returns none; the set is no longer a version |
+| W4 and inject | both | the episode row (inject needs it FOR UPDATE, W4 FOR SHARE) | both succeed; the episode's location is at the everyday set |
+| W4 twice | one | the event row | the second 409 `NOT_A_VERSION` |
+| inject and W1 / W2 (scene-set-link) / W3 | both | the episode row | both succeed; the episode's location is where the event ends |
+| inject twice, the same episode | one | the episode row | both 200, one location |
+| inject twice, one unattached event, two episodes | one | the event row | the second 409 `EVENT_TERMS_LOCKED` (§4a) |
+| a Locations save that moves the event, an uploaded look (the venue-look image finalizer), generate-venue; each with W1 and W3 | finalizer first | the event row | the save commits, then the writer moves the event |
+| the same six | writer first | the event row | the finalizer saves nothing: 409 `STALE_SOURCE_SET` (generate-venue: `generated_not_saved`); no look, no base on the set the event left |
+| Start Episode with W1 and W3 | writer first | the event row | Start 409 `STALE_SOURCE_SET`, no episode created |
+| Start Episode with W1 and W3 | Start first | the event row | Start 201; the event ends at the writer's set with the new episode's location |
+
+**One outcome is asserted as one of two serial results, because its order is not gated:** with Start first, Start saves its locations after its commit in a transaction of its own, and the waiting writer moves the event before or after that. The event and the episode's location end the same either way; Start's own locations step is `complete`, or `failed` with `STALE_SOURCE_SET`. The case accepts exactly those two.
+
+**Not reachable as a lock race:** two different events injected into one episode. The route refuses the second before any lock is taken (a second event is linked from the episode's Events, not injected). "One event, two episodes" is reachable only with the second inject already past the early terms-lock check: that is the case in §4a.
 
 **The delete's order in that suite is SIMULATED**, and labelled so: a raw session takes the affected episodes FOR UPDATE ascending, the events FOR UPDATE ascending and the set row FOR UPDATE NOWAIT, removes the set and commits. Against it, W1, W2, W3 and inject in both arrival orders: no 40P01; the writer waits for the episode row.
 
-**The real combination** (MEASURED on a throwaway, never committed local merge of this branch with `claude/scene-set-delete-lock-order` at `f7748bea`; the merge was automatic; evidence in `/root/pr2-evidence/combo/`):
+**The real combination, as this work ran it** (MEASURED on a throwaway, never committed local merge of this branch at `d90467ab` with `claude/scene-set-delete-lock-order` at `f7748bea`; the merge was automatic; evidence in `/root/pr2-evidence/combo/`; made before §4a's fix and not repeated after it by this work):
 - PR 1's 77-case suite, **unmodified**, three runs: 73 pass and the same 4 fail each time: its four KNOWN INCOMPATIBILITY cases (the event edit, scene-set-link, makeEventVersion, makeEveryday, the writer first). Each fails at `expect(out.errors).toEqual(['40P01'])` with `[]` received: against the real delete, with the writer first and held at the event row, there is no deadlock and no lock error at all. Its "delete first" case against the same four writers passes as before.
-- This change's suite on the combination: 63 of 63. `placeLockGenerationB3` as merged: 60 of 60.
+- This change's suite on the combination, as it then was: 63 of 63. `placeLockGenerationB3` as merged: 60 of 60.
+
+> **PLACEHOLDER, TO BE FILLED BY THE COORDINATOR. Real #3935 combination (combo-r9 / r10): results recorded in …**
+> *(The cells of each writer against the real delete, run by a separate session in a scratch tree. Nothing in this document states their results until this paragraph is filled.)*
 
 **Reasoned, not observed:** that no ordering of these six writers, the finalizer's callers and the real delete can deadlock, since each takes episodes, then events, then set rows without waiting. Only the orderings above were run.
 
@@ -148,7 +186,7 @@ Required for Scene Set deletion to be safe, and not done here (the coordinated C
 
 - **References inserted after a delete by the remaining writers.** The beat editor's save, `linkBeatSet`, Start's beat rows, the other link and scene writers take no set lock and do not check the set is live under one.
 - **A brief created after discovery**, `startPartTwo` included: a new episode linked to an event after a writer or the delete has locked the episodes it knew of is caught by these six writers' re-check, and by nothing else.
-- **The raw clip insert that takes no lock**, as carried forward to this work from the lock-matrix findings. It was not examined here (`rawClipsService.createClip`, the one path read, attaches under a share lock on its episode).
+- **Raw clip inserts.** Read here: `rawClipsService.createClip`, which attaches under a share lock on its episode. Not read here: any other path that inserts a clip row.
 - **Looks, characters' places and show defaults** reference a set without a foreign key and without the set rule.
 - **The check-to-delete race of an old base image's file** (the base-image amendment's known remaining race).
 - **The filmed, not accepted gap on these writers.** A filmed episode's event is still moved by the event edit, scene-set-link and makeEventVersion: pinned in the new suite as today's behaviour, labelled RECORDED GAP.
@@ -156,26 +194,38 @@ Required for Scene Set deletion to be safe, and not done here (the coordinated C
 - **PR 2 does not complete Scene Set deletion safety and does not by itself make the delete lock-order change deployable**: the combination was run only as far as §7 says.
 - **PR 1's four KNOWN INCOMPATIBILITY tests** assert the deadlock this change removes. They need rewriting on PR 1's branch, which this work did not touch. Proposed, for separate approval: in each of the four, `expect(out.errors).toEqual(['40P01'])` → `expect(out.errors).toEqual([])`; `expect(pause.mock.calls).toEqual([[DELAY]])` → `expect(pause).not.toHaveBeenCalled()`; the victim assertion of the first removed; the statuses and final rows kept as they are; the describe and titles renamed from "KNOWN INCOMPATIBILITY … a deadlock is raised" to the writers taking turns.
 
+# §8a. Limitations (Evoni, 2026-11-24)
+
+- The combined evidence supports the corrected episode-first order. It is evidence for the orderings that were run, not a proof for every ordering.
+- **409 `RETRY` remains possible** under sustained lock contention: a writer that loses a lock three times in a row answers it, with nothing written.
+- **generate-venue may produce a paid `generated_not_saved` result** after `STALE_SOURCE_SET`: the image was generated and paid for, and is not saved because the event moved meanwhile.
+- **The remaining reference-liveness writers need C2 / PR 3** (the first two bullets of §8).
+- **The saved-scene image check-to-delete race is unresolved.**
+- **Passing the combined matrix does not authorize deployment.**
+- **#3935 is unchanged.** Its four KNOWN INCOMPATIBILITY tests are being corrected only in a scratch tree, pending Evoni's go-ahead for its branch.
+
 # §9. Tests, and what was not run
 
 On a private, migrated local PostgreSQL test database. Providers, storage and the model are doubles. No test sends DDL. The network guard reports 0 external attempts.
 
-- New suite: 63 of 63 (several runs). **Before the change**, with the six source files put back to the basis for one run: 34 failed and 26 passed of the 60 cases the suite then had (`/root/pr2-evidence/new-suite/before-main-sources.*`).
-- `placeLockGenerationB1` 56 of 56 and `placeLockGenerationB3` 59 of 59, three full runs each on the final head; `placeLockGenerationB2` 69; `placeLockFinalizer` 52; `placeLockStrict` 53; earlier on this branch: `p1PlanAdmin` 85, `p2bSceneSetAdmin` 243, `baseSaveLiveSet` 15, `baseImageStillUsed` 30, `eventPlaceSync` 6, `sceneSetsAudit7` 7.
+- New suite: 79 of 79, three full runs on the final source head (`3c37f142`). **Before the change**, with the six source files put back to the basis for one run: 34 failed and 26 passed of the 60 cases the suite then had (`/root/pr2-evidence/new-suite/before-main-sources.*`). The two-episode inject case alone, with the basis's `inject.js`: fails (§4a).
+- On the same head, one full run each: `placeLockGenerationB1` 56 of 56, `placeLockGenerationB3` 59 of 59, `placeLockGenerationB2` 69, `placeLockFinalizer` 52, `placeLockStrict` 53, `p1PlanAdmin` 85, `p2bSceneSetAdmin` 243, `baseSaveLiveSet` 15, `baseImageStillUsed` 30, `eventPlaceSync` 6, `sceneSetsAudit7` 7. B1 and B3 also three full runs each at `d90467ab`.
+- Suites that call inject and whose files send no DDL, one run each on the same head: `eventTermsLock` 10, `eventFromLink` 6, `scriptHistoryWriters` 11, `episodeEventOneRule` 4, `filmedEpisodeEventLink` 17, `eventDeleteSafe` 20, `frozenEpisodeDelete` 13.
 - The unit directory: 745 suites, 11287 tests. A static guard there (`lockOrderStatic`) pins how many event-row lock statements each file has; W3 uses `lockLiveEvent` so that count is unchanged, and the guard was not edited.
+- Raw logs: `/root/pr2-evidence/final-head-3c37f142/`.
 
 **Not done, of what was asked:**
 - The combined tree as a separate scratch worktree: the worktree guard refuses git on another worktree, so the merge was made, uncommitted, in this work's own worktree and aborted.
 - Each of the six sites against the REAL delete with a replacement and with "delete anyway", in both orders, three runs a cell: only what PR 1's own suite holds was run (the four writers, writer first and delete first, three runs). Inject against the real delete was not run.
 - The jittered sweeps (ten runs an ordered pair): not run. No frequency is claimed anywhere in this document.
 - Removed-set liveness against the real delete after a writer waited: run only against the simulated order.
-- Of the new suite's asked scenarios: Start Episode against W3, a look upload against W1 and W3, and each W4 pair as its own named case are absent; the finalizer and inject races assert no deadlock, no 500 and a consistent end state rather than each exact outcome, because the second writer's order past the gate is not itself gated.
 - The version losing its NOWAIT lock to one of generate-venue's writes after its save, as its own deterministic case (§5).
-- CI-only suites whose setup sends DDL were not run: `injectSceneSetLink` and `injectVenueSceneSet` (read for the link reason: §6 C; not read line by line beyond that).
+- Suites that call inject and send DDL or run a migration in their setup were **not run**: `injectSceneSetLink`, `injectVenueSceneSet`, `scriptWriters`, `episodeSecondaryEvents`, `lockOrderTrace`, `lockOrderMatrix`. Read for §4a's new refusal: read at the lines that call inject or name `EVENT_TERMS_LOCKED`, not line by line: no assertion on the status of an inject racing another attachment of its event was found; `lockOrderMatrix`'s "Start × inject of the same event" asserts no lock conflict and a consistent season, not the inject's status; `lockOrderTrace` checks inject's lock order, and the re-check is a read that takes no lock. That they pass is expected from that reading and was not observed.
+- The real combination was not repeated by this work after §4a's fix (§7).
 
 ---
 
 **Type:** amendment.
-**Rules:** the six writers of an event's Place take the linked episodes before the event row and a set's row live only and without waiting; a lost lock is retried and then answered 409 RETRY; six existing concurrency tests follow the new order; inject links at the set the event has under its lock; on Evoni's authorization and rulings set out in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** nothing.
+**Rules:** the six writers of an event's Place take the linked episodes before the event row and a set's row live only and without waiting; a lost lock is retried and then answered 409 RETRY; six existing concurrency tests follow the new order; inject links at the set the event has under its lock, and asks the terms lock again under it; on Evoni's authorization and rulings set out in §2. **Mints:** nothing (no FD, XK or PE number). **Discharges:** nothing.
 **Host/AWS/DB/Cognito contact (this session):** the tests ran against a local PostgreSQL test database in the session's own container. No deployed host, AWS service, production or development database, or Cognito pool was contacted for this change, and no paid provider was called.
 **Production standing:** as the newest Fix Plan revision states it (`F-Deploy-1_Fix_Plan_v1.56.md`, footer): "Production's freeze is lifted (`F-Deploy-1_Fix_Plan_v1.53.md` §1)". What an agent session may do in production is set by `CLAUDE.md` and `F-Tools-5_AgentProductionAccess_Ruling_2026-10-31.md`.
