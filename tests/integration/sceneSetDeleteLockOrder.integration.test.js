@@ -1128,78 +1128,140 @@ const observed = [];
     });
   });
 
-  // ══ KNOWN INCOMPATIBILITY ══════════════════════════════════════════════
-  // The four writers below still take the EVENT row first and reach the
-  // episode row afterwards (through the foreign key of the location row they
-  // insert for an episode that has no Event location yet). The delete takes
-  // the episode first, exclusively, and then the event. With the writer
-  // first that is a real deadlock (40P01). PR 2 changes those writers to
-  // take the linked episodes before the event; until then PR 1 is NOT to be
-  // deployed. These cases assert what really happens on this code, with both
-  // sides held open at the deadlock. They are not a design to keep.
-  describe('KNOWN INCOMPATIBILITY with the event-first writers, until PR 2 [real lock]: the writer first, on an episode with no Event location row', () => {
-    /** The writer holds the event row; the delete holds the episode and waits for the event; then the writer goes on to the episode. */
-    async function deadlock(name, writer, target, query) {
+  // ══ THE FOUR EVENT-FIRST WRITERS, WRITER FIRST (corrected for PR 2) ════
+  // Before PR 2 these four writers took the EVENT row first and reached the
+  // episode row afterwards (the foreign key of the location row they insert
+  // for an episode with no Event location yet), while the delete takes the
+  // episode first: with the writer first that was a real deadlock (40P01),
+  // and these cases asserted it. With PR 2 the writers take the linked
+  // episodes first (FOR SHARE), then the event: the same two actors, held at
+  // the same gate, now TAKE TURNS. The delete waits for the episode row the
+  // writer holds; nobody is a deadlock victim; nothing is retried.
+  describe('the event-first writers after PR 2 [real lock]: the writer first, on an episode with no Event location row; the writer and the delete take turns', () => {
+    /**
+     * The writer runs until it holds the event row (its episodes are held
+     * already); the delete starts and is seen waiting; the gate opens.
+     * Resolves both answers, the lock errors, any deadlock victim, the
+     * statement the delete waited in, and the delete's transactions.
+     */
+    async function takeTurns(name, writer, target, query) {
       const g = gateOn(holdsEventRow);
       const p1 = writer();
       await g.reached;
       const p2 = send(del(target, query));
       const end = Date.now() + 8000;
-      while (await waiting() === 0 && Date.now() < end) await sleep(15); // the delete waits for the event row
+      while (await waiting() === 0 && Date.now() < end) await sleep(15); // the delete waits for a row the writer holds
       expect(await waiting()).toBe(1);
+      const [waiter] = await rows(
+        "SELECT query FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND wait_event_type = 'Lock'");
       g.open();
       const [a, b] = await Promise.all([p1, p2]);
       const errors = lockErrors(trace.records);
       const victim = trace.records.find((r) => r.error === '40P01');
-      observed.push({ name: `KNOWN INCOMPATIBILITY: ${name}`, writer: a.status ?? (a.ok ? 'ok' : `threw ${a.error?.code || a.error?.message}`), del: `${b.status} ${b.body?.code || ''}`, errors, pauses: pause.mock.calls.length, victimSql: victim?.sql?.slice(0, 60) });
-      return { a, b, errors, victim };
+      const deleteTries = [...trace.byTransaction().values()].filter((t) => t.some((r) => /^WITH gone AS/.test(r.sql || '')));
+      observed.push({ name: `after PR 2, take turns: ${name}`, writer: a.status ?? (a.ok ? 'ok' : `threw ${a.error?.code || a.error?.message}`), del: `${b.status} ${b.body?.code || ''}`, errors, pauses: pause.mock.calls.length, waitedIn: flat(waiter?.query || '').slice(0, 60) });
+      return { a, b, errors, victim, waitedIn: flat(waiter?.query || ''), deleteTries };
+    }
+    /** What both tests of a pair must show: turns taken, no deadlock, no victim, no retry, one delete transaction, committed. */
+    function expectTurnsTaken(out) {
+      expect(out.errors).toEqual([]); // no 40P01 and no 55P03
+      expect(out.victim).toBeUndefined(); // nobody was a deadlock victim
+      expect(out.waitedIn).toMatch(/^SELECT id FROM episodes WHERE id IN .* FOR UPDATE$/); // the delete waited for the episode row the writer holds
+      expect(pause).not.toHaveBeenCalled(); // no retry: the delete's reference set did not grow (the writer moved the event AWAY from the set)
+      expect(out.deleteTries).toHaveLength(1); // one transaction, not a second try
+      expect(out.deleteTries[0].some((r) => r.kind === 'commit')).toBe(true);
+      expect(out.deleteTries[0].some((r) => r.kind === 'rollback')).toBe(false);
+    }
+    /** Nothing but the named rows changed between two snapshots (no partial commit of either side). */
+    function expectOnlyThese(before, after, { removedSet, event, eventNowAt, newLink = null, versions = {} }) {
+      expect(after.events.map((e) => (e.id === event ? { ...e, scene_set_id: 'X' } : e))).toEqual(before.events.map((e) => (e.id === event ? { ...e, scene_set_id: 'X' } : e)));
+      expect(after.events.find((e) => e.id === event).scene_set_id).toBe(eventNowAt);
+      const strip = (s) => ({ ...s, deleted_at: s.id === removedSet ? 'X' : s.deleted_at, version_of_set_id: s.id in versions ? 'X' : s.version_of_set_id });
+      expect(after.sets.map(strip)).toEqual(before.sets.map(strip));
+      expect(after.sets.find((s) => s.id === removedSet).deleted_at).not.toBeNull();
+      expect(after.sets.filter((s) => s.deleted_at).map((s) => s.id)).toEqual([removedSet]);
+      for (const [id, of] of Object.entries(versions)) expect(after.sets.find((s) => s.id === id).version_of_set_id).toBe(of);
+      const liveLinks = (snap) => snap.links.filter((l) => !l.deleted_at).map((l) => ({ scene_set_id: l.scene_set_id, episode_id: l.episode_id, role: l.role }));
+      expect(liveLinks(after)).toEqual([...liveLinks(before), ...(newLink ? [newLink] : [])]);
+      for (const k of ['beats', 'scenes', 'looks', 'shows', 'places', 'episodes', 'clips']) expect(after[k]).toEqual(before[k]);
     }
 
-    test('the event edit (PUT event, a set change): a deadlock is raised (40P01); the delete is its victim, tries again after its pause and succeeds; the edit succeeds; no database text in either answer', async () => {
+    test('the event edit (PUT event, a set change): the edit and the delete take turns; no deadlock, no victim, no retry; the edit succeeds, then the delete with a replacement succeeds; the event and its episode are at the edit\'s set; no database text in either answer', async () => {
       const { ep, ev } = await eventOnly(w.s);
-      const out = await deadlock('event PUT', () => send(putEvent(ev, { scene_set_id: w.t })), w.s, into(w.r));
-      expect(out.errors).toEqual(['40P01']);
-      expect(out.victim.sql).toMatch(/world_events/); // the delete, waiting for the event row
+      const before = await snapshot();
+      const out = await takeTurns('event PUT', () => send(putEvent(ev, { scene_set_id: w.t })), w.s, into(w.r));
+      expectTurnsTaken(out);
       expect(out.a.status).toBe(200);
+      expect(out.a.body.success).toBe(true);
       expect(out.b.status).toBe(200);
-      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(out.b.body).toMatchObject({ success: true, message: 'Scene set deleted; its uses moved to the replacement' });
+      expect(out.b.body.moved).toMatchObject({ events: 0, locations: 0, beats: 0, scenes: 0 }); // the delete ran after the writer's commit: the event was already away, nothing was left to move
+      expect(JSON.stringify([out.a.body, out.b.body])).not.toMatch(/deadlock/);
+      expect(JSON.stringify(out.b.body)).not.toMatch(NOT_DATABASE_TEXT);
+      expect((await eventRow(ev)).scene_set_id).toBe(w.t);
+      expect(await linksOf(ep)).toEqual([{ scene_set_id: w.t, role: 'event' }]);
+      expect(await removedAt(w.s)).not.toBeNull();
+      expect((await liveRefs(w.s)).total).toBe(0); // nothing is left on the removed set
+      expect(await evaluationOf(ep)).toBe('pending');
+      expectOnlyThese(before, await snapshot(), { removedSet: w.s, event: ev, eventNowAt: w.t, newLink: { scene_set_id: w.t, episode_id: ep, role: 'event' } });
+    });
+
+    test('scene-set-link (a chosen set): the link and the delete take turns; no deadlock, no victim, no retry; the link answers linked, then the delete with a replacement succeeds; the event and its episode are at the chosen set', async () => {
+      const { ep, ev } = await eventOnly(w.s, { brief: false });
+      const before = await snapshot();
+      const out = await takeTurns('scene-set-link', () => send(linkSet(ev, w.t)), w.s, into(w.r));
+      expectTurnsTaken(out);
+      expect(out.a.status).toBe(200);
+      expect(out.a.body).toMatchObject({ success: true, scene_set: { status: 'linked', scene_set_id: w.t } });
+      expect(out.b.status).toBe(200);
+      expect(out.b.body).toMatchObject({ success: true, message: 'Scene set deleted; its uses moved to the replacement' });
+      expect(out.b.body.moved).toMatchObject({ events: 0, locations: 0, beats: 0, scenes: 0 }); // the delete ran after the writer's commit: the event was already away, nothing was left to move
       expect(JSON.stringify([out.a.body, out.b.body])).not.toMatch(/deadlock/);
       expect((await eventRow(ev)).scene_set_id).toBe(w.t);
       expect(await linksOf(ep)).toEqual([{ scene_set_id: w.t, role: 'event' }]);
       expect(await removedAt(w.s)).not.toBeNull();
+      expect((await liveRefs(w.s)).total).toBe(0);
+      expect(await evaluationOf(ep)).toBe('pending');
+      expectOnlyThese(before, await snapshot(), { removedSet: w.s, event: ev, eventNowAt: w.t, newLink: { scene_set_id: w.t, episode_id: ep, role: 'event' } });
     });
 
-    test('scene-set-link (a chosen set): the same deadlock; the delete is the victim and succeeds on its second try', async () => {
-      const { ev } = await eventOnly(w.s, { brief: false });
-      const out = await deadlock('scene-set-link', () => send(linkSet(ev, w.t)), w.s, into(w.r));
-      expect(out.errors).toEqual(['40P01']);
-      expect(out.a.status).toBe(200);
-      expect(out.b.status).toBe(200);
-      expect(pause.mock.calls).toEqual([[DELAY]]);
-      expect((await eventRow(ev)).scene_set_id).toBe(w.t);
-    });
-
-    test('makeEventVersion: the same deadlock; the delete is the victim and succeeds on its second try', async () => {
-      const { ev } = await eventOnly(w.s);
-      const out = await deadlock('makeEventVersion', () => settle(makeEventVersion(sequelize, { setId: w.t, everydaySetId: w.r, eventId: ev })), w.s, ANYWAY);
-      expect(out.errors).toEqual(['40P01']);
+    test('makeEventVersion: the version and the delete take turns; no deadlock, no victim, no retry; the version is made and holds the event, then "delete anyway" removes the old set with nothing left on it', async () => {
+      const { ep, ev } = await eventOnly(w.s);
+      const before = await snapshot();
+      const out = await takeTurns('makeEventVersion', () => settle(makeEventVersion(sequelize, { setId: w.t, everydaySetId: w.r, eventId: ev })), w.s, ANYWAY);
+      expectTurnsTaken(out);
       if (!out.a.ok) throw out.a.error;
       expect(out.b.status).toBe(200);
-      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(out.b.body).toMatchObject({ success: true, message: 'Scene set deleted', links_dropped: 0 });
+      expect(out.b.body.uses_left.total).toBe(0); // the delete, under its locks, found nothing still using the set
+      expect(JSON.stringify(out.b.body)).not.toMatch(NOT_DATABASE_TEXT);
       expect((await eventRow(ev)).scene_set_id).toBe(w.t);
+      expect(await linksOf(ep)).toEqual([{ scene_set_id: w.t, role: 'event' }]);
+      expect(await removedAt(w.s)).not.toBeNull();
+      expect((await liveRefs(w.s)).total).toBe(0);
+      expect(await evaluationOf(ep)).toBe('pending');
+      expectOnlyThese(before, await snapshot(), { removedSet: w.s, event: ev, eventNowAt: w.t, newLink: { scene_set_id: w.t, episode_id: ep, role: 'event' }, versions: { [w.t]: w.r } });
     });
 
-    test('makeEveryday (the event returned to the everyday set): the same deadlock; the delete is the victim and succeeds on its second try', async () => {
+    test('makeEveryday (the event returned to the everyday set): the return and the delete take turns; no deadlock, no victim, no retry; the event returns to the everyday set, then "delete anyway" removes the former version with nothing left on it', async () => {
       const { ep, ev } = await eventOnly(w.s);
       expect((await settle(makeEventVersion(sequelize, { setId: w.t, everydaySetId: w.r, eventId: ev }))).ok).toBe(true);
       // As an episode that has no Event location row (the version's move gave it one).
       await run('UPDATE scene_set_episodes SET deleted_at = NOW() WHERE episode_id = :ep', { ep });
-      const out = await deadlock('makeEveryday', () => settle(makeEveryday(sequelize, w.t, { returnEvent: true })), w.t, ANYWAY);
-      expect(out.errors).toEqual(['40P01']);
+      const before = await snapshot();
+      const out = await takeTurns('makeEveryday', () => settle(makeEveryday(sequelize, w.t, { returnEvent: true })), w.t, ANYWAY);
+      expectTurnsTaken(out);
       if (!out.a.ok) throw out.a.error;
       expect(out.b.status).toBe(200);
-      expect(pause.mock.calls).toEqual([[DELAY]]);
+      expect(out.b.body).toMatchObject({ success: true, message: 'Scene set deleted', links_dropped: 0 });
+      expect(out.b.body.uses_left.total).toBe(0);
+      expect(JSON.stringify(out.b.body)).not.toMatch(NOT_DATABASE_TEXT);
       expect((await eventRow(ev)).scene_set_id).toBe(w.r);
+      expect(await linksOf(ep)).toEqual([{ scene_set_id: w.r, role: 'event' }]);
+      expect(await removedAt(w.t)).not.toBeNull();
+      expect((await liveRefs(w.t)).total).toBe(0);
+      expect(await evaluationOf(ep)).toBe('pending');
+      expectOnlyThese(before, await snapshot(), { removedSet: w.t, event: ev, eventNowAt: w.r, newLink: { scene_set_id: w.r, episode_id: ep, role: 'event' }, versions: { [w.t]: null } });
     });
 
     test('the delete first against the same four writers: no deadlock (each waits for the delete\'s event or set row, or is refused)', async () => {
