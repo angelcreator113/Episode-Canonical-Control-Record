@@ -1073,6 +1073,11 @@ router.delete('/:id', validateUUIDParam('id'), requireAuth, authorize(['ADMIN'])
     const { asRetryable, RetryableConflictError } = require('../utils/episodeLocks');
     const retry = asRetryable(err);
     if (retry instanceof RetryableConflictError) return res.status(409).json({ success: false, code: retry.code, error: retry.message });
+    // The scene generation guard (migration 20261108210100) refuses the
+    // removal of a set whose generation outcome is uncertain or in flight,
+    // with a sentence of its own written for the user. That refusal is
+    // answered as it always was (sendFail), not as the fixed sentence.
+    if (/^scene generation guard: /.test(String(err?.message || ''))) return sendFail(res, err);
     console.error(`Scene Sets DELETE /:id error: set=${req.params.id} error=${require('../services/sceneGenerationService').errorClassOf(err)}`);
     return res.status(500).json({ success: false, error: DELETE_FAILED });
   }
