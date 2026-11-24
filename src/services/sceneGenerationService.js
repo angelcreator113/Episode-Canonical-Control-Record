@@ -946,6 +946,11 @@ function briefDb(models) {
 
 const GENERATED_NOT_SAVED = 'generated_not_saved';
 const GENERATED_NOT_SAVED_MESSAGE = 'The image was generated but it was not saved. Generating it again costs again.';
+// The set was removed from Scene Sets while its picture was being made: the
+// code and sentence a finalization already answers for a set that is gone
+// (venueLookImageService takeSetRow).
+const SET_NOT_FOUND = 'SET_NOT_FOUND';
+const SET_NOT_FOUND_MESSAGE = 'That scene set no longer exists.';
 
 // The pause the generation paths ask the Place finalizer for between tries
 // that lost to a lock (utils/placeLock retryDelayMs; Evoni, 2026-11-23).
@@ -1196,13 +1201,24 @@ async function generateBaseScene(sceneSet, models, options = {}) {
     // So the lock is NOWAIT there: a held set row is a lock conflict
     // (55P03), which the finalizer rolls back and tries again. Alone,
     // nothing else is held, and it waits as the UPDATE always did.
+    //
+    // The set must still be there (Evoni, 2026-11-24). Removing a scene set
+    // is a soft delete: the row stays, so the lock was taken on a removed
+    // row, and the final write, which is the model's (live rows only),
+    // matched nothing and threw nothing: a paid picture was reported saved
+    // and was on no row. The lock now reads live rows only, and a final
+    // write that changes no row is the same finding. Either is the
+    // generated-not-saved refusal (SET_NOT_FOUND), on both paths: thrown
+    // here, so the transaction is rolled back and it is never tried again.
     const guarded = typeof options.finalize === 'function';
+    const setGone = () => new PlaceFinalizeRefusal({ code: SET_NOT_FOUND, message: SET_NOT_FOUND_MESSAGE });
     const work = async ({ transaction } = {}) => {
       const inTx = transaction ? { transaction } : {};
       if (transaction) {
-        await db.query(
-          `SELECT id FROM scene_sets WHERE id = :id FOR NO KEY UPDATE${guarded ? ' NOWAIT' : ''}`,
+        const [live] = await db.query(
+          `SELECT id FROM scene_sets WHERE id = :id AND deleted_at IS NULL FOR NO KEY UPDATE${guarded ? ' NOWAIT' : ''}`,
           { replacements: { id: sceneSet.id }, transaction });
+        if (Array.isArray(live) && live.length === 0) throw setGone();
       }
       // S6: the base may have been approved while the picture was being
       // made (a claim gone stale). The approved base stays; the new picture
@@ -1211,7 +1227,9 @@ async function generateBaseScene(sceneSet, models, options = {}) {
       if (lateRefusal) {
         throw new ApprovedBaseError({ ...lateRefusal, error: `${lateRefusal.error} It was approved while the new picture was being made, so the new picture was not kept.` });
       }
-      await SceneSet.update(finalWrite, { where: { id: sceneSet.id }, ...inTx });
+      const written = await SceneSet.update(finalWrite, { where: { id: sceneSet.id }, ...inTx });
+      // The second line of defence: the model's update says how many live rows it changed.
+      if (Array.isArray(written) && written[0] === 0) throw setGone();
     };
     const finalize = guarded
       ? options.finalize
@@ -1235,7 +1253,14 @@ async function generateBaseScene(sceneSet, models, options = {}) {
     try {
       saved = await finalize(work);
     } catch (saveErr) {
-      if (saveErr instanceof ApprovedBaseError) {
+      if (saveErr instanceof PlaceFinalizeRefusal) {
+        // The set was removed while the picture was being made: generated
+        // and not saved, as any other refusal below. Its status is put back
+        // (the removed row is not restored: deleted_at is not written), the
+        // reason kept, the stored picture left and logged.
+        await restoreBaseAfterRefusal(db, sceneSet.id, priorStatus, `${saveErr.message} ${saveErr.detail}`);
+        console.error(orphan(saveErr.code, saveErr.attempts));
+      } else if (saveErr instanceof ApprovedBaseError) {
         console.warn(`[SceneGen] ${sceneSet.name}: base approved during generation; new still not kept (${stillUrl})`);
         await restoreBaseAfterRefusal(db, sceneSet.id, priorStatus, saveErr.message);
       } else {
