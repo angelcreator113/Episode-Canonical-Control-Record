@@ -297,6 +297,13 @@ const observed = [];
     const out = { a, b, how, errors: lockErrors(trace.records), pauses: pause.mock.calls.length };
     const brief = (x) => (x && typeof x.status === 'number' ? `${x.status}${x.body?.code ? ` ${x.body.code}` : ''}` : (x && 'ok' in x ? (x.ok ? 'ok' : `threw ${x.error?.code || x.error?.name}`) : String(x)));
     observed.push({ name, first: brief(a), second: brief(b), how, errors: out.errors, pauses: out.pauses });
+    // A 500 from either side is recorded with its body and what was logged, so a failing run explains itself.
+    for (const x of [a, b]) {
+      if (x && x.status >= 500) {
+        observed.push({ name: `${name}: 500`, body: x.body, logged: console.error.mock?.calls.map((c) => c.map(String).join(' ').slice(0, 300)).slice(-6),
+          statements: trace.records.filter((r) => r.table === 'scene_sets' || r.table === 'world_events').map((r) => `${r.txId ? 'tx' : 'auto'} ${r.kind} ${r.table}${r.error ? ` ${r.error}` : ''} ${String(r.sql || '').slice(0, 70)}`).slice(-30) });
+      }
+    }
     return out;
   }
   const noDeadlock = (out) => {
@@ -1170,6 +1177,13 @@ const observed = [];
         ['event PUT', async () => { const x = await eventOnly(w.s); return { target: w.s, go: () => send(putEvent(x.ev, { scene_set_id: w.t })) }; }],
         ['scene-set-link', async () => { const u = await set('Hall U'); const x = await eventOnly(u, { brief: false }); return { target: u, go: () => send(linkSet(x.ev, w.t)) }; }],
         ['makeEventVersion', async () => { const u = await set('Hall V'); const x = await eventOnly(u); return { target: u, go: () => settle(makeEventVersion(sequelize, { setId: w.home2, everydaySetId: w.home, eventId: x.ev })) }; }],
+        ['makeEveryday', async () => {
+          const version = await set('Hall W');
+          const everyday = await set('Hall X');
+          const x = await eventOnly(everyday);
+          expect((await settle(makeEventVersion(sequelize, { setId: version, everydaySetId: everyday, eventId: x.ev }))).ok).toBe(true);
+          return { target: version, go: () => settle(makeEveryday(sequelize, version, { returnEvent: true })) };
+        }],
       ];
       for (const [name, make] of cases) {
         const { target, go } = await make();
