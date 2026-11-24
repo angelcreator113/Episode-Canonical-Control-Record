@@ -483,26 +483,50 @@ router.put('/:episodeId/plan/:beatNumber', requireAuth, authorize(['ADMIN']), as
       const sceneSet = await SceneSet.findByPk(updates.scene_set_id);
       if (!sceneSet) return res.status(404).json({ error: 'Scene set not found' });
       updates.scene_context = sceneSet.script_context || sceneSet.canonical_description?.slice(0, 400);
-      // L11: a set not yet linked to the episode joins its locations.
-      const { linkBeatSet, EpisodeLocationsError } = require('../services/episodeLocationsService');
-      try {
-        location = await linkBeatSet(models.sequelize, { episodeId, sceneSetId: updates.scene_set_id });
-      } catch (linkErr) {
-        if (linkErr instanceof EpisodeLocationsError) {
-          return res.status(linkErr.status).json({ error: linkErr.message, code: linkErr.code });
-        }
-        throw linkErr;
-      }
     }
 
-    await plan.update(updates);
-    // L12a: the beat's scene row follows the beat.
+    // C2 PR 3: the episode first, then the set's row, live only and never
+    // waited for under the episode's lock, then the episode link (L11) and
+    // the beat as ONE commit. Before this, linkBeatSet and plan.update were
+    // two independent commits, and the set was read above without a lock,
+    // so it could be removed in between.
+    const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
+    const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+    const { linkBeatSet, EpisodeLocationsError } = require('../services/episodeLocationsService');
+    try {
+      await inEpisodeFirstTransaction(models.sequelize, async (transaction) => {
+        location = null;
+        await lockEpisodes(models.sequelize, [episodeId], { transaction, mode: 'share' });
+        if (updates.scene_set_id) {
+          if (!await holdLiveSet(models.sequelize, updates.scene_set_id, { transaction, nowait: true })) {
+            throw new EpisodeLocationsError('That scene set no longer exists', 404, 'SCENE_SET_NOT_FOUND');
+          }
+          // L11: a set not yet linked to the episode joins its locations.
+          // It decides EPISODE_ACCEPTED under the episode's lock.
+          location = await linkBeatSet(models.sequelize, { episodeId, sceneSetId: updates.scene_set_id, transaction });
+        }
+        await plan.update(updates, { transaction });
+      });
+    } catch (linkErr) {
+      if (linkErr instanceof EpisodeLocationsError) {
+        return res.status(linkErr.status).json({ error: linkErr.message, code: linkErr.code });
+      }
+      if (linkErr instanceof RetryableConflictError) {
+        console.error(`[ScenePlanner] beat ${beatNumber} gave up after retries:`, linkErr.name);
+        return res.status(409).json({ error: linkErr.message, code: linkErr.code });
+      }
+      throw linkErr;
+    }
+    // L12a: the beat's scene row follows the beat. Derived, idempotent and
+    // quiet, after the commit as before (it is S1's to correct).
     const { syncBeatScenesQuietly } = require('../services/beatScenesService');
     await syncBeatScenesQuietly(models.sequelize, episodeId, 'beat save');
     return res.json({ data: plan, ...(location ? { location } : {}) });
   } catch (err) {
-    console.error('[ScenePlanner] beat update failed:', err.message);
-    return res.status(500).json({ error: err.message });
+    // No database or ORM text in the answer (C2 PR 3): the error's class is
+    // logged, the browser gets a fixed sentence.
+    console.error('[ScenePlanner] beat update failed:', err?.name || 'Error', err);
+    return res.status(500).json({ error: 'This beat could not be saved. Nothing was changed: try again.' });
   }
 });
 

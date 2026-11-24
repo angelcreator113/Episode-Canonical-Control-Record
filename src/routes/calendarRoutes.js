@@ -545,28 +545,42 @@ router.post('/events/:id/spawn-world-event', requireAuth, async (req, res) => {
       {}
     );
 
+    // C2 PR 3 (Evoni, 2026-11-24): the spawned event's scene_set_id came
+    // straight from the request with no check, so a spawn could create an
+    // event at a set that had been removed. One short transaction takes the
+    // set's row first, live only and WAITED (nothing else is held here),
+    // then inserts the event. The raw-SQL fallback below writes no
+    // scene_set_id at all, so it needs nothing.
+    const spawnSetId = req.body.scene_set_id || null;
     if (WorldEvent) {
-      const worldEvent = await WorldEvent.create({
-        show_id,
-        name: req.body.name || calendarEvent.title,
-        event_type: req.body.event_type || typeMap[calendarEvent.event_type] || 'invite',
-        host: req.body.host || null,
-        host_brand: req.body.host_brand || null,
-        description: req.body.description || calendarEvent.what_world_knows || calendarEvent.title,
-        venue_location_id: calendarEvent.location_id || null,
-        venue_name: req.body.venue_name || venue?.name || calendarEvent.location_name || null,
-        venue_address: req.body.venue_address || venueAddress || null,
-        event_date: dated.event_date,
-        event_time: req.body.event_time || null,
-        canon_consequences: dated.canon_consequences,
-        location_hint: calendarEvent.location_name || dreamCityFromEvent(calendarEvent) || calendarEvent.lalaverse_district || null,
-        dress_code: req.body.dress_code || null,
-        prestige: req.body.prestige || Math.min(10, (calendarEvent.severity_level || 5) + 2),
-        narrative_stakes: req.body.narrative_stakes || calendarEvent.what_only_we_know || null,
-        source_calendar_event_id: calendarEvent.id,
-        scene_set_id: req.body.scene_set_id || null,
-        status: 'draft',
+      const { holdLiveSet } = require('../services/eventPlaceSync');
+      const worldEvent = await models.sequelize.transaction(async (transaction) => {
+        if (!await holdLiveSet(models.sequelize, spawnSetId, { transaction })) return null;
+        return WorldEvent.create({
+          show_id,
+          name: req.body.name || calendarEvent.title,
+          event_type: req.body.event_type || typeMap[calendarEvent.event_type] || 'invite',
+          host: req.body.host || null,
+          host_brand: req.body.host_brand || null,
+          description: req.body.description || calendarEvent.what_world_knows || calendarEvent.title,
+          venue_location_id: calendarEvent.location_id || null,
+          venue_name: req.body.venue_name || venue?.name || calendarEvent.location_name || null,
+          venue_address: req.body.venue_address || venueAddress || null,
+          event_date: dated.event_date,
+          event_time: req.body.event_time || null,
+          canon_consequences: dated.canon_consequences,
+          location_hint: calendarEvent.location_name || dreamCityFromEvent(calendarEvent) || calendarEvent.lalaverse_district || null,
+          dress_code: req.body.dress_code || null,
+          prestige: req.body.prestige || Math.min(10, (calendarEvent.severity_level || 5) + 2),
+          narrative_stakes: req.body.narrative_stakes || calendarEvent.what_only_we_know || null,
+          source_calendar_event_id: calendarEvent.id,
+          scene_set_id: spawnSetId,
+          status: 'draft',
+        }, { transaction });
       });
+      if (!worldEvent) {
+        return res.status(400).json({ success: false, code: 'INVALID_SCENE_SET_ID', error: 'That scene set does not exist.' });
+      }
       // The deal type's first draft (Task #2330; dealTypeDraftService).
       await syncDraftedDealType(models.sequelize, worldEvent.id, { initial: true });
 

@@ -220,27 +220,49 @@ exports.createScene = async (req, res) => {
     // Get user ID from request
     const userId = req.user?.id || 'system';
 
-    // Create scene
-    const scene = await Scene.create({
-      episode_id: resolvedEpisodeId,
-      scene_number,
-      title: resolvedTitle,
-      description,
-      location,
-      duration_seconds: resolvedDurationSeconds,
-      scene_type: resolvedSceneType,
-      production_status: resolvedProductionStatus || 'draft',
-      mood,
-      script_notes: resolvedScriptNotes,
-      start_timecode: resolvedStartTimecode,
-      end_timecode: resolvedEndTimecode,
-      characters: characters || [],
-      scene_set_id: sceneSetId || scene_set_id || null,
-      scene_angle_id: sceneAngleId || scene_angle_id || null,
-      background_url: backgroundUrl || background_url || null,
-      created_by: userId,
-      updated_by: userId,
-    });
+    // C2 PR 3: the episode first, then the set's row, live only and never
+    // waited for under the episode's lock. This handler wrote scene_set_id
+    // straight from the request with no check at all, so a scene could be
+    // made on a set that had been removed.
+    const wantedSetId = sceneSetId || scene_set_id || null;
+    const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
+    const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+    let scene;
+    try {
+      scene = await inEpisodeFirstTransaction(Scene.sequelize, async (transaction) => {
+        await lockEpisodes(Scene.sequelize, [resolvedEpisodeId], { transaction, mode: 'share' });
+        if (!await holdLiveSet(Scene.sequelize, wantedSetId, { transaction, nowait: true })) return null;
+        return Scene.create({
+          episode_id: resolvedEpisodeId,
+          scene_number,
+          title: resolvedTitle,
+          description,
+          location,
+          duration_seconds: resolvedDurationSeconds,
+          scene_type: resolvedSceneType,
+          production_status: resolvedProductionStatus || 'draft',
+          mood,
+          script_notes: resolvedScriptNotes,
+          start_timecode: resolvedStartTimecode,
+          end_timecode: resolvedEndTimecode,
+          characters: characters || [],
+          scene_set_id: wantedSetId,
+          scene_angle_id: sceneAngleId || scene_angle_id || null,
+          background_url: backgroundUrl || background_url || null,
+          created_by: userId,
+          updated_by: userId,
+        }, { transaction });
+      });
+    } catch (err) {
+      if (err instanceof RetryableConflictError) {
+        console.error('Creating a scene gave up after retries:', err.name);
+        return res.status(409).json({ success: false, error: err.message, code: err.code });
+      }
+      throw err;
+    }
+    if (!scene) {
+      return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
 
     res.status(201).json({
       success: true,
@@ -344,7 +366,32 @@ exports.updateScene = async (req, res) => {
 
     // Track who updated
     scene.updated_by = req.user?.id || 'system';
-    await scene.save();
+
+    // C2 PR 3: the episode first, then the set's row, live only and never
+    // waited for under the episode's lock. scene_set_id and sceneSetId are
+    // in the allowlist above and were saved with no check at all, so a
+    // scene could be moved onto a set that had been removed.
+    const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
+    const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+    const namesSet = 'scene_set_id' in updates || 'sceneSetId' in updates;
+    let saved = true;
+    try {
+      await inEpisodeFirstTransaction(Scene.sequelize, async (transaction) => {
+        saved = true;
+        await lockEpisodes(Scene.sequelize, [scene.episode_id], { transaction, mode: 'share' });
+        if (namesSet && !await holdLiveSet(Scene.sequelize, scene.scene_set_id, { transaction, nowait: true })) { saved = false; return; }
+        await scene.save({ transaction });
+      });
+    } catch (err) {
+      if (err instanceof RetryableConflictError) {
+        console.error('Updating a scene gave up after retries:', err.name);
+        return res.status(409).json({ success: false, error: err.message, code: err.code });
+      }
+      throw err;
+    }
+    if (!saved) {
+      return res.status(404).json({ success: false, error: 'Scene set not found' });
+    }
 
     res.json({
       success: true,

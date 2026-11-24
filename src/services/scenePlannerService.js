@@ -315,16 +315,48 @@ Return ONLY the JSON array, no other text.`;
 
     // One transaction: a failed save no longer loses the unlocked beats it
     // had just removed (eighth audit).
+    //
+    // C2 PR 3 (Evoni, 2026-11-24): the sets were read before the long model
+    // call, so one of them can have been removed by the time the plan is
+    // saved. The long call stays outside this transaction, as it always
+    // was; the liveness of every set the plan names is re-checked HERE, at
+    // save time, under the episode's lock. NOWAIT, not waited: the episode
+    // row is held, and a set row is never waited for while one is (the
+    // delete path's order). A set that went: the beat is saved with no set,
+    // which is this service's existing answer for a set it cannot resolve
+    // (`scene_set_id: sceneSet ? beat.scene_set_id : null` above).
     const { sequelize: planDb } = require('../models');
-    const transaction = await planDb.transaction();
+    const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
+    const { lockEpisodes } = require('../utils/episodeLocks');
+    let dropped = [];
     try {
-      await ScenePlan.destroy({ where: { episode_id: episodeId, locked: false, chosen_by_user: false }, force: true, transaction });
-      await ScenePlan.bulkCreate(rows, { transaction });
-      await transaction.commit();
+      await inEpisodeFirstTransaction(planDb, async (transaction) => {
+        dropped = [];
+        await lockEpisodes(planDb, [episodeId], { transaction, mode: 'share' });
+        const named = [...new Set(rows.map((r) => r.scene_set_id).filter(Boolean).map(String))].sort();
+        const gone = new Set();
+        for (const setId of named) {
+          if (!await holdLiveSet(planDb, setId, { transaction, nowait: true })) gone.add(setId);
+        }
+        const live = rows.map((r) => (r.scene_set_id && gone.has(String(r.scene_set_id))
+          ? { ...r, scene_set_id: null, scene_context: null }
+          : r));
+        dropped = [...gone];
+        await ScenePlan.destroy({ where: { episode_id: episodeId, locked: false, chosen_by_user: false }, force: true, transaction });
+        await ScenePlan.bulkCreate(live, { transaction });
+      });
     } catch (saveErr) {
-      await transaction.rollback();
-      console.error('[ScenePlanner] Saving the plan failed; the beats are as they were:', saveErr.message);
+      console.error('[ScenePlanner] Saving the plan failed; the beats are as they were:', saveErr?.name || 'Error', saveErr.message);
       throw saveErr;
+    }
+    if (dropped.length) {
+      console.warn(`[ScenePlanner] ${dropped.length} scene set(s) were removed while the plan was being written; those beats were saved with no set.`);
+      for (const beat of enrichedBeats) {
+        if (beat.scene_set_id && dropped.includes(String(beat.scene_set_id))) {
+          beat.scene_set_id = null;
+          beat.scene_context = null;
+        }
+      }
     }
     console.log(`[ScenePlanner] Saved ${rows.length} beats for episode ${episodeId}; kept ${lockedRows.length} locked or chosen`);
 

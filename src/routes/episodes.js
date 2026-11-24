@@ -193,7 +193,17 @@ router.post(
       removed_scene_ids: removedSceneIds, timeline_basis: sentTimelineBasis, confirm_remove_all: confirmRemoveAll,
     } = req.body;
 
-    const _result = await Episode.sequelize.transaction(async (t) => {
+    // C2 PR 3: the episode first, then every set the sent scenes name, live
+    // only and never waited for under the episode's lock. This save wrote
+    // scene_set_id straight from the request body with no check at all.
+    const { inEpisodeFirstTransaction, holdLiveSets } = require('../services/eventPlaceSync');
+    const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+    const sentSetIds = Array.isArray(scenes) ? scenes.map((s) => s?.scene_set_id).filter(Boolean) : [];
+
+    const _result = await inEpisodeFirstTransaction(Episode.sequelize, async (t) => {
+      await lockEpisodes(Episode.sequelize, [id], { transaction: t, mode: 'share' });
+      const goneSet = await holdLiveSets(Episode.sequelize, sentSetIds, { transaction: t, nowait: true });
+      if (goneSet) throw new SaveConflict(404, 'SCENE_SET_NOT_FOUND', 'Scene set not found');
       // 1. Update episode metadata + platform
       const episodeRecord = await Episode.findByPk(id, { transaction: t });
       if (!episodeRecord) throw new SaveConflict(404, 'EPISODE_NOT_FOUND', 'Episode not found');
@@ -286,6 +296,12 @@ router.post(
       return { success: true, sceneIds, timelineBasis: savedTimelineBasis };
     }).catch((error) => {
       if (error instanceof SaveConflict) return { conflict: error };
+      // A lock conflict that survived the bounded retries is the repo's
+      // retryable 409, never the database's own words.
+      if (error instanceof RetryableConflictError) {
+        console.error(`[Save] Episode ${id} gave up after retries:`, error.name);
+        return { conflict: new SaveConflict(409, error.code, error.message) };
+      }
       throw error;
     });
 
@@ -1723,7 +1739,7 @@ router.post(
   requireAuth,
   authorize(['ADMIN']),
   asyncHandler(async (req, res) => {
-    const { models } = require('../models');
+    const { models, sequelize } = require('../models');
     const { Episode, SceneSetEpisode } = models;
 
     const episode = await Episode.findByPk(req.params.episodeId);
@@ -1731,43 +1747,76 @@ router.post(
       return res.status(404).json({ success: false, error: 'Episode not found' });
     }
 
-    // An accepted episode's locations are locked (eighth audit: this route
-    // added links to one the Locations step refused).
-    if (episode.evaluation_status === 'accepted') {
-      return res.status(409).json({ success: false, code: 'EPISODE_ACCEPTED', error: 'This episode is accepted: its locations are locked' });
-    }
-
     const { sceneSetIds } = req.body;
     if (!sceneSetIds || !Array.isArray(sceneSetIds) || sceneSetIds.length === 0) {
       return res.status(400).json({ success: false, error: 'sceneSetIds array required' });
     }
 
+    const wanted = sceneSetIds.map((raw, i) => ({
+      setId: typeof raw === 'string' ? raw : raw?.sceneSetId,
+      order: (typeof raw === 'object' && raw !== null && raw.sortOrder !== undefined) ? parseInt(raw.sortOrder, 10) : i,
+      fallback: i,
+    })).filter((x) => x.setId);
+
+    // C2 PR 3: the episode first, the accepted check under its lock, then
+    // every set this request names, live only and never waited for while
+    // the episode row is held. A removed set is the new 404 below: this
+    // route read a set only for its name, so a link could be made to a set
+    // that had been removed.
+    const { inEpisodeFirstTransaction, holdLiveSets } = require('../services/eventPlaceSync');
+    const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+    let gone = null;
+    let accepted = false;
     const created = [];
-    for (let i = 0; i < sceneSetIds.length; i += 1) {
-      const raw = sceneSetIds[i];
-      const setId = typeof raw === 'string' ? raw : raw?.sceneSetId;
-      const requestedOrder = (typeof raw === 'object' && raw !== null && raw.sortOrder !== undefined)
-        ? parseInt(raw.sortOrder, 10)
-        : i;
-      if (!setId) continue;
-      // A new link is an extra named after its set: with no role or name it
-      // read as an unnamed extra, and the Locations step would not save
-      // until it was named (eighth audit).
-      const named = models.SceneSet ? await models.SceneSet.findByPk(setId, { attributes: ['name'] }) : null;
-      const [link, wasCreated] = await SceneSetEpisode.findOrCreate({
-        where: { episode_id: req.params.episodeId, scene_set_id: setId },
-        defaults: { sort_order: Number.isNaN(requestedOrder) ? i : requestedOrder, role: 'extra', role_name: String(named?.name || 'Extra location').slice(0, 80) },
+    try {
+      await inEpisodeFirstTransaction(sequelize, async (transaction) => {
+        created.length = 0;
+        gone = null;
+        accepted = false;
+        await lockEpisodes(sequelize, [req.params.episodeId], { transaction, mode: 'share' });
+        // An accepted episode's locations are locked (eighth audit: this
+        // route added links to one the Locations step refused). Read under
+        // the episode's lock, so an acceptance committing now takes turns.
+        const [[live]] = await sequelize.query(
+          'SELECT evaluation_status FROM episodes WHERE id = :id', { replacements: { id: req.params.episodeId }, transaction });
+        if (live?.evaluation_status === 'accepted') { accepted = true; return; }
+        gone = await holdLiveSets(sequelize, wanted.map((x) => x.setId), { transaction, nowait: true });
+        if (gone) return;
+        for (const { setId, order, fallback } of wanted) {
+          const sortOrder = Number.isNaN(order) ? fallback : order;
+          // A new link is an extra named after its set: with no role or name it
+          // read as an unnamed extra, and the Locations step would not save
+          // until it was named (eighth audit).
+          const named = models.SceneSet ? await models.SceneSet.findByPk(setId, { attributes: ['name'], transaction }) : null;
+          const [link, wasCreated] = await SceneSetEpisode.findOrCreate({
+            where: { episode_id: req.params.episodeId, scene_set_id: setId },
+            defaults: { sort_order: sortOrder, role: 'extra', role_name: String(named?.name || 'Extra location').slice(0, 80) },
+            transaction,
+          });
+          if (!wasCreated && link.sort_order !== sortOrder) {
+            await link.update({ sort_order: sortOrder }, { transaction });
+          }
+          created.push({
+            id: link.id,
+            sceneSetId: setId,
+            sortOrder,
+            isPrimary: sortOrder === 0,
+            created: wasCreated,
+          });
+        }
       });
-      if (!wasCreated && link.sort_order !== (Number.isNaN(requestedOrder) ? i : requestedOrder)) {
-        await link.update({ sort_order: Number.isNaN(requestedOrder) ? i : requestedOrder });
+    } catch (err) {
+      if (err instanceof RetryableConflictError) {
+        console.error(`POST /episodes/${req.params.episodeId}/scene-sets gave up after retries:`, err.name);
+        return res.status(409).json({ success: false, code: err.code, error: err.message });
       }
-      created.push({
-        id: link.id,
-        sceneSetId: setId,
-        sortOrder: Number.isNaN(requestedOrder) ? i : requestedOrder,
-        isPrimary: (Number.isNaN(requestedOrder) ? i : requestedOrder) === 0,
-        created: wasCreated,
-      });
+      throw err;
+    }
+    if (accepted) {
+      return res.status(409).json({ success: false, code: 'EPISODE_ACCEPTED', error: 'This episode is accepted: its locations are locked' });
+    }
+    if (gone) {
+      return res.status(404).json({ success: false, code: 'SCENE_SET_NOT_FOUND', error: 'Scene set not found' });
     }
 
     res.json({ success: true, data: created });
@@ -1984,21 +2033,42 @@ router.post(
 
     const nextNumber = await Scene.getNextSceneNumber(req.params.episodeId);
 
-    const scene = await Scene.create({
-      episode_id: req.params.episodeId,
-      scene_set_id: sceneSetId,
-      scene_angle_id: sceneAngleId,
-      scene_number: nextNumber,
-      title: title || `${sceneSet.name} — ${angle.angle_name}`,
-      background_url: angle.still_image_url || null,
-      scene_type: sceneType || 'main',
-      production_status: 'draft',
-      duration_seconds: 5.0,
-      characters: [],
-      ui_elements: [],
-      dialogue_clips: [],
-      location: sceneSet.name,
-    });
+    // C2 PR 3: the episode first, then the set's row, live only and never
+    // waited for under the episode's lock. The set was read above without
+    // one, so it could be removed between that read and this insert (the
+    // scenes foreign key is then satisfied by the soft-deleted row).
+    const { sequelize } = require('../models');
+    const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
+    const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+    let scene = null;
+    try {
+      scene = await inEpisodeFirstTransaction(sequelize, async (transaction) => {
+        await lockEpisodes(sequelize, [req.params.episodeId], { transaction, mode: 'share' });
+        if (!await holdLiveSet(sequelize, sceneSetId, { transaction, nowait: true })) return null;
+        return Scene.create({
+          episode_id: req.params.episodeId,
+          scene_set_id: sceneSetId,
+          scene_angle_id: sceneAngleId,
+          scene_number: nextNumber,
+          title: title || `${sceneSet.name} — ${angle.angle_name}`,
+          background_url: angle.still_image_url || null,
+          scene_type: sceneType || 'main',
+          production_status: 'draft',
+          duration_seconds: 5.0,
+          characters: [],
+          ui_elements: [],
+          dialogue_clips: [],
+          location: sceneSet.name,
+        }, { transaction });
+      });
+    } catch (err) {
+      if (err instanceof RetryableConflictError) {
+        console.error(`POST /episodes/${req.params.episodeId}/scenes/from-angle gave up after retries:`, err.name);
+        return res.status(409).json({ success: false, code: err.code, error: err.message });
+      }
+      throw err;
+    }
+    if (!scene) return res.status(404).json({ success: false, error: 'Scene set not found' });
 
     res.status(201).json({ success: true, data: scene });
   })

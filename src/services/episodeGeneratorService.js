@@ -306,27 +306,71 @@ async function createScenePlanRows(episode, event, models, locations = null) {
     console.warn('[EpisodeGenerator] Scene angles load failed; beats get no angle:', angleErr.message);
   }
 
-  for (const beat of missing) {
+  // C2 PR 3 (Evoni, 2026-11-24): these inserts run AFTER Start's own
+  // transaction has committed (the caller below), so they hold neither the
+  // event nor the episode, and the sets were last read in
+  // applyStartLocations' separate transaction. One short transaction takes
+  // the episode first and then every set the beats name, live only and
+  // NOWAIT (a set row is never waited for while an episode row is held).
+  // A set removed meanwhile is OMITTED from its beat — Start's existing
+  // answer for a set it cannot place (`scene_set_id: sceneSetId || null`),
+  // and the scene-plan step records what it made, as it always did. Start
+  // itself is never failed by this step.
+  const { inEpisodeFirstTransaction, holdLiveSet } = require('./eventPlaceSync');
+  const { lockEpisodes } = require('../utils/episodeLocks');
+  const placedBeats = missing.map((beat) => {
     const placed = placeBeat(beat.beat, roleSets, anglesBySet);
-    const sceneSetId = placed.scene_set_id;
-    const angleLabel = placed.angle?.angle_label || null;
-
-    try {
-      const beatId = uuidv4();
-      await models.sequelize.query(
-        `INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, emotional_intent, scene_set_id, angle_label, scene_context, sort_order, locked, ai_suggested, created_at, updated_at)
-         VALUES (:id, :episode_id, :beat_number, :beat_name, :emotional_intent, :scene_set_id, :angle_label, :scene_context, :sort_order, false, true, NOW(), NOW())`,
-        { replacements: {
-          id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label,
-          emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId || null, angle_label: angleLabel,
-          scene_context: beat.description, sort_order: beat.beat,
-        } }
-      );
-      scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId, angle_label: angleLabel });
-    } catch (beatErr) {
-      console.error(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
-      failedBeats.push({ beat: beat.beat, reason: beatErr.message });
-    }
+    return { beat, sceneSetId: placed.scene_set_id || null, angleLabel: placed.angle?.angle_label || null };
+  });
+  try {
+    await inEpisodeFirstTransaction(models.sequelize, async (transaction) => {
+      scenePlanRows.length = 0;
+      failedBeats.length = 0;
+      await lockEpisodes(models.sequelize, [episode.id], { transaction, mode: 'share' });
+      const named = [...new Set(placedBeats.map((p) => p.sceneSetId).filter(Boolean).map(String))].sort();
+      const gone = new Set();
+      for (const setId of named) {
+        if (!await holdLiveSet(models.sequelize, setId, { transaction, nowait: true })) gone.add(setId);
+      }
+      if (gone.size) {
+        console.warn(`[EpisodeGenerator] ${gone.size} scene set(s) were removed while the plan was being made; those beats were made with no set.`);
+      }
+      for (const { beat, sceneSetId: rawSetId, angleLabel: rawAngle } of placedBeats) {
+        const removed = rawSetId && gone.has(String(rawSetId));
+        const sceneSetId = removed ? null : rawSetId;
+        const angleLabel = removed ? null : rawAngle;
+        const beatId = uuidv4();
+        try {
+          // A SAVEPOINT per beat: one beat's own failure (a duplicate beat
+          // number from a retry that raced this one) is recorded and the
+          // rest are still written, exactly as when each insert was its own
+          // statement. Without it the first failure would abort the whole
+          // transaction and lose every beat.
+          await models.sequelize.transaction({ transaction }, async (savepoint) => {
+            await models.sequelize.query(
+              `INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, emotional_intent, scene_set_id, angle_label, scene_context, sort_order, locked, ai_suggested, created_at, updated_at)
+               VALUES (:id, :episode_id, :beat_number, :beat_name, :emotional_intent, :scene_set_id, :angle_label, :scene_context, :sort_order, false, true, NOW(), NOW())`,
+              { replacements: {
+                id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label,
+                emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId || null, angle_label: angleLabel,
+                scene_context: beat.description, sort_order: beat.beat,
+              }, transaction: savepoint }
+            );
+          });
+          scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId, angle_label: angleLabel });
+        } catch (beatErr) {
+          // A lock conflict is the transaction's to retry, not this beat's.
+          if (require('../utils/episodeLocks').isLockConflict(beatErr)) throw beatErr;
+          console.error(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
+          failedBeats.push({ beat: beat.beat, reason: beatErr.message });
+        }
+      }
+    });
+  } catch (planErr) {
+    console.error('[EpisodeGenerator] The scene plan could not be written; no beat was made:', planErr?.name || 'Error', planErr.message);
+    scenePlanRows.length = 0;
+    failedBeats.length = 0;
+    for (const { beat } of placedBeats) failedBeats.push({ beat: beat.beat, reason: 'The plan could not be saved; nothing was written.' });
   }
   console.log(`[EpisodeGenerator] Scene plan for episode ${episode.id}: ${existingBeats.size} existing, ${scenePlanRows.length} created, ${failedBeats.length} failed.`);
 

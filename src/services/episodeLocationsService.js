@@ -572,6 +572,17 @@ async function saveSceneDefaults(sequelize, { showId, body, leadCharacterId }) {
   // meanwhile (audit, 2026-10-15). leadCharacterId: the lead the caller
   // saved this for (the lead's home or closet), checked under the lock.
   return sequelize.transaction(async (transaction) => {
+    // C2 PR 3 (Evoni, 2026-11-24): the set's row FIRST, before the show's.
+    // The sets were read above with no lock, and shows.metadata has no
+    // foreign key, so a default could be saved naming a set that had been
+    // removed. WAITED: this is the transaction's first lock, so waiting
+    // inverts no order — and it MUST come before `shows`, because the
+    // delete path writes set rows, then `shows`, then `character_places`
+    // (sceneSetUsesService moveUses); taking the show first would be the
+    // opposite order.
+    const { holdLiveSets } = require('./eventPlaceSync');
+    const goneSet = await holdLiveSets(sequelize, Object.values(changes), { transaction });
+    if (goneSet) throw new EpisodeLocationsError('That scene set no longer exists', 404, 'SCENE_SET_NOT_FOUND');
     const [[locked]] = await sequelize.query('SELECT metadata FROM shows WHERE id = :showId FOR UPDATE', { replacements: { showId }, transaction });
     const metadata = typeof locked.metadata === 'string' ? JSON.parse(locked.metadata || '{}') : (locked.metadata || {});
     if (leadCharacterId !== undefined && String(metadata.lead_character_id || '') !== String(leadCharacterId || '')) {
