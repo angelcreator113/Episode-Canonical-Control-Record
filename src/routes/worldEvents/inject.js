@@ -264,7 +264,11 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, authorize(['AD
             { replacements: { episodeId: episode_id, assetId: event.invitation_asset_id }, transaction: t }
           );
         }
-        return linkEventSceneSet(models.sequelize, { event, episodeId: episode_id, transaction: t });
+        // The event's set as it is now, under its lock: the row read before
+        // this transaction may be older than a move that committed since,
+        // and the episode would be given a location at the set the event left.
+        const [[held]] = await models.sequelize.query('SELECT scene_set_id FROM world_events WHERE id = :eventId', { replacements: { eventId }, transaction: t });
+        return linkEventSceneSet(models.sequelize, { event: { ...event, scene_set_id: held?.scene_set_id ?? null }, episodeId: episode_id, transaction: t });
       });
     } catch (err) {
       if (sendScriptSaveError(res, err)) return undefined;
