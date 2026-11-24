@@ -214,6 +214,14 @@ function calculateFinancials(event, wardrobeItems = null) {
 }
 
 /**
+ * Why a beat was not made (C2 Writer 8; Evoni, 2026-11-25). The repo's own
+ * words: a failed beat's reason is read by the operator in setup_status and
+ * never carries a database or ORM message.
+ */
+const REMOVED_SET_BEAT_REASON = "This beat's scene set was removed while the episode was being set up. The beat was not made, and nothing naming the removed set was written: choose the beat's location in the episode's Locations, then resume the setup.";
+const PLAN_NOT_SAVED_REASON = "The scene plan was not saved: another change to this episode's scene sets kept getting in the way. Nothing was written: resume the setup to make the missing beats.";
+
+/**
  * Create the 14 scene_plans rows for an episode, one per BEAT_TEMPLATES
  * entry, and resolve the home/venue scene_set_id pair those rows (and the
  * SceneSetEpisode junction step right after this call) use.
@@ -270,64 +278,168 @@ async function createScenePlanRows(episode, event, models, locations = null) {
     }
   } catch { /* scene_sets query failed — no scene sets linked */ }
 
-  // The beats the episode already has (audit STATE-01, 2026-10-03). Only
-  // the missing ones are made: a retry after a partial first run fills the
-  // gaps and leaves the rows that exist alone, and the unique index on
-  // (episode_id, beat_number) keeps it to one row per beat.
-  const existingBeats = new Set();
-  try {
-    const [existingRows] = await models.sequelize.query(
-      `SELECT beat_number FROM scene_plans WHERE episode_id = :episode_id`,
-      { replacements: { episode_id: episode.id } }
-    );
-    for (const r of existingRows || []) existingBeats.add(Number(r.beat_number));
-  } catch (existingErr) {
-    console.warn('[EpisodeGenerator] Scene plan existence check failed, proceeding with insert:', existingErr.message);
-  }
-  const failedBeats = [];
-  const missing = BEAT_TEMPLATES.filter((b) => !existingBeats.has(b.beat));
-  if (missing.length === 0) {
-    console.log(`[EpisodeGenerator] Scene plan for episode ${episode.id} is complete: ${existingBeats.size} beats exist, nothing to make.`);
-    return { scenePlanRows, sceneSetIds, existingBeats: [...existingBeats].sort((a, b) => a - b), failedBeats };
-  }
-
   // L4 (Evoni, 2026-10-02; Q17, Q18, §8(hh)): each beat goes to the
   // location of its role, and to that set's angle of the kind the beat asks
-  // for (arrival → entrance or exterior, the event → main interior). The
+  // for (arrival -> entrance or exterior, the event -> main interior). The
   // closet beat uses the closet, else home.
+  //
+  // The roles and their sets are reads: they stay outside the transaction
+  // below, as the home-set lookup above does.
   const { setsByRole, placeBeat, loadSetAngles } = require('./planLocationsService');
   const roleSets = Array.isArray(locations)
     ? setsByRole(locations)
     : { home: sceneSetIds.home, event: sceneSetIds.venue };
-  let anglesBySet = new Map();
+
+  // ── C2 (Writer 8; Evoni, 2026-11-25): THE BEATS NAME LIVE SCENE SETS ──
+  //
+  // Start's main transaction commits before this call, and these inserts
+  // ran autocommit: holding no episode, no event and no set row. A Scene
+  // Set delete that committed in between left the beat naming the removed
+  // set — scene_plans.scene_set_id has a foreign key, so the insert was
+  // satisfied by the soft-deleted row and nothing waited for it.
+  //
+  // The beats are now made in a short transaction of their own, in the
+  // established order (C1): the episode FOR SHARE first, then every set the
+  // beats name, live only and NOWAIT (a set row is never waited for while
+  // an episode row is held — the delete path's order). The existing-beat
+  // read is inside it, so a retry re-reads what is there.
+  //
+  // A SAVEPOINT per beat keeps what has always been true of this step: one
+  // failed beat does not cost the others. Without one, PostgreSQL would
+  // abort the whole transaction on the first failed insert.
+  //
+  // Two cases are kept apart (Evoni, 2026-11-25):
+  //   - a beat with no location at all is written with no set, as it always
+  //     was;
+  //   - a beat whose SELECTED set has been removed is NOT written, and is
+  //     NOT quietly turned into a locationless beat. Auto-NULL was
+  //     considered here and refused: the beat is a failed beat with its
+  //     reason, and every unrelated beat still succeeds. (scenePlannerService
+  //     generateScenePlan, W7, answers the same situation by saving the beat
+  //     with no set; that divergence is deliberate and recorded in
+  //     docs/audit/F-AUTH-1_StartPlanRowsSetLiveness_Amendment_2026-11-25.md.)
+  const { inEpisodeFirstTransaction, holdLiveSets } = require('./eventPlaceSync');
+  const { lockEpisodes, isLockConflict } = require('../utils/episodeLocks');
+
+  const failedBeats = [];
+  let existingBeats = new Set();
+
+  // Every set the beats would name: the home and event locations, and the
+  // closet beat's closet, which falls back to home (planLocationsService
+  // placeBeat). Distinct ids, resolved from the reads above.
+  const namedSets = [...new Set(BEAT_TEMPLATES
+    .map((b) => placeBeat(b.beat, roleSets, new Map()).scene_set_id)
+    .filter(Boolean)
+    .map(String))];
+
   try {
-    anglesBySet = await loadSetAngles(models.sequelize, Object.values(roleSets));
-  } catch (angleErr) {
-    console.warn('[EpisodeGenerator] Scene angles load failed; beats get no angle:', angleErr.message);
-  }
+    await inEpisodeFirstTransaction(models.sequelize, async (transaction) => {
+      // Each attempt starts clean: a retry reads and decides again.
+      scenePlanRows.length = 0;
+      failedBeats.length = 0;
+      existingBeats = new Set();
 
-  for (const beat of missing) {
-    const placed = placeBeat(beat.beat, roleSets, anglesBySet);
-    const sceneSetId = placed.scene_set_id;
-    const angleLabel = placed.angle?.angle_label || null;
+      await lockEpisodes(models.sequelize, [episode.id], { transaction, mode: 'share' });
 
-    try {
-      const beatId = uuidv4();
-      await models.sequelize.query(
-        `INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, emotional_intent, scene_set_id, angle_label, scene_context, sort_order, locked, ai_suggested, created_at, updated_at)
-         VALUES (:id, :episode_id, :beat_number, :beat_name, :emotional_intent, :scene_set_id, :angle_label, :scene_context, :sort_order, false, true, NOW(), NOW())`,
-        { replacements: {
-          id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label,
-          emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId || null, angle_label: angleLabel,
-          scene_context: beat.description, sort_order: beat.beat,
-        } }
-      );
-      scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId, angle_label: angleLabel });
-    } catch (beatErr) {
-      console.error(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
-      failedBeats.push({ beat: beat.beat, reason: beatErr.message });
+      // The set rows, live only, ascending, never waited for. holdLiveSets
+      // names the FIRST id that is not there or was removed; the pass is
+      // made again without it, so the sets that are live are all held and
+      // every removed one is known. Each pass takes only the rows it does
+      // not already hold, ascending, so the order over all the passes is
+      // ascending too.
+      const goneSets = new Set();
+      for (;;) {
+        const gone = await holdLiveSets(
+          models.sequelize,
+          namedSets.filter((id) => !goneSets.has(id)),
+          { transaction, nowait: true }
+        );
+        if (!gone) break;
+        goneSets.add(String(gone));
+      }
+
+      // The beats the episode already has (audit STATE-01, 2026-10-03). Only
+      // the missing ones are made: a retry after a partial first run fills the
+      // gaps and leaves the rows that exist alone, and the unique index on
+      // (episode_id, beat_number) keeps it to one row per beat. The read is
+      // deliberately not filtered by deleted_at: that is the unique index's
+      // own reach, and this read is what keeps the insert off a beat the
+      // index already holds.
+      try {
+        const [existingRows] = await models.sequelize.query(
+          `SELECT beat_number FROM scene_plans WHERE episode_id = :episode_id`,
+          { replacements: { episode_id: episode.id }, transaction }
+        );
+        for (const r of existingRows || []) existingBeats.add(Number(r.beat_number));
+      } catch (existingErr) {
+        if (isLockConflict(existingErr)) throw existingErr;
+        console.warn('[EpisodeGenerator] Scene plan existence check failed, proceeding with insert:', existingErr.message);
+      }
+
+      const missing = BEAT_TEMPLATES.filter((b) => !existingBeats.has(b.beat));
+      if (missing.length === 0) {
+        console.log(`[EpisodeGenerator] Scene plan for episode ${episode.id} is complete: ${existingBeats.size} beats exist, nothing to make.`);
+        return;
+      }
+
+      let anglesBySet = new Map();
+      try {
+        anglesBySet = await loadSetAngles(models.sequelize, Object.values(roleSets), transaction);
+      } catch (angleErr) {
+        if (isLockConflict(angleErr)) throw angleErr;
+        console.warn('[EpisodeGenerator] Scene angles load failed; beats get no angle:', angleErr.message);
+      }
+
+      for (const beat of missing) {
+        const placed = placeBeat(beat.beat, roleSets, anglesBySet);
+        const sceneSetId = placed.scene_set_id;
+        const angleLabel = placed.angle?.angle_label || null;
+
+        // Case B: the set this beat was placed at has been removed. Nothing
+        // that names it is written, and the beat is not made without it.
+        if (sceneSetId && goneSets.has(String(sceneSetId))) {
+          failedBeats.push({ beat: beat.beat, reason: REMOVED_SET_BEAT_REASON });
+          continue;
+        }
+
+        const savepoint = `beat_${Number(beat.beat)}`;
+        await models.sequelize.query(`SAVEPOINT ${savepoint}`, { transaction });
+        try {
+          const beatId = uuidv4();
+          await models.sequelize.query(
+            `INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, emotional_intent, scene_set_id, angle_label, scene_context, sort_order, locked, ai_suggested, created_at, updated_at)
+             VALUES (:id, :episode_id, :beat_number, :beat_name, :emotional_intent, :scene_set_id, :angle_label, :scene_context, :sort_order, false, true, NOW(), NOW())`,
+            { replacements: {
+              id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label,
+              emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId || null, angle_label: angleLabel,
+              scene_context: beat.description, sort_order: beat.beat,
+            }, transaction }
+          );
+          await models.sequelize.query(`RELEASE SAVEPOINT ${savepoint}`, { transaction });
+          scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId, angle_label: angleLabel });
+        } catch (beatErr) {
+          // A lock conflict rolled the whole transaction back: it is the
+          // transaction's to try again, not one beat's to record.
+          if (isLockConflict(beatErr)) throw beatErr;
+          await models.sequelize.query(`ROLLBACK TO SAVEPOINT ${savepoint}`, { transaction });
+          console.error(`[EpisodeGenerator] Beat ${beat.beat} creation failed:`, beatErr.message);
+          failedBeats.push({ beat: beat.beat, reason: beatErr.message });
+        }
+      }
+    });
+  } catch (planErr) {
+    // The transaction kept losing to a lock (or could not be opened): it
+    // rolled back, so nothing was written. Start has already committed and
+    // is never reported as rolled back or failed: the beats that are still
+    // missing are named here, and the step says the setup is not complete.
+    console.error(`[EpisodeGenerator] Scene plan for episode ${episode.id} was not saved:`, planErr.message);
+    scenePlanRows.length = 0;
+    failedBeats.length = 0;
+    for (const b of BEAT_TEMPLATES) {
+      if (!existingBeats.has(b.beat)) failedBeats.push({ beat: b.beat, reason: PLAN_NOT_SAVED_REASON });
     }
   }
+
   console.log(`[EpisodeGenerator] Scene plan for episode ${episode.id}: ${existingBeats.size} existing, ${scenePlanRows.length} created, ${failedBeats.length} failed.`);
 
   return { scenePlanRows, sceneSetIds, existingBeats: [...existingBeats].sort((a, b) => a - b), failedBeats };
