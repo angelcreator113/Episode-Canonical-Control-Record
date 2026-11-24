@@ -229,7 +229,35 @@ The old assertions, verbatim, and the new ones, per test:
 
 **Rationale.** Before PR 2 the writer took the event row first and reached the episode row afterwards, the delete took the episode first, and the two deadlocked (40P01, the delete the victim, one retry pause). With PR 2 the writer takes its linked episodes FOR SHARE before the event row; the delete, wanting those episodes FOR UPDATE, waits for the writer's commit and then runs once. So `['40P01']`, the victim's statement and the one pause are replaced by: no lock error, no victim, the delete seen waiting in its episode statement, no pause, one committed transaction. The outcomes are kept and tightened to each answer's body; `moved` all zero (W1, W2) and `uses_left.total` 0 (W3, W4) show the delete ran after the writer's commit and found nothing left on the old set, so nothing is left pointing at a removed set; the snapshot comparison shows no partial commit. These four fixtures have no accepted or filmed episode, so there is no refusal to assert in them; each asserts the episode is still a draft and that the show's episodes and clips are unchanged, and the suite's own accepted and filmed cases, untouched, carry those protections. One assertion tried in a first scratch version and removed before this file: that the writer's COMMIT record precedes the delete's first lock record in the lock trace; trace order is the order statements resolve in the test process, not the database's order, and it failed once in three runs; the delete's own report (`moved` / `uses_left`) replaced it.
 
-**Measured** (private scratch trees, evidence in `/root/pr2-evidence/combo-r10/`: `OLD-NEW-RATIONALE.md`, `partA-four-tests.patch`, the original file, raw jest output): on PR 2 at `d90467ab` merged with this branch at `f7748bea`, the corrected suite 77 of 77 in five consecutive runs; on PR 2 at `574d471d` (its final source) merged the same way, 77 of 77 in three runs; unmodified, the four cases observed `[]` where they asserted `['40P01']` (73 of 77). The results on this branch's new head, after the merge of `main` at `748c3d1e`, are in §12 when run.
+**Measured** (private scratch trees, evidence in `/root/pr2-evidence/combo-r10/`: `OLD-NEW-RATIONALE.md`, `partA-four-tests.patch`, the original file, raw jest output): on PR 2 at `d90467ab` merged with this branch at `f7748bea`, the corrected suite 77 of 77 in five consecutive runs; on PR 2 at `574d471d` (its final source) merged the same way, 77 of 77 in three runs; unmodified, the four cases observed `[]` where they asserted `['40P01']` (73 of 77). The results on this branch's new head, after the merge of `main` at `748c3d1e`, are in §12.
+
+# §12. The integrated branch verified before push (added in v1.2; MEASURED by a separate scratch session on `61af6cd0cc138472316487c26475454860d547d4`, the head that §11 describes; evidence outside the repository in `/root/pr2-evidence/pr1int-r11/`, with a manifest, raw jest output and a recorded line per cell)
+
+On a new private scratch database, the real routes, provider and storage doubles, no DDL from tests, 0 external network attempts in every run. Nothing was edited to pass.
+
+| Suite | Runs | Result |
+|---|---|---|
+| `sceneSetDeleteLockOrder` (77, the four corrected cases included) | 3 | 77 of 77 each |
+| `eventWritersEpisodeFirst` (PR 2's, 79) | 2 | 79 of 79 each |
+| `placeLockGenerationB1` | 2 | 56 of 56 |
+| `placeLockGenerationB2` | 1 | 69 of 69 |
+| `placeLockGenerationB3` (this branch's and PR 2's edits to the one file, merged automatically) | 2 | 60 of 60 |
+| `placeLockFinalizer`, `placeLockStrict` | 1 | 52, 53 |
+| `baseSaveLiveSet` (#3936), `baseImageStillUsed` (#3937) | 1 | 15, 30 |
+| `p2bSceneSetAdmin`, `sceneSetsAudit7` | 1 | 243, 7 |
+| unit (`tests/unit`) | 1 | 745 suites, 11287 tests |
+| eslint on the five changed files; `validate-routes`, `lint-silent-catches`, `audit-cost-exposure`, `check-root-junk` | | exit 0 each |
+
+Not run locally: `sceneGenerationLegacyCompat` (its setup sends `ALTER TABLE`; CI runs it).
+
+**Against the real delete, on this head** (the scratch session's gated harness):
+- Each of W1, W2, W3, W4 and inject against `DELETE /scene-sets/:id`, with a replacement and "delete anyway", the writer first and the delete first, three runs a cell (24 cells): both sides answer; every wait is on an episode row; no lock error; no 500. The only non-200 is W4's 404 `SET_NOT_FOUND` when the delete removed its set first.
+- Jittered sweep, 49 ordered pairs over W1, W2, W3, W4, inject, generate-venue (its base save exercised) and the delete, ten runs each: 0 × 40P01, 0 × 500, 0 × 409 `RETRY`; one 55P03 (generate-venue then delete, on a set row, retried once); no event pointing at a removed set afterwards. Every other non-200 is the operation's own refusal: generate-venue 409 `STALE_SOURCE_SET` (`generated_not_saved`; one provider call each) when the event moved meanwhile, W4 404 after the delete, the second of two W4 409 `NOT_A_VERSION`, the second of two deletes 404.
+- **One answer not seen in earlier rounds**, once in ten runs of W3 then W1: the event edit to set T was refused 400/409 `OTHER_EVENT_VERSION` (an existing validation: T is another event's version) while `makeEventVersion` was making T this same event's version. Nothing was written by the refused edit; the event ended at T through W3; no lock error, no pause. INFERRED, not gated: the edit's pre-transaction validation read "T is a version" after W3's commit and "which event is at T" before it. The validation is in `eventPlaceSync.refuseEventSet`, on `main`, not a file this branch changes; recorded here as a stale-read refusal to look at with the PR 3 writers, not corrected here.
+- Accepted and filmed: the suite's own cases, and real `completeEpisode` and a real first raw clip racing the delete (32 cells, three runs each): a state change committed before the delete's final check → 409 `EPISODE_SNAPSHOT_FROZEN`, `EPISODE_ACCEPTED` or `PLACE_LOCKED`; committed after the delete holds its locks → it waits and lands after the delete. No bypass.
+- Removed-set liveness after a writer resumes (six sites, 28 cells, three runs each): W1 400 `INVALID_SCENE_SET_ID`; W2 200 `needs_reconnecting`; W3 404 `SET_NOT_FOUND` or `EVERYDAY_NOT_FOUND`; W4 200 (the event back at the replacement) or 409 `NOT_A_VERSION`; inject 200 with the link `needs_reconnecting`. With the delete held past the writer's retry budget, W1 to W4 answer 409 `RETRY` and write nothing. **No row or event written by a resumed writer points at the removed set.** W4's `EVERYDAY_GONE` is not reached through the real delete (it moves or releases the versions first).
+
+**What this does not show.** This branch, with PR 2 on `main`, no longer deadlocks with the six corrected writers in any ordering run. It does not complete Scene Set deletion safety: §10's gaps stand (the remaining reference writers of C2 / PR 3, the brief and raw-clip races, looks, characters' places and show defaults without foreign keys, the filmed-not-accepted gap on the event-first writers, S1, the saved-scene image check-to-delete race, generation claim ownership). Passing these runs does not authorize deployment.
 
 ---
 
