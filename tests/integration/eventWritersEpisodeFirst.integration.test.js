@@ -373,34 +373,81 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       expect(await linksOf(target)).toEqual([{ scene_set_id: w.s, role: 'event' }]);
     });
 
-    test('inject\'s union with other linked episodes (services/eventPlaceSync shareLinkedEpisodes with an exclusive episode): one ascending pass, that episode FOR UPDATE and the others FOR SHARE', async () => {
-      // The route refuses an event another episode already holds (the terms lock) before it locks anything, so the
-      // union with OTHER linked episodes is exercised on the helper itself, with real locks.
-      const target = await mkEpisode(show);
-      const others = [await mkEpisode(show), await mkEpisode(show)];
-      const ev = await mkEvent(show, { set: w.s, stamp: others[0] });
-      await mkBrief(show, others[1], ev);
-      const t = tracing();
-      const holder = await holdTransaction();
-      await require('../../src/services/eventPlaceSync').shareLinkedEpisodes(sequelize, ev, { transaction: holder, exclusive: [target] });
-      const asked = t.records.filter((r) => r.kind === 'lock' && r.table === 'episodes').map((r) => [r.ids[0], r.mode]);
-      expect(asked).toEqual([target, ...others].sort().map((id) => [id, id === target ? 'update' : 'share']));
-      // Really held so: the target refuses a share lock; another takes a share lock (a clip upload's) and refuses an exclusive one.
-      const probe = async (id, how) => {
-        const p = await sequelize.transaction();
-        try {
-          await sequelize.query(`SELECT id FROM episodes WHERE id = :id ${how} NOWAIT`, { replacements: { id }, transaction: p });
-          return true;
-        } catch (err) {
-          if (isLockConflict(err)) return false;
-          throw err;
-        } finally {
-          await p.rollback();
+    // The route refuses an event another episode already holds (the terms
+    // lock) before it locks anything, so inject's union with OTHER linked
+    // episodes cannot be reached through the route. It is exercised here on
+    // the helper the route calls (services/eventPlaceSync
+    // shareLinkedEpisodes with an exclusive episode), with real locks.
+    test.each([['lowest', 0], ['in the middle', 1], ['highest', 2]])(
+      'inject\'s union of episodes, its own episode\'s id the %s: one ascending pass, that episode FOR UPDATE and the others FOR SHARE; no row is shared first and strengthened later, the script save\'s own FOR UPDATE included',
+      async (_where, at) => {
+        const ids = [await mkEpisode(show), await mkEpisode(show), await mkEpisode(show)].sort();
+        const target = ids[at];
+        const others = ids.filter((id) => id !== target);
+        const ev = await mkEvent(show, { set: w.s, stamp: others[0] });
+        await mkBrief(show, others[1], ev);
+        const t = tracing();
+        const holder = await holdTransaction();
+        await require('../../src/services/eventPlaceSync').shareLinkedEpisodes(sequelize, ev, { transaction: holder, exclusive: [target] });
+        // What the script save does next, in the same transaction: its own FOR UPDATE on its episode.
+        const ownLock = await models.Episode.findByPk(target, { transaction: holder, lock: holder.LOCK.UPDATE });
+        const asked = t.records.filter((r) => r.kind === 'lock' && r.table === 'episodes').map((r) => [r.ids[0], r.mode]);
+        // Ascending, each row in the mode it needs from the first.
+        expect(asked.slice(0, 3)).toEqual(ids.map((id) => [id, id === target ? 'update' : 'share']));
+        // Per row, the first mode asked is the strongest ever asked: nothing is strengthened in place.
+        const first = new Map();
+        for (const [id, mode] of asked) {
+          if (!first.has(id)) first.set(id, mode);
+          else expect([first.get(id), mode]).not.toEqual(['share', 'update']);
         }
-      };
-      expect(await probe(target, 'FOR SHARE')).toBe(false);
-      expect(await probe(others[0], 'FOR SHARE')).toBe(true);
-      expect(await probe(others[0], 'FOR UPDATE')).toBe(false);
+        // The script save's own FOR UPDATE (the model's statement, run above after the pass) found its row already
+        // held FOR UPDATE by this transaction: the row's first lock was the exclusive one.
+        expect(first.get(target)).toBe('update');
+        expect(ownLock.id).toBe(target);
+        // Really held so: the target refuses a share lock; another gives a share lock (a clip upload's) and refuses an exclusive one.
+        const probe = async (id, how) => {
+          const tx = await sequelize.transaction();
+          try {
+            await sequelize.query(`SELECT id FROM episodes WHERE id = :id ${how} NOWAIT`, { replacements: { id }, transaction: tx });
+            return true;
+          } catch (err) {
+            if (isLockConflict(err)) return false;
+            throw err;
+          } finally {
+            await tx.rollback();
+          }
+        };
+        expect(await probe(target, 'FOR SHARE')).toBe(false);
+        for (const id of others) {
+          expect(await probe(id, 'FOR SHARE')).toBe(true);
+          expect(await probe(id, 'FOR UPDATE')).toBe(false);
+        }
+      });
+
+    // An additional defect found in an already authorized writer: inject read
+    // the event before its transaction and linked the episode at THAT set,
+    // though the event could be moved before inject locked it.
+    test('[real lock] inject and an event moved between inject\'s first read and its event lock: the episode\'s Event location is the set the event has, not the one inject read; no stale link, no deadlock', async () => {
+      const ep = await mkEpisode(show);
+      const ev = await mkEvent(show, { set: w.s });
+      // Inject has read the event (held at S) and locked its episode; the event row is not locked yet.
+      const g = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'episodes');
+      const pending = send(inject(ev, ep));
+      await g.reached;
+      // Another request moves the event to T and commits.
+      const moved = await putEvent(ev, { scene_set_id: w.t });
+      expect(moved.status).toBe(200);
+      expect(await setOf(ev)).toBe(w.t);
+      g.open();
+      const res = await pending;
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ success: true, attached: true, scene_set_linked: true, scene_set: { status: 'linked', scene_set_id: w.t } });
+      expect(JSON.stringify(res.body)).not.toMatch(NOT_DATABASE_TEXT);
+      expect(lockErrors()).toEqual([]);
+      // The event is where the edit put it, attached to the episode; the episode's one location is there.
+      expect(await eventRow(ev)).toMatchObject({ scene_set_id: w.t, used_in_episode_id: ep });
+      expect(await linksOf(ep)).toEqual([{ scene_set_id: w.t, role: 'event' }]);
+      expect(await rows('SELECT id FROM scene_set_episodes WHERE episode_id = :ep AND scene_set_id = :s', { ep, s: w.s })).toEqual([]);
     });
   });
 
