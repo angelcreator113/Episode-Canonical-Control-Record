@@ -44,6 +44,16 @@ const falCalls = () => axios.post.mock.calls.filter((c) => String(c[0]).startsWi
   + axios.get.mock.calls.filter((c) => String(c[0]).startsWith('https://fal.run/')).length;
 // Refused by the database guard (500 through sendFail), not by some earlier check.
 const byGuard = (res) => expect([res.status, res.body.error]).toEqual([500, expect.stringMatching(/^scene generation guard: /)]);
+// Deleting a scene set (C1, PR 1): the same database guard refuses it, and the
+// route answers with its own fixed sentence at the same status. The trigger's
+// text, which names row ids, is not sent, and nothing else of the database's is.
+const SET_DELETE_REFUSED = 'This scene set, or one of its angles, has a generation that is in flight or whose outcome is not known yet: it cannot be deleted until that is settled. Nothing was changed.';
+const bySetDeleteGuard = (res, ids = []) => {
+  expect([res.status, res.body]).toEqual([500, { success: false, error: SET_DELETE_REFUSED }]);
+  const sent = JSON.stringify(res.body);
+  expect(sent).not.toMatch(/scene generation guard|23514|violates|constraint|sequelize|PL\/pgSQL/i);
+  for (const id of ids) expect(sent).not.toContain(String(id));
+};
 const settle = () => new Promise((r) => setTimeout(r, 300));
 
 (shouldSkip ? describe.skip : describe)('the current application against the PR A schema', () => {
@@ -253,8 +263,8 @@ const settle = () => new Promise((r) => setTimeout(r, 300));
       byGuard(await api('delete', `/${s.set.id}/angles/${s.uAngle.id}`));
       byGuard(await api('delete', `/${s.set.id}/angles/${s.stale.id}`));
       byGuard(await api('delete', `/${s.set.id}/angles`));
-      byGuard(await auth(request(app).delete(`/api/v1/scene-sets/${s.set.id}?confirm_orphan=true`)));
-      byGuard(await auth(request(app).delete(`/api/v1/scene-sets/${s.uSet.id}?confirm_orphan=true`)));
+      bySetDeleteGuard(await auth(request(app).delete(`/api/v1/scene-sets/${s.set.id}?confirm_orphan=true`)), [s.set.id, s.uAngle.id, s.stale.id]);
+      bySetDeleteGuard(await auth(request(app).delete(`/api/v1/scene-sets/${s.uSet.id}?confirm_orphan=true`)), [s.uSet.id]);
       await expectUnchanged(s);
     });
 
