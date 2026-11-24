@@ -767,6 +767,10 @@ router.put('/:id', validateUUIDParam('id'), requireAuth, authorize(['ADMIN']), a
 const sendVersionError = (res, err, label) => {
   const { SceneSetVersionError } = require('../services/sceneSetVersionService');
   if (err instanceof SceneSetVersionError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
+  // A lock conflict that reached here (C1 PR 2): the retryable answer, never the database's words.
+  const { asRetryable, RetryableConflictError } = require('../utils/episodeLocks');
+  const retry = asRetryable(err);
+  if (retry instanceof RetryableConflictError) return res.status(409).json({ success: false, code: retry.code, error: retry.message });
   console.error(`${label} error:`, err);
   return res.status(500).json({ success: false, error: err.message });
 };

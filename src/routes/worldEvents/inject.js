@@ -213,7 +213,16 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, authorize(['AD
     let sceneSet;
     let saved;
     try {
-      sceneSet = await models.sequelize.transaction(async (t) => {
+      // C1 PR 2 (Evoni, 2026-11-24): episode-first for everything this
+      // transaction can reach. The episode whose script is saved and the
+      // event's other linked episodes (the scene-set link below can give
+      // them a location) are locked in ONE ascending statement, FOR UPDATE
+      // (saveEpisodeScript locks its episode FOR UPDATE itself: taken
+      // together here, no lock is strengthened in place), before the
+      // event row. A transaction that lost to a lock is tried again.
+      const place = require('../../services/eventPlaceSync');
+      sceneSet = await place.inEpisodeFirstTransaction(models.sequelize, async (t) => {
+        await place.shareLinkedEpisodes(models.sequelize, eventId, { transaction: t, extra: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(episode_id)) ? [episode_id] : [], mode: 'update' });
         saved = await saveEpisodeScript(models, episode_id, {
           writer: 'W5',
           source: 'generate',
@@ -228,6 +237,8 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, authorize(['AD
         // A1.2c: the event row locked (after the episode's, episode-first), then asked again.
         // The same lock a delete takes: an event deleted meanwhile is refused (EVENT_DELETED), nothing linked.
         await lockLiveEvent(models.sequelize, eventId, { transaction: t });
+        // An episode linked to the event since the locks above is not held: start again.
+        await place.assertLinkedEpisodesHeld(models.sequelize, eventId, { transaction: t });
         const frozenNow = await findFrozenDeletedEpisode(models.sequelize, eventId, { transaction: t });
         if (frozenNow) throw restartRefusal(eventId, frozenNow);
         // Asked again under the episode and event locks: another event
@@ -268,6 +279,15 @@ router.post('/world/:showId/events/:eventId/inject', requireAuth, authorize(['AD
       if (err.code === EVENT_DELETED_CODE) {
         console.warn(`[inject] refused (${err.code}):`, err.message);
         return res.status(409).json(eventDeletedBody(err));
+      }
+      {
+        // A lost lock after the bounded tries: the retryable conflict, nothing written.
+        const { asRetryable, RetryableConflictError } = require('../../utils/episodeLocks');
+        const retry = asRetryable(err);
+        if (retry instanceof RetryableConflictError && retry.code === 'RETRY') {
+          console.warn(`[inject] refused (${retry.code}):`, retry.message);
+          return res.status(409).json({ success: false, error: retry.message, code: retry.code });
+        }
       }
       throw err;
     }
@@ -333,11 +353,46 @@ router.post('/world/:showId/events/:eventId/scene-set-link', requireAuth, author
       // A set that does not exist is answered by the link itself (needs reconnecting).
       if (refusal && refusal.code !== 'INVALID_SCENE_SET_ID') return res.status(refusal.status).json({ success: false, code: refusal.code, error: refusal.error });
     }
-    const sceneSet = await models.sequelize.transaction((t) => linkEventSceneSet(models.sequelize, {
-      event, episodeId: event.used_in_episode_id, transaction: t, chosenSceneSetId,
-    }));
+    // C1 PR 2 (Evoni, 2026-11-24): episode-first. The event's linked
+    // episodes and the episode it is attached to FOR SHARE in one ascending
+    // statement, then the event row, then the proof that no episode was
+    // linked meanwhile; the event's set and the Place lock are read again
+    // under those locks; the link then holds the set's row (the set rule).
+    // A transaction that lost to a lock is tried again, then answered as
+    // the retryable conflict.
+    const place = require('../../services/eventPlaceSync');
+    const refused = (status, body) => Object.assign(new Error(body.error), { linkRefusal: { status, body } });
+    const sceneSet = await place.inEpisodeFirstTransaction(models.sequelize, async (t) => {
+      await place.shareLinkedEpisodes(models.sequelize, event.id, { transaction: t, extra: [event.used_in_episode_id] });
+      await lockLiveEvent(models.sequelize, event.id, { transaction: t });
+      await place.assertLinkedEpisodesHeld(models.sequelize, event.id, { transaction: t });
+      const [[now]] = await models.sequelize.query(
+        'SELECT scene_set_id, used_in_episode_id FROM world_events WHERE id = :id', { replacements: { id: event.id }, transaction: t });
+      if (!now?.used_in_episode_id) {
+        throw refused(409, { success: false, code: 'EVENT_NOT_ATTACHED', error: 'This event is not attached to an episode.' });
+      }
+      const held = { ...event, scene_set_id: now.scene_set_id ?? null, used_in_episode_id: now.used_in_episode_id };
+      if (chosenSceneSetId && String(chosenSceneSetId) !== String(held.scene_set_id || '')) {
+        const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../../utils/placeLock');
+        if (await isPlaceLocked(models.sequelize, event.id, { transaction: t })) {
+          throw refused(409, { success: false, code: PLACE_LOCKED_CODE, error: PLACE_LOCKED_MESSAGE });
+        }
+      }
+      return linkEventSceneSet(models.sequelize, { event: held, episodeId: held.used_in_episode_id, transaction: t, chosenSceneSetId });
+    });
     return res.json({ success: true, episode_id: event.used_in_episode_id, scene_set: sceneSet });
   } catch (error) {
+    if (error?.linkRefusal) return res.status(error.linkRefusal.status).json(error.linkRefusal.body);
+    // Deleted while this waited for it: the route's own not-found.
+    if (error?.code === EVENT_DELETED_CODE) return res.status(404).json({ success: false, error: 'Event not found' });
+    {
+      const { asRetryable, RetryableConflictError } = require('../../utils/episodeLocks');
+      const retry = asRetryable(error);
+      if (retry instanceof RetryableConflictError) {
+        console.warn(`[scene-set-link] refused (${retry.code}):`, retry.message);
+        return res.status(409).json({ success: false, error: retry.message, code: retry.code });
+      }
+    }
     console.error('Scene set link error:', error);
     return res.status(500).json({ success: false, error: 'Failed to link the scene set', message: error.message });
   }

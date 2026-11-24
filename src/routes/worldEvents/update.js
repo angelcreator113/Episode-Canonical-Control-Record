@@ -594,8 +594,20 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       const isAdmin = () => userInGroup(req.user, 'ADMIN');
       const linkTo = replacements.used_in_episode_id;
       if (linkTo && isAdmin()) await assertRelinkUnlessStored(transaction, linkTo);
+      // C1 PR 2 (Evoni, 2026-11-24): a save that carries a scene set can
+      // move the event, and its draft episodes' locations follow. Their
+      // rows are taken before the event's (episode-first), FOR SHARE, in one
+      // ascending statement; after the relink guard above, which holds a
+      // superset FOR UPDATE when it runs (rows it holds are not locked
+      // again, so no lock is strengthened in place).
+      const place = require('../../services/eventPlaceSync');
+      const carriesSet = replacements.scene_set_id !== undefined;
+      if (carriesSet) await place.shareLinkedEpisodes(models.sequelize, eventId, { transaction });
       const stored = await loadScopedEvent(models.sequelize, { showId, eventId, transaction, lock: true });
       if (!stored) throw new EventPutRefusal(404, { success: false, error: 'Event not found' });
+      // An episode linked to the event since those locks is not held: the
+      // transaction stops and is tried again (nothing written).
+      if (carriesSet) await place.assertLinkedEpisodesHeld(models.sequelize, eventId, { transaction });
       // Episode-affecting fields are an ADMIN's (Evoni, 2026-11-22). Judged
       // here, on the locked row, before the stale-save answer (which carries
       // the event row, its episode link included), the terms lock, the Place
@@ -654,10 +666,16 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // L13 (§8(hh)): the scene set is part of the Place, editable after
       // Start Episode while the episode is a draft, locked once it is
       // accepted. The stored value re-sent is not a change.
+      let setGone = false;
       if (replacements.scene_set_id !== undefined && !sameRef(stored.scene_set_id, replacements.scene_set_id)) {
         const { isPlaceLocked, PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = require('../../utils/placeLock');
         if (await isPlaceLocked(models.sequelize, eventId, { transaction })) {
           throw new EventPutRefusal(409, { success: false, error: PLACE_LOCKED_MESSAGE, code: PLACE_LOCKED_CODE });
+        }
+        // The set rule: the new set's row is held, live only, before the
+        // event is pointed at it (not waited for: the event row is held).
+        if (replacements.scene_set_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(replacements.scene_set_id))) {
+          setGone = !(await place.holdLiveSet(models.sequelize, replacements.scene_set_id, { transaction, nowait: true }));
         }
       }
 
@@ -666,6 +684,13 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       // an episode (audit Medium, 2026-10-23).
       const referenceRefusal = await refuseEventReferences(models.sequelize, { showId, eventId, values: replacements, stored, transaction });
       if (referenceRefusal) throw new EventPutRefusal(400, referenceRefusal);
+      // Removed between the request's validation and this lock: the same refusal.
+      if (setGone) {
+        throw new EventPutRefusal(400, {
+          success: false, error: 'Invalid scene_set_id',
+          message: 'Selected scene set does not exist. Please re-select a valid scene set.', code: 'INVALID_SCENE_SET_ID',
+        });
+      }
       return stored;
     };
 
@@ -686,7 +711,8 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
 
     try {
       const updateSql = `UPDATE world_events SET ${setClauses.join(', ')} WHERE id = :eventId AND show_id = :showId AND deleted_at IS NULL`;
-      await models.sequelize.transaction(async (transaction) => {
+      // Tried again when it lost to a lock or found an episode it does not hold (C1 PR 2).
+      await require('../../services/eventPlaceSync').inEpisodeFirstTransaction(models.sequelize, async (transaction) => {
         const stored = await lockAndCheck(transaction);
         if (ccIncoming !== undefined) {
           // Merged with the stored value instead of replacing it (Task
@@ -704,6 +730,15 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
     } catch (updateErr) {
       if (updateErr instanceof EventPutRefusal) return res.status(updateErr.status).json(updateErr.body);
       if (updateErr.staleSave) return refuseStale();
+      // A lost lock after the bounded tries (C1 PR 2): the retryable
+      // conflict, nothing saved, never the database's words.
+      {
+        const retry = asRetryable(updateErr);
+        if (retry instanceof RetryableConflictError) {
+          console.warn(`[WorldEvents] PUT refused (${retry.code}):`, retry.message);
+          return res.status(409).json({ success: false, error: retry.message, code: retry.code });
+        }
+      }
       // The one known conflict: the database lets one event's own link point
       // at an episode, and this save asked for a second. The transaction has
       // rolled back, so nothing in the request was saved. Answered 409, not
@@ -752,7 +787,7 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
         return res.status(500).json({ success: false, error: 'The event could not be saved: the database is missing the columns for these fields.', fields: dropped });
       }
       try {
-        await models.sequelize.transaction(async (transaction) => {
+        await require('../../services/eventPlaceSync').inEpisodeFirstTransaction(models.sequelize, async (transaction) => {
           const stored = await lockAndCheck(transaction);
           await noteNonPrimary(stored, transaction);
           if (ccIncoming !== undefined || hasStash) {
@@ -777,6 +812,13 @@ router.put('/world/:showId/events/:eventId', express.json({ limit: '2mb' }), req
       } catch (retryErr) {
         if (retryErr instanceof EventPutRefusal) return res.status(retryErr.status).json(retryErr.body);
         if (retryErr.staleSave) return refuseStale();
+        {
+          const retry = asRetryable(retryErr);
+          if (retry instanceof RetryableConflictError) {
+            console.warn(`[WorldEvents] PUT refused (${retry.code}):`, retry.message);
+            return res.status(409).json({ success: false, error: retry.message, code: retry.code });
+          }
+        }
         // A failed retry is a failed save (audit Medium, 2026-10-23).
         console.error('[WorldEvents] Core-only retry also failed:', retryErr.message);
         return res.status(500).json({ success: false, error: 'The event could not be saved. Please try again.' });

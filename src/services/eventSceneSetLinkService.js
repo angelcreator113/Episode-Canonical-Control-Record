@@ -87,7 +87,11 @@ async function linkEventSceneSet(sequelize, { event, episodeId, transaction, cho
         }
         sceneSetId = options[0].id;
       }
-      const set = await liveSceneSet(sequelize, sceneSetId, sp);
+      // The set rule (C1 PR 2): the set's row is held, live only, before
+      // anything references it; not waited for, since the callers hold the
+      // event row. A set removed meanwhile is the answer below, as before.
+      const held = await require('./eventPlaceSync').holdLiveSet(sequelize, sceneSetId, { transaction: sp, nowait: true });
+      const set = held ? await liveSceneSet(sequelize, sceneSetId, sp) : null;
       if (!set) {
         return { status: STATUS.NEEDS_RECONNECTING, scene_set_id: sceneSetId, reason: 'The event\'s scene set no longer exists.' };
       }
@@ -103,6 +107,12 @@ async function linkEventSceneSet(sequelize, { event, episodeId, transaction, cho
       return { status: STATUS.LINKED, scene_set_id: sceneSetId, scene_set_name: set.name };
     });
   } catch (err) {
+    // A lost lock (C1 PR 2) is not "could not be linked": it leaves this
+    // function, so the caller's whole transaction is rolled back and the
+    // request answers the retryable conflict. Its text is the database's
+    // and is never put in a reason.
+    const { isLockConflict, RetryableConflictError } = require('../utils/episodeLocks');
+    if (isLockConflict(err) || err instanceof RetryableConflictError) throw err;
     console.error('[eventSceneSetLink] scene set link failed:', err.message);
     return { status: STATUS.NEEDS_RECONNECTING, scene_set_id: wanted, reason: `The scene set could not be linked: ${err.message}` };
   }
