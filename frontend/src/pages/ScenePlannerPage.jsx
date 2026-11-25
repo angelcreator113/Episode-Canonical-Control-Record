@@ -33,6 +33,98 @@ function LocationsStrip({ locations, showId, episodeId }) {
   );
 }
 
+// ─── WHAT THE LAST RE-PLAN CHANGED ────────────────────────────────────────────
+//
+// Gap 2 (Evoni, 2026-11-25): POST generate-plan answers with `plan_changes`,
+// which names the beats whose generated fields changed and says whether each
+// one carries saved work. It is INFORMATION, not a fault: the plan saved, the
+// scenes and the operator's own writing were kept, and nothing here asks for a
+// decision. So it follows the readiness line's register (L5, Q21: "flagged,
+// never blocking") and never role="alert" or an error colour.
+//
+// It is stored nowhere — the response is the only copy — so this notice lives
+// in the page's own state and is gone on a reload or a navigation. It says
+// "in this plan" rather than pretending to be a record.
+const CHANGE_LABELS = {
+  scene_set_id: 'Location changed',
+  operator_fields_kept: 'Your wording kept',
+};
+
+/** The entry for one beat, with the names resolved where they genuinely are. */
+function changeFor(report, beat) {
+  if (!report?.changes?.length || !beat) return null;
+  const n = Number(beat.beat_number);
+  const found = report.changes.find((c) => Number(c.beat_number) === n);
+  if (!found) return null;
+  const changed = Array.isArray(found.changed) ? found.changed : [];
+  // "Was showing" is the plan that was on screen when Generate was pressed —
+  // what she was looking at, not a stored history of the row. Null when the
+  // beat had no set, was not on screen, or its set cannot be named now.
+  const was = report.wasShowing?.get(n) || null;
+  const now = beatSetName(beat, null);
+  return {
+    beat_number: n,
+    changed,
+    has_saved_work: Boolean(found.has_saved_work),
+    was,
+    now,
+    moved: changed.includes('scene_set_id'),
+  };
+}
+
+/** The tag beside "Chosen by you" and "Event look", in both views. */
+function ChangedBadges({ change }) {
+  if (!change?.changed.length) return null;
+  return change.changed.filter((f) => CHANGE_LABELS[f]).map((f) => (
+    <span
+      key={f}
+      className="scene-planner-card-tag changed"
+      data-testid={`beat-changed-${change.beat_number}`}
+      title={f === 'scene_set_id' && change.was ? `Was showing: ${change.was}` : undefined}
+    >
+      {CHANGE_LABELS[f]}
+    </span>
+  ));
+}
+
+function PlanChangesNotice({ report, plan, episodeId }) {
+  if (!report?.changes?.length) return null;
+  const byBeat = new Map(plan.map((b) => [Number(b.beat_number), b]));
+  const entries = report.changes
+    .map((c) => changeFor(report, byBeat.get(Number(c.beat_number)) || { beat_number: c.beat_number }))
+    .filter(Boolean)
+    .sort((a, b) => a.beat_number - b.beat_number);
+  if (!entries.length) return null;
+  const moved = entries.filter((e) => e.moved);
+  const kept = entries.filter((e) => e.changed.includes('operator_fields_kept'));
+  const withWork = entries.filter((e) => e.has_saved_work);
+  const list = (es) => es.map((e) => e.beat_number).join(', ');
+  return (
+    <div className="scene-planner-plan-changes" role="status" data-testid="planner-plan-changes">
+      <p className="scene-planner-plan-changes-head">
+        {moved.length > 0 && `Beat${moved.length === 1 ? '' : 's'} ${list(moved)} changed location in this plan. `}
+        {kept.length > 0 && `Beat${kept.length === 1 ? '' : 's'} ${list(kept)} kept your wording. `}
+        Your scenes and your edits were kept.
+      </p>
+      {withWork.length > 0 && (
+        <p className="scene-planner-plan-changes-work" data-testid="planner-plan-changes-work">
+          Beat{withWork.length === 1 ? '' : 's'} {list(withWork)} {withWork.length === 1 ? 'has' : 'have'} saved
+          work — worth checking it still fits.
+        </p>
+      )}
+      <ul className="scene-planner-plan-changes-list">
+        {moved.map((e) => (
+          <li key={e.beat_number} data-testid={`planner-plan-change-${e.beat_number}`}>
+            Beat {e.beat_number}
+            {e.was && e.now ? ` — was showing ${e.was}, now ${e.now}` : ''}
+          </li>
+        ))}
+      </ul>
+      <Link to={scenesPath(episodeId)}>Check them on the Beat Plan →</Link>
+    </div>
+  );
+}
+
 // ─── BEAT CARD ────────────────────────────────────────────────────────────────
 
 // S9 (d) (Evoni, 2026-10-02; §8(hh)): "the Beat Plan page keeps
@@ -57,7 +149,7 @@ function Beat11Piece({ beat, piece }) {
   );
 }
 
-function BeatCard({ beat, index, episodeId, beat11 }) {
+function BeatCard({ beat, index, episodeId, beat11, change }) {
   return (
     <div className={`scene-planner-card ${beat.locked ? 'locked' : ''}`} data-testid={`beat-card-${beat.beat_number}`}>
       <div className="scene-planner-card-image">
@@ -83,6 +175,7 @@ function BeatCard({ beat, index, episodeId, beat11 }) {
           {beat.angle_label && <span className="scene-planner-card-tag angle">{beat.angle_label}</span>}
           {beat.shot_type && <span className="scene-planner-card-tag shot">{SHOT_LABELS[beat.shot_type]}</span>}
           {isDressed(beat) && <span className="scene-planner-card-tag dressed" data-testid={`beat-dressed-tag-${beat.beat_number}`}>Event look</span>}
+          <ChangedBadges change={change} />
         </div>
 
         {beat.emotional_intent && (
@@ -103,7 +196,7 @@ function BeatCard({ beat, index, episodeId, beat11 }) {
 
 // ─── BEAT ROW ─────────────────────────────────────────────────────────────────
 
-function BeatRow({ beat, index, episodeId, beat11 }) {
+function BeatRow({ beat, index, episodeId, beat11, change }) {
   return (
     <div className={`scene-planner-row ${beat.locked ? 'locked' : ''}`}>
       <div className="scene-planner-row-number">{index + 1}</div>
@@ -125,6 +218,7 @@ function BeatRow({ beat, index, episodeId, beat11 }) {
           {beat.chosen_by_user
             ? <ChosenBadge beat={beat} className="scene-planner-card-tag chosen" />
             : beat.ai_suggested && <span className="scene-planner-card-tag angle">AI</span>}
+          <ChangedBadges change={change} />
         </div>
       </div>
 
@@ -239,6 +333,13 @@ export default function ScenePlannerPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  // What the last re-plan changed (Gap 2). Its own state, so a background
+  // refresh (usePlanRefresh) re-reads the plan without erasing the notice.
+  const [planChanges, setPlanChanges] = useState(null);
+  // The newest generation wins, as the newest read does below: an older POST
+  // answer never shows its notice against a plan it did not produce.
+  const genSeq = useRef(0);
+
   // The newest read of the brief and plan wins: an older answer or failure
   // never replaces a newer one.
   const loadSeq = useRef(0);
@@ -304,11 +405,27 @@ export default function ScenePlannerPage() {
   };
 
   const handleGenerate = async () => {
+    const seq = ++genSeq.current;
+    // Captured before the call: the plan that is on screen right now is the
+    // only honest source for "was showing". beatSetName gives null rather
+    // than a placeholder when a beat has no set or its set cannot be named,
+    // and an unresolved name is left out instead of invented.
+    const wasShowing = new Map(plan.map((b) => [Number(b.beat_number), beatSetName(b, null)]));
+    // A new attempt drops the previous notice at once, so nothing stale is on
+    // screen while this one runs, or afterwards if it fails.
+    setPlanChanges(null);
     setGenerating(true);
     try {
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/generate-plan`);
       showToast(`Scene plan generated — ${res.data.data.length} beats mapped`);
       await fetchAll();
+      // After the re-read, so the notice names the plan now on screen. A 409
+      // (PLAN_OUTPUT_INVALID, PLAN_BEAT_UNAVAILABLE) never reaches here: it
+      // throws, nothing was written, and the error toast below is the answer.
+      if (seq === genSeq.current) {
+        const changes = Array.isArray(res.data?.plan_changes) ? res.data.plan_changes : [];
+        setPlanChanges(changes.length ? { changes, wasShowing } : null);
+      }
     } catch (err) {
       showToast(adminOnlyMessage(err) || err.response?.data?.error || 'Generation failed', 'error');
     } finally {
@@ -341,6 +458,7 @@ export default function ScenePlannerPage() {
               {readiness.ready < readiness.total && <Link to={scenesPath(episodeId)}>Fix them on the Beat Plan →</Link>}
             </p>
           )}
+          <PlanChangesNotice report={planChanges} plan={plan} episodeId={episodeId} />
         </div>
 
         <div className="scene-planner-actions">
@@ -393,13 +511,15 @@ export default function ScenePlannerPage() {
         view === 'storyboard' ? (
           <div className="scene-planner-storyboard">
             {plan.map((beat, i) => (
-              <BeatCard key={beat.id || i} beat={beat} index={i} episodeId={episodeId} beat11={beat11} />
+              <BeatCard key={beat.id || i} beat={beat} index={i} episodeId={episodeId} beat11={beat11}
+                change={changeFor(planChanges, beat)} />
             ))}
           </div>
         ) : (
           <div className="scene-planner-list">
             {plan.map((beat, i) => (
-              <BeatRow key={beat.id || i} beat={beat} index={i} episodeId={episodeId} beat11={beat11} />
+              <BeatRow key={beat.id || i} beat={beat} index={i} episodeId={episodeId} beat11={beat11}
+                change={changeFor(planChanges, beat)} />
             ))}
           </div>
         )
