@@ -20,6 +20,7 @@ vi.mock('../services/api', () => ({
 
 import api from '../services/api';
 import ScenePlannerPage from './ScenePlannerPage';
+import { PLAN_REFRESH_MS } from '../components/BeatPlan/usePlanRefresh';
 
 const HOME = { id: 'set-home', name: 'Lala apartment', base_still_url: 'https://x/home.jpg' };
 const VENUE = { id: 'set-venue', name: 'Glasshouse', base_still_url: 'https://x/venue.jpg' };
@@ -58,6 +59,9 @@ const wirePost = (plan_changes, after = PLAN_AFTER) => vi.mocked(api.post).mockI
   return { data: { success: true, data: after, plan_changes } };
 });
 
+/** How many times the plan itself has been read. */
+const planReads = () => vi.mocked(api.get).mock.calls.filter((c) => c[0] === '/api/v1/episode-brief/ep-1/plan').length;
+
 const generate = async () => {
   const button = await screen.findByRole('button', { name: /Generate Scene Plan|Re-plan/ });
   await act(async () => { fireEvent.click(button); });
@@ -79,12 +83,11 @@ describe('ScenePlannerPage: what the last re-plan changed (Gap 2)', () => {
 
     const notice = await screen.findByTestId('planner-plan-changes');
     expect(notice.textContent).toContain('Beat 4 changed location in this plan.');
-    expect(notice.textContent).toContain('Your scenes and your edits were kept.');
     // "Was showing" is what was on screen, never claimed as stored history.
     expect(within(notice).getByTestId('planner-plan-change-4').textContent)
       .toBe('Beat 4 — was showing Lala apartment, now Glasshouse');
     expect(within(notice).getByTestId('planner-plan-changes-work').textContent)
-      .toContain('Beat 4 has saved work');
+      .toContain('Beat 4 has saved work, which was kept');
     expect(within(notice).getByRole('link', { name: 'Check them on the Beat Plan →' }).getAttribute('href'))
       .toBe('/episodes/ep-1?tab=beatplan');
   });
@@ -98,6 +101,12 @@ describe('ScenePlannerPage: what the last re-plan changed (Gap 2)', () => {
     const notice = await screen.findByTestId('planner-plan-changes');
     expect(notice.textContent).toContain('Beat 2 changed location in this plan.');
     expect(screen.queryByTestId('planner-plan-changes-work')).toBeNull();
+    // has_saved_work false establishes no live tied scene with an image and no
+    // director note, feed moment or script lines. The notice must not claim a
+    // saved scene or an edit was kept, because none is established.
+    expect(notice.textContent).not.toMatch(/scenes? .*(kept|preserved)/i);
+    expect(notice.textContent).not.toMatch(/edits? .*(kept|preserved)/i);
+    expect(notice.textContent).not.toContain('was kept');
   });
 
   test('operator wording that was kept is reported as kept, not as a location change', async () => {
@@ -190,19 +199,38 @@ describe('ScenePlannerPage: what the last re-plan changed (Gap 2)', () => {
     expect(screen.queryByTestId('beat-changed-4')).toBeNull();
   });
 
-  test('a background plan refresh does not erase the notice', async () => {
-    wirePost([{ beat_number: 4, changed: ['scene_set_id'], has_saved_work: true }]);
+  test('a real background refresh updates the plan and does not erase the notice', async () => {
+    // usePlanRefresh re-reads the plan every PLAN_REFRESH_MS while any beat
+    // says what it waits on is still generating. So the generated plan has a
+    // generating beat, which makes the refresh genuinely fire.
+    // Fake timers for this case only, so the hook's interval can be advanced
+    // deliberately; shouldAdvanceTime keeps the awaits above working.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const generatingAfter = [
+      beat(2, VENUE), beat(4, VENUE, { location: { generating: true } }), beat(5, HOME), beat(6, HOME),
+    ];
+    wirePost([{ beat_number: 4, changed: ['scene_set_id'], has_saved_work: true }], generatingAfter);
     renderPage();
     await screen.findByTestId('beat-card-4');
     await generate();
     await screen.findByTestId('planner-plan-changes');
 
-    const callsBefore = vi.mocked(api.get).mock.calls.length;
-    // The same read usePlanRefresh performs; the notice is its own state.
-    await screen.findByTestId('beat-card-4');
-    await waitFor(() => expect(vi.mocked(api.get).mock.calls.length).toBeGreaterThanOrEqual(callsBefore));
+    const readsBefore = planReads();
+    // The refresh's next read returns a CHANGED plan: beat 6 moves to the
+    // Glasshouse and beat 4 has finished generating. If the notice were
+    // derived from the plan rather than its own state, this would erase it.
+    plan = [beat(2, VENUE), beat(4, VENUE), beat(5, HOME), beat(6, VENUE)];
+    await act(async () => { vi.advanceTimersByTime(PLAN_REFRESH_MS); });
+
+    // The refresh really happened: one more plan read, and the plan on screen
+    // changed to prove the new data was applied.
+    await waitFor(() => expect(planReads()).toBe(readsBefore + 1));
+    await waitFor(() => expect(within(screen.getByTestId('beat-card-6')).getByText('Glasshouse')).toBeTruthy());
+
+    // and the notice and its tag are still there
     expect(screen.getByTestId('planner-plan-changes')).toBeTruthy();
-    expect(screen.getByTestId('beat-changed-4')).toBeTruthy();
+    expect(within(screen.getByTestId('beat-card-4')).getByTestId('beat-changed-4')).toBeTruthy();
+    vi.useRealTimers();
   });
 
   test('the notice does not survive a remount, because nothing stores it', async () => {

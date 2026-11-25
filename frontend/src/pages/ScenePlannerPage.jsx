@@ -103,13 +103,17 @@ function PlanChangesNotice({ report, plan, episodeId }) {
     <div className="scene-planner-plan-changes" role="status" data-testid="planner-plan-changes">
       <p className="scene-planner-plan-changes-head">
         {moved.length > 0 && `Beat${moved.length === 1 ? '' : 's'} ${list(moved)} changed location in this plan. `}
-        {kept.length > 0 && `Beat${kept.length === 1 ? '' : 's'} ${list(kept)} kept your wording. `}
-        Your scenes and your edits were kept.
+        {kept.length > 0 && `Beat${kept.length === 1 ? '' : 's'} ${list(kept)} kept your wording.`}
       </p>
+      {/* The preservation claim is made ONLY where has_saved_work establishes
+          there is work to preserve. has_saved_work false means the server
+          found no live tied scene with an image and no director note, feed
+          moment or script lines — so there may be no saved scene at all, and
+          saying one was kept would assert something the contract does not. */}
       {withWork.length > 0 && (
         <p className="scene-planner-plan-changes-work" data-testid="planner-plan-changes-work">
           Beat{withWork.length === 1 ? '' : 's'} {list(withWork)} {withWork.length === 1 ? 'has' : 'have'} saved
-          work — worth checking it still fits.
+          work, which was kept — worth checking it still fits.
         </p>
       )}
       <ul className="scene-planner-plan-changes-list">
