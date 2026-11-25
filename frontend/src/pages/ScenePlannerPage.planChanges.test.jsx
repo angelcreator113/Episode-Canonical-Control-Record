@@ -59,6 +59,13 @@ const wirePost = (plan_changes, after = PLAN_AFTER) => vi.mocked(api.post).mockI
   return { data: { success: true, data: after, plan_changes } };
 });
 
+/** A promise whose settling this test controls: no sleeps, no timing races. */
+const deferred = () => {
+  let settle;
+  const promise = new Promise((res) => { settle = res; });
+  return { promise, resolve: (v) => settle(v) };
+};
+
 /** How many times the plan itself has been read. */
 const planReads = () => vi.mocked(api.get).mock.calls.filter((c) => c[0] === '/api/v1/episode-brief/ep-1/plan').length;
 
@@ -384,6 +391,74 @@ describe('ScenePlannerPage: what the last re-plan changed (Gap 2)', () => {
     // is not folded into it.
     expect(screen.getByTestId('planner-plan-change-4').textContent)
       .toBe('Beat 4 — was showing Lala apartment, now Glasshouse');
+    vi.useRealTimers();
+  });
+
+  test('an older background refresh that lands last cannot clear the saved-but-not-loaded state', async () => {
+    // The page polls only while a beat is still generating, so the plan on
+    // screen has one. The older refresh's plan read is held open; the newer
+    // generation's own read fails; then the older one lands.
+    const GEN = [beat(2, HOME), beat(4, HOME, { location: { generating: true } }), beat(5, HOME), beat(6, HOME)];
+    // What the stale response carries: beat 6 at the Glasshouse. If it were
+    // applied, the screen would show it — so its absence is the proof.
+    const STALE = [beat(2, HOME), beat(4, HOME, { location: { generating: true } }), beat(5, HOME), beat(6, VENUE)];
+    const held = deferred();
+    let planCall = 0;
+    vi.mocked(api.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/episode-brief/ep-1') return { data: { data: { status: 'draft' } } };
+      if (url === '/api/v1/episodes/ep-1/locations') return { data: { success: true, data: { show_id: 'show-1', locations: [] } } };
+      if (url === '/api/v1/episode-brief/ep-1/plan') {
+        planCall += 1;
+        if (planCall === 1) return { data: { data: GEN, readiness: null } };
+        if (planCall === 2) return held.promise;          // the OLDER refresh, left pending
+        throw new Error('plan read failed');              // the generation's OWN read
+      }
+      return { data: {} };
+    });
+    vi.mocked(api.post).mockResolvedValue({
+      data: { success: true, data: PLAN_AFTER, plan_changes: [{ beat_number: 4, changed: ['scene_set_id'], has_saved_work: true }] },
+    });
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderPage();
+    await screen.findByTestId('beat-card-4');
+    expect(planCall).toBe(1);
+
+    // 1. the older background refresh starts, and stays in flight
+    await act(async () => { vi.advanceTimersByTime(PLAN_REFRESH_MS); });
+    await waitFor(() => expect(planCall).toBe(2));
+
+    // 2-4. a newer generation: the POST saves, its own plan read fails
+    await generate();
+    await waitFor(() => expect(planCall).toBe(3));
+    const banner = await screen.findByTestId('beat-plan-load-failed');
+    expect(banner.textContent).toContain('The new plan was saved');
+
+    // 5. the older refresh resolves LAST, carrying pre-generation data
+    await act(async () => { held.resolve({ data: { data: STALE, readiness: null } }); });
+    await act(async () => {});
+
+    // 6a. it did not clear savedNotLoaded: the banner is still accurate
+    expect(screen.getByTestId('beat-plan-load-failed').textContent).toContain('The new plan was saved');
+    expect(screen.getByTestId('beat-plan-load-failed').textContent)
+      .toContain('updated details couldn\'t be loaded');
+    expect(screen.getByTestId('beat-plan-load-failed').textContent).not.toContain('Nothing was changed');
+    expect(screen.getByTestId('planner-plan-changes-stale')).toBeTruthy();
+
+    // 6b. it did not overwrite the newer displayed state: beat 6 is unmoved
+    expect(within(screen.getByTestId('beat-card-6')).getByText('Lala apartment')).toBeTruthy();
+    expect(within(screen.getByTestId('beat-card-6')).queryByText('Glasshouse')).toBeNull();
+
+    // 6c. no misleading previous-versus-new comparison appeared
+    const line = screen.getByTestId('planner-plan-change-4');
+    expect(line.textContent).toBe('Beat 4');
+    expect(line.textContent).not.toContain('was showing');
+    expect(within(screen.getByTestId('beat-card-4')).getByTestId('beat-changed-4').getAttribute('title')).toBeNull();
+
+    // 6d. the notice never says the generation failed — it did not
+    const notice = screen.getByTestId('planner-plan-changes');
+    expect(notice.textContent).toContain('Beat 4 changed location in this plan.');
+    expect(notice.textContent).not.toMatch(/generation failed|could not be saved|nothing was saved/i);
     vi.useRealTimers();
   });
 
