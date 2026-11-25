@@ -23,6 +23,48 @@ function getClient() {
 // Content unchanged: this file's own list already matched the show-brain
 // seeder's names and order exactly, so importing it is a pure refactor.
 const { CANONICAL_BEATS: BEAT_STRUCTURE } = require('../constants/canonicalBeats');
+// The canonical beat numbers, already derived and exported beside the coverage
+// reader: the validation below reuses that list rather than re-deriving it.
+const { CANONICAL_NUMBERS } = require('../utils/beatPlanCoverage');
+const CANONICAL_BEATS_COUNT = BEAT_STRUCTURE.length;
+
+/**
+ * Gap 2 (Evoni, 2026-11-25): the model's whole reply is checked BEFORE any
+ * plan row is touched. A reply that is not the complete canonical beat set is
+ * invalid output, never authorisation to remove beats, so nothing is written
+ * and every existing row — with its id, its scenes and its operator's work —
+ * stays exactly as it was. 409, never a 500 carrying service text.
+ */
+class PlanOutputInvalidError extends Error {
+  constructor(problems) {
+    const k = Array.isArray(problems) ? problems.length : 0;
+    super(`The planner's reply was not a complete ${CANONICAL_NUMBERS.length}-beat plan, so the plan was not changed. `
+      + `Nothing was saved: try again.${k ? ` (${problems.join('; ')})` : ''}`);
+    this.name = 'PlanOutputInvalidError';
+    this.code = 'PLAN_OUTPUT_INVALID';
+    this.problems = problems || [];
+  }
+}
+
+/**
+ * Gap 2: a soft-deleted plan row sits INSIDE idx_scene_plans_episode_beat
+ * (that index has no deleted_at predicate) but outside every write guard, so
+ * it occupies its canonical beat number without being usable. The re-plan
+ * refuses and rolls back rather than skipping the beat in silence. Nothing in
+ * src/ soft-deletes a plan row today; this is the guard, not a repair, and it
+ * never deletes, renumbers or reassigns the row.
+ */
+class PlanBeatUnavailableError extends Error {
+  constructor(beats) {
+    super(`Beat${beats.length === 1 ? '' : 's'} ${beats.join(', ')} in this episode's saved plan `
+      + `${beats.length === 1 ? 'is' : 'are'} marked removed but still hold${beats.length === 1 ? 's' : ''} `
+      + `${beats.length === 1 ? 'its' : 'their'} place, so the plan was not changed. `
+      + 'Nothing was saved. This episode\'s existing plan data needs review before it can be re-planned.');
+    this.name = 'PlanBeatUnavailableError';
+    this.code = 'PLAN_BEAT_UNAVAILABLE';
+    this.beats = beats;
+  }
+}
 
 /**
  * Load all available scene sets for a show, with their angles and images:
@@ -243,8 +285,38 @@ Return ONLY the JSON array, no other text.`;
     throw new Error(`AI returned invalid JSON: ${err.message}`);
   }
 
+  // ── Gap 2 Phase A: validate the WHOLE reply before anything is written ──
   if (!Array.isArray(beats) || beats.length === 0) {
-    throw new Error('AI returned empty or invalid beat plan');
+    throw new PlanOutputInvalidError(['the reply held no beats at all']);
+  }
+  {
+    const problems = [];
+    const seen = new Map();
+    beats.forEach((beat, i) => {
+      const raw = beat?.beat_number;
+      const n = Number(raw);
+      if (raw === undefined || raw === null || raw === '' || !Number.isInteger(n)) {
+        problems.push(`entry ${i + 1}: beat_number "${raw}" is not a whole number`);
+        return;
+      }
+      if (!CANONICAL_NUMBERS.includes(n)) {
+        problems.push(`beat ${n} is not one of this show's beats`);
+        return;
+      }
+      seen.set(n, (seen.get(n) || 0) + 1);
+    });
+    for (const n of CANONICAL_NUMBERS) {
+      if (seen.get(n) > 1) problems.push(`beat ${n} appears ${seen.get(n)} times`);
+    }
+    const missing = CANONICAL_NUMBERS.filter((n) => !seen.has(n));
+    if (missing.length) problems.push(`beat${missing.length === 1 ? '' : 's'} ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} missing`);
+    if (beats.length !== CANONICAL_BEATS_COUNT) problems.push(`${beats.length} beats came back, ${CANONICAL_BEATS_COUNT} expected`);
+    if (problems.length) throw new PlanOutputInvalidError(problems);
+
+    // Valid but out of order: sort by beat_number so the enrichment below,
+    // which reads BEAT_STRUCTURE by ARRAY INDEX while beat_number comes from
+    // the reply, lines each beat up with its own canonical beat.
+    beats = [...beats].sort((a, b) => Number(a.beat_number) - Number(b.beat_number));
   }
 
   // Validate and enrich each beat with scene_context
@@ -329,6 +401,10 @@ Return ONLY the JSON array, no other text.`;
     const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
     const { lockEpisodes } = require('../utils/episodeLocks');
     let dropped = [];
+    // Gap 2: what this re-plan changed on beats that already existed, reported
+    // on the response and stored nowhere. It is NOT evidence that a saved
+    // scene is still creatively right for its beat.
+    let changes = [];
     try {
       await inEpisodeFirstTransaction(planDb, async (transaction) => {
         dropped = [];
@@ -342,8 +418,118 @@ Return ONLY the JSON array, no other text.`;
           ? { ...r, scene_set_id: null, scene_context: null }
           : r));
         dropped = [...gone];
-        await ScenePlan.destroy({ where: { episode_id: episodeId, locked: false, chosen_by_user: false }, force: true, transaction });
-        await ScenePlan.bulkCreate(live, { transaction });
+
+        // ── Gap 2 Phase B: update the surviving rows IN PLACE ──────────────
+        //
+        // Nothing is deleted. Every row that is still there keeps its id, so
+        // the scene tied to it through scenes.scene_plan_id keeps its own
+        // identity and every child record with it; a beat's number is never
+        // written, so idx_scene_plans_episode_beat is never contended and no
+        // temporary numbering is needed.
+        //
+        // The read is deliberately NOT filtered by deleted_at: that unique
+        // index has no deleted_at predicate, so a soft-deleted row occupies
+        // its beat number, and a read that could not see it would let the
+        // guarded upsert below skip that beat in silence. Ascending, in one
+        // statement, so two overlapping re-plans take the rows in the same
+        // order — MEASURED: the opposite order deadlocks (40P01).
+        const [existing] = await planDb.query(
+          `SELECT id, beat_number, locked, chosen_by_user, scene_set_id, ai_suggested,
+                  shot_type, emotional_intent, transition_in,
+                  (deleted_at IS NOT NULL) AS tombstoned,
+                  (director_note IS NOT NULL) AS has_director_note,
+                  (feed_moment IS NOT NULL) AS has_feed_moment,
+                  (script_lines IS NOT NULL) AS has_script_lines
+             FROM scene_plans WHERE episode_id = :episodeId
+             ORDER BY beat_number ASC FOR UPDATE`,
+          { replacements: { episodeId }, transaction });
+
+        // A tombstoned row on a beat this plan needs is a controlled conflict:
+        // refuse and roll back before a single write. Never deleted, never
+        // renumbered, never reassigned.
+        const wanted = new Set(live.map((r) => Number(r.beat_number)));
+        const blocked = existing
+          .filter((r) => r.tombstoned && wanted.has(Number(r.beat_number)))
+          .map((r) => Number(r.beat_number));
+        if (blocked.length) throw new PlanBeatUnavailableError([...new Set(blocked)].sort((a, b) => a - b));
+
+        const byBeat = new Map(existing.filter((r) => !r.tombstoned).map((r) => [Number(r.beat_number), r]));
+
+        // What the operator has saved against each beat, for plan_changes.
+        const planIds = existing.filter((r) => !r.tombstoned).map((r) => r.id);
+        const savedByPlan = new Set();
+        if (planIds.length) {
+          const [withWork] = await planDb.query(
+            `SELECT scene_plan_id FROM scenes
+               WHERE scene_plan_id IN (:planIds) AND deleted_at IS NULL AND background_url IS NOT NULL`,
+            { replacements: { planIds }, transaction });
+          for (const r of withWork) savedByPlan.add(String(r.scene_plan_id));
+        }
+
+        changes = [];
+        for (const row of live) {                      // live is already ascending
+          const beatNumber = Number(row.beat_number);
+          const before = byBeat.get(beatNumber);
+          const [ret] = await planDb.query(
+            `INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, scene_set_id, angle_label,
+                shot_type, emotional_intent, transition_in, scene_context,
+                locked, chosen_by_user, sort_order, ai_suggested, ai_confidence, created_at, updated_at)
+             VALUES (gen_random_uuid(), :episode_id, :beat_number, :beat_name, :scene_set_id, :angle_label,
+                CAST(:shot_type AS enum_scene_plans_shot_type), :emotional_intent,
+                CAST(:transition_in AS enum_scene_plans_transition_in), :scene_context,
+                false, false, :sort_order, true, :ai_confidence, NOW(), NOW())
+             ON CONFLICT (episode_id, beat_number) DO UPDATE SET
+                beat_name = EXCLUDED.beat_name,
+                scene_set_id = EXCLUDED.scene_set_id,
+                angle_label = EXCLUDED.angle_label,
+                scene_context = EXCLUDED.scene_context,
+                shot_type = CASE WHEN scene_plans.ai_suggested THEN EXCLUDED.shot_type ELSE scene_plans.shot_type END,
+                emotional_intent = CASE WHEN scene_plans.ai_suggested THEN EXCLUDED.emotional_intent ELSE scene_plans.emotional_intent END,
+                transition_in = CASE WHEN scene_plans.ai_suggested THEN EXCLUDED.transition_in ELSE scene_plans.transition_in END,
+                sort_order = EXCLUDED.sort_order,
+                ai_confidence = EXCLUDED.ai_confidence,
+                updated_at = NOW()
+               WHERE scene_plans.locked = false AND scene_plans.chosen_by_user = false
+                 AND scene_plans.deleted_at IS NULL
+             RETURNING id`,
+            { replacements: { ...row, episode_id: episodeId, sort_order: beatNumber }, transaction });
+
+          // Zero rows back means the row is locked, chosen_by_user or
+          // soft-deleted — MEASURED as the complete set of causes. The first
+          // two are the existing B2/L11 guarantee and are expected here
+          // (`live` already excludes them, so this is belt and braces); a
+          // tombstone was refused above, so reaching one here is a state the
+          // read did not see and the transaction stops rather than guess.
+          if (!ret.length) {
+            const why = byBeat.get(beatNumber);
+            if (!why || (!why.locked && !why.chosen_by_user)) {
+              throw new PlanBeatUnavailableError([beatNumber]);
+            }
+            continue;
+          }
+
+          if (before) {
+            const fields = [];
+            if (String(before.scene_set_id || '') !== String(row.scene_set_id || '')) fields.push('scene_set_id');
+            // Only worth saying when the planner actually wanted something
+            // different and the operator's value was kept instead. A beat
+            // whose kept value already matches is not a mismatch.
+            if (before.ai_suggested === false
+              && (String(before.shot_type || '') !== String(row.shot_type || '')
+                || String(before.emotional_intent || '') !== String(row.emotional_intent || '')
+                || String(before.transition_in || '') !== String(row.transition_in || ''))) {
+              fields.push('operator_fields_kept');
+            }
+            if (fields.length) {
+              changes.push({
+                beat_number: beatNumber,
+                changed: fields,
+                has_saved_work: savedByPlan.has(String(before.id))
+                  || Boolean(before.has_director_note || before.has_feed_moment || before.has_script_lines),
+              });
+            }
+          }
+        }
       });
     } catch (saveErr) {
       console.error('[ScenePlanner] Saving the plan failed; the beats are as they were:', saveErr?.name || 'Error', saveErr.message);
@@ -358,9 +544,9 @@ Return ONLY the JSON array, no other text.`;
         }
       }
     }
-    console.log(`[ScenePlanner] Saved ${rows.length} beats for episode ${episodeId}; kept ${lockedRows.length} locked or chosen`);
+    console.log(`[ScenePlanner] Wrote ${rows.length} beats in place for episode ${episodeId}; kept ${lockedRows.length} locked or chosen, ${changes.length} changed`);
 
-    return enrichedBeats.map((beat) => {
+    const plan = enrichedBeats.map((beat) => {
       const kept = lockedByBeat.get(beat.beat_number);
       if (!kept) return { ...beat, locked: false };
       return {
@@ -377,6 +563,11 @@ Return ONLY the JSON array, no other text.`;
         chosen_by_user: Boolean(kept.chosen_by_user),
       };
     });
+    // The beats stay the array every caller already reads (plan.length, the
+    // response's `data`); what changed rides alongside it so the route can
+    // report it without changing this function's shape for anyone else.
+    plan.plan_changes = changes;
+    return plan;
   }
 
   return enrichedBeats;
@@ -424,4 +615,7 @@ async function getScenePlanForScriptGenerator(episodeId) {
   });
 }
 
-module.exports = { generateScenePlan, getScenePlanForScriptGenerator, BEAT_STRUCTURE };
+module.exports = {
+  generateScenePlan, getScenePlanForScriptGenerator, BEAT_STRUCTURE,
+  PlanOutputInvalidError, PlanBeatUnavailableError,
+};
