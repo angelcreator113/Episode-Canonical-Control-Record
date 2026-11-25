@@ -324,6 +324,12 @@ router.post('/:episodeId/generate-plan', requireAuth, authorize(['ADMIN']), aiRa
     // code of their own and never 'RETRY', which this codebase reserves for a
     // lost lock race — neither of these is one, and an immediate retry is not
     // promised. The existing plan, its scenes and its operator's work stand.
+    // S1-B: an accepted or filmed episode refuses before the model call and
+    // again inside the locked save; either way nothing was written.
+    if (require('../utils/frozenEpisode').isFrozenEpisodeError(err)) {
+      console.warn(`[ScenePlanner] Refused for episode ${req.params.episodeId}: the episode is frozen; its plan is kept.`);
+      return res.status(err.status).json(err.toJSON());
+    }
     if (err?.code === 'PLAN_OUTPUT_INVALID') {
       return res.status(409).json({ success: false, code: err.code, error: err.message, problems: err.problems || [] });
     }
@@ -525,10 +531,21 @@ router.put('/:episodeId/plan/:beatNumber', requireAuth, authorize(['ADMIN']), as
     const { inEpisodeFirstTransaction, holdLiveSet } = require('../services/eventPlaceSync');
     const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
     const { linkBeatSet, EpisodeLocationsError } = require('../services/episodeLocationsService');
+    const { episodeFreeze, frozenWriteRefusal, isFrozenEpisodeError } = require('../utils/frozenEpisode');
     try {
       await inEpisodeFirstTransaction(models.sequelize, async (transaction) => {
         location = null;
-        await lockEpisodes(models.sequelize, [episodeId], { transaction, mode: 'share' });
+        // S1-B (Evoni, 2026-11-25): FOR UPDATE at entry, never FOR SHARE then
+        // upgraded. It excludes a first raw clip's attach (FOR SHARE); an
+        // acceptance already took FOR UPDATE.
+        await lockEpisodes(models.sequelize, [episodeId], { transaction, mode: 'update' });
+        // Before ANY field is written, not only a Scene Set change. Until
+        // S1-B the only accepted check on this route was inside linkBeatSet,
+        // reached solely under `if (updates.scene_set_id)`, so a save of just
+        // a director's note, shot type, intent, transition or "chosen" went
+        // through on an accepted episode.
+        const freeze = await episodeFreeze(models.sequelize, episodeId, { transaction });
+        if (freeze.frozen) throw frozenWriteRefusal(episodeId, freeze, 'beat');
         if (updates.scene_set_id) {
           if (!await holdLiveSet(models.sequelize, updates.scene_set_id, { transaction, nowait: true })) {
             throw new EpisodeLocationsError('That scene set no longer exists', 404, 'SCENE_SET_NOT_FOUND');
@@ -540,6 +557,8 @@ router.put('/:episodeId/plan/:beatNumber', requireAuth, authorize(['ADMIN']), as
         await plan.update(updates, { transaction });
       });
     } catch (linkErr) {
+      // S1-B: 409 EPISODE_FROZEN, nothing written, never retryable.
+      if (isFrozenEpisodeError(linkErr)) return res.status(linkErr.status).json(linkErr.toJSON());
       if (linkErr instanceof EpisodeLocationsError) {
         return res.status(linkErr.status).json({ error: linkErr.message, code: linkErr.code });
       }

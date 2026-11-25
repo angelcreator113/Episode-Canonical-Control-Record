@@ -125,6 +125,18 @@ async function loadAvailableSceneSets(showId, eventSetId = null) {
 async function generateScenePlan(episodeId, showId, briefData, options = {}) {
   const { save = true } = options;
 
+  // S1-B (Evoni, 2026-11-25): an accepted or filmed episode's plan is kept as
+  // it is. Asked HERE so a refusal costs no model call — this read takes no
+  // lock and is NOT the decision: the definitive check is made again inside
+  // the save's own locked transaction below, where the answer cannot change
+  // before the commit. A plan asked for without saving is a read and is never
+  // refused here.
+  if (save) {
+    const { episodeFreeze, frozenWriteRefusal } = require('../utils/frozenEpisode');
+    const early = await episodeFreeze(require('../models').sequelize, episodeId);
+    if (early.frozen) throw frozenWriteRefusal(episodeId, early, 'beat plan');
+  }
+
   // Load available scene sets, with the event's own set
   let eventSetId = null;
   try {
@@ -408,7 +420,21 @@ Return ONLY the JSON array, no other text.`;
     try {
       await inEpisodeFirstTransaction(planDb, async (transaction) => {
         dropped = [];
-        await lockEpisodes(planDb, [episodeId], { transaction, mode: 'share' });
+        // S1-B: FOR UPDATE, not FOR SHARE, and taken at the transaction's
+        // entry — never FOR SHARE first and upgraded, which two transactions
+        // doing at once is a deadlock. FOR UPDATE is what excludes a first
+        // raw clip, whose attach takes the episode FOR SHARE
+        // (rawClipsService.attachClip): MEASURED, with FOR SHARE here the
+        // attach was not blocked and committed while this transaction was
+        // open, so the plan was written onto an episode that had just become
+        // filmed. An acceptance already took FOR UPDATE, so it was always
+        // excluded. The episode-first order is unchanged.
+        await lockEpisodes(planDb, [episodeId], { transaction, mode: 'update' });
+        // The decision, under that lock. The early check above saved the
+        // model call; this one is what makes the refusal sound.
+        const { episodeFreeze, frozenWriteRefusal } = require('../utils/frozenEpisode');
+        const freeze = await episodeFreeze(planDb, episodeId, { transaction });
+        if (freeze.frozen) throw frozenWriteRefusal(episodeId, freeze, 'beat plan');
         const named = [...new Set(rows.map((r) => r.scene_set_id).filter(Boolean).map(String))].sort();
         const gone = new Set();
         for (const setId of named) {

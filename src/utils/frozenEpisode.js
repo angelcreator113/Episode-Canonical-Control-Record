@@ -160,6 +160,54 @@ async function assertEpisodeAcceptsEventLink(sequelize, { eventId, episodeId, tr
   throw filmedLinkRefusal(eventId, episodeId, frozenAt, fields);
 }
 
+/**
+ * S1-B (Evoni, 2026-11-25): is this episode frozen against automatic
+ * production writes? Two existing definitions, read together and NOT
+ * redefined here:
+ *   accepted — episodes.evaluation_status = 'accepted', the same field
+ *              episodeLocationsService and sceneSetUsesService decide
+ *              EPISODE_ACCEPTED on;
+ *   filmed   — filmedAt above: ANY row in episode_raw_clips for the episode,
+ *              removed (soft-deleted) clips included, earliest created_at.
+ *
+ * One statement, so a guarded transaction pays for one round trip. Pass the
+ * transaction: read under the episode's lock, the answer cannot change before
+ * that transaction commits (an acceptance takes the episode FOR UPDATE in
+ * episodeCompletionService; a first clip takes it FOR SHARE in
+ * rawClipsService.attachClip, so a holder of FOR UPDATE excludes it).
+ */
+async function episodeFreeze(sequelize, episodeId, { transaction } = {}) {
+  if (!episodeId) return { frozen: false, accepted: false, frozenAt: null };
+  const [[row]] = await sequelize.query(
+    `SELECT e.evaluation_status,
+            (SELECT MIN(c.created_at) FROM episode_raw_clips c WHERE c.episode_id = e.id) AS frozen_at
+       FROM episodes e WHERE e.id = :episodeId`,
+    { replacements: { episodeId }, transaction });
+  const accepted = row ? row.evaluation_status === 'accepted' : false;
+  const frozenAt = row && row.frozen_at ? iso(row.frozen_at) : null;
+  return { frozen: accepted || Boolean(frozenAt), accepted, frozenAt };
+}
+
+/**
+ * S1-B: an automatic production write refused because the episode is accepted
+ * or filmed. 409, never retryable, nothing written, and no offer to reopen:
+ * there is no per-episode unaccept or unfilm, and the only reset there is
+ * clears every episode of the show, so this never points at it.
+ *
+ * Its own code. EPISODE_ACCEPTED keeps its meaning for the locations and
+ * scene-set callers, and EPISODE_SNAPSHOT_FROZEN keeps its meaning for
+ * deleting and relinking; neither is widened here.
+ */
+function frozenWriteRefusal(episodeId, freeze, what = 'plan') {
+  const why = freeze.accepted && freeze.frozenAt
+    ? `has been accepted and filmed (since ${day(freeze.frozenAt)})`
+    : (freeze.accepted ? 'has been accepted' : `has been filmed (since ${day(freeze.frozenAt)})`);
+  return new FrozenEpisodeError(
+    `This episode ${why}, so its ${what} is kept as it was. Nothing was changed.`,
+    'EPISODE_FROZEN',
+    { episode_id: episodeId, accepted: freeze.accepted, frozen_at: freeze.frozenAt });
+}
+
 /** Q-7 Layer 1: deleting a filmed episode, for every role. */
 function deleteRefusal(episodeId, frozenAt) {
   return new FrozenEpisodeError(
@@ -180,6 +228,8 @@ module.exports = {
   FrozenEpisodeError,
   isFrozenEpisodeError,
   filmedAt,
+  episodeFreeze,
+  frozenWriteRefusal,
   findFrozenDeletedEpisode,
   assertEventRelinkAllowed,
   assertEpisodeAcceptsEventLink,
