@@ -266,6 +266,119 @@ describe('ScenePlannerPage: what the last re-plan changed (Gap 2)', () => {
     expect(order[order.length - 1]).toBeGreaterThan(order[0]);
   });
 
+  // ── the POST and the plan read that follows it are separate results ──────
+
+  /** The POST saves and answers; the plan read that follows it fails. */
+  const wireRereadFailure = () => vi.mocked(api.get).mockImplementation(async (url) => {
+    if (url === '/api/v1/episode-brief/ep-1/plan') throw new Error('plan read failed');
+    if (url === '/api/v1/episode-brief/ep-1') return { data: { data: { status: 'draft' } } };
+    if (url === '/api/v1/episodes/ep-1/locations') return { data: { success: true, data: { show_id: 'show-1', locations: [] } } };
+    return { data: {} };
+  });
+
+  test('POST succeeds but the plan reread fails: the change is still reported, the save is not called a failure', async () => {
+    wirePost([{ beat_number: 4, changed: ['scene_set_id'], has_saved_work: true }]);
+    renderPage();
+    await screen.findByTestId('beat-card-4');
+    wireRereadFailure();
+    await generate();
+
+    const notice = await screen.findByTestId('planner-plan-changes');
+    // the truthful part survives: this re-plan reported beat 4
+    expect(notice.textContent).toContain('Beat 4 changed location in this plan.');
+    expect(within(notice).getByTestId('planner-plan-changes-work').textContent)
+      .toContain('Beat 4 has saved work, which was kept');
+    // and it says the details could not be loaded, not that the save failed
+    const stale = within(notice).getByTestId('planner-plan-changes-stale');
+    expect(stale.textContent).toContain('The new plan was saved.');
+    expect(stale.textContent).toContain('couldn\'t be loaded');
+    expect(notice.textContent).not.toMatch(/generation failed|could not be saved|nothing was saved/i);
+  });
+
+  test('the plan on screen stays as it was after a failed reread, and the page says it may be out of date', async () => {
+    wirePost([{ beat_number: 4, changed: ['scene_set_id'], has_saved_work: false }]);
+    renderPage();
+    await screen.findByTestId('beat-card-4');
+    wireRereadFailure();
+    await generate();
+
+    await screen.findByTestId('planner-plan-changes-stale');
+    // the stale plan is still rendered, with its old location
+    expect(within(screen.getByTestId('beat-card-4')).getByText('Lala apartment')).toBeTruthy();
+    // and the page's own staleness presentation is there too
+    expect(screen.getByTestId('beat-plan-load-failed')).toBeTruthy();
+  });
+
+  test('a failed reread shows no previous-to-new comparison and no was-showing tooltip', async () => {
+    wirePost([{ beat_number: 4, changed: ['scene_set_id'], has_saved_work: false }]);
+    renderPage();
+    await screen.findByTestId('beat-card-4');
+    wireRereadFailure();
+    await generate();
+
+    const line = within(await screen.findByTestId('planner-plan-changes')).getByTestId('planner-plan-change-4');
+    expect(line.textContent).toBe('Beat 4');
+    expect(line.textContent).not.toContain('was showing');
+    expect(line.textContent).not.toContain('now');
+    expect(within(screen.getByTestId('beat-card-4')).getByTestId('beat-changed-4').getAttribute('title')).toBeNull();
+  });
+
+  test('identical previous and new names are not presented as a transition', async () => {
+    // The server reports beat 4, but both reads name the same set: there is
+    // nothing meaningful to show as old-to-new.
+    wirePost([{ beat_number: 4, changed: ['scene_set_id'], has_saved_work: false }],
+      [beat(2, HOME), beat(4, HOME), beat(5, HOME), beat(6, HOME)]);
+    renderPage();
+    await screen.findByTestId('beat-card-4');
+    await generate();
+
+    const notice = await screen.findByTestId('planner-plan-changes');
+    expect(notice.textContent).toContain('Beat 4 changed location in this plan.');
+    expect(within(notice).getByTestId('planner-plan-change-4').textContent).toBe('Beat 4');
+    expect(notice.textContent).not.toContain('was showing');
+    // the read worked, so this is not the stale case
+    expect(screen.queryByTestId('planner-plan-changes-stale')).toBeNull();
+  });
+
+  test('a successful reread shows the supported comparison', async () => {
+    wirePost([{ beat_number: 4, changed: ['scene_set_id'], has_saved_work: false }]);
+    renderPage();
+    await screen.findByTestId('beat-card-4');
+    await generate();
+
+    expect(within(await screen.findByTestId('planner-plan-changes')).getByTestId('planner-plan-change-4').textContent)
+      .toBe('Beat 4 — was showing Lala apartment, now Glasshouse');
+    expect(screen.queryByTestId('planner-plan-changes-stale')).toBeNull();
+  });
+
+  test('a later refresh is not attributed to the earlier generation', async () => {
+    const generatingAfter = [
+      beat(2, VENUE), beat(4, VENUE, { location: { generating: true } }), beat(5, HOME), beat(6, HOME),
+    ];
+    wirePost([{ beat_number: 4, changed: ['scene_set_id'], has_saved_work: false }], generatingAfter);
+    // Before the generation, so usePlanRefresh's timer is a fake one and can
+    // be advanced deliberately below.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderPage();
+    await screen.findByTestId('beat-card-4');
+    await generate();
+    const line = within(await screen.findByTestId('planner-plan-changes')).getByTestId('planner-plan-change-4');
+    expect(line.textContent).toContain('now Glasshouse');
+
+    const readsBefore = planReads();
+    // Someone else moves beat 4 on to the apartment after this generation.
+    plan = [beat(2, VENUE), beat(4, HOME), beat(5, HOME), beat(6, HOME)];
+    await act(async () => { vi.advanceTimersByTime(PLAN_REFRESH_MS); });
+    await waitFor(() => expect(planReads()).toBe(readsBefore + 1));
+    await waitFor(() => expect(within(screen.getByTestId('beat-card-4')).getByText('Lala apartment')).toBeTruthy());
+
+    // The notice still reports what THIS generation produced; the later change
+    // is not folded into it.
+    expect(screen.getByTestId('planner-plan-change-4').textContent)
+      .toBe('Beat 4 — was showing Lala apartment, now Glasshouse');
+    vi.useRealTimers();
+  });
+
   test('it is information, not an alert: no role=alert and no error styling', async () => {
     wirePost([{ beat_number: 4, changed: ['scene_set_id'], has_saved_work: true }]);
     renderPage();

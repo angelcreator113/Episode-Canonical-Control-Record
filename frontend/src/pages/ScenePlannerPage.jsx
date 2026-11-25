@@ -59,15 +59,22 @@ function changeFor(report, beat) {
   const changed = Array.isArray(found.changed) ? found.changed : [];
   // "Was showing" is the plan that was on screen when Generate was pressed —
   // what she was looking at, not a stored history of the row. Null when the
-  // beat had no set, was not on screen, or its set cannot be named now.
+  // beat had no set, was not on screen, or its set cannot be named.
   const was = report.wasShowing?.get(n) || null;
-  const now = beatSetName(beat, null);
+  // "Now" comes from the read THIS generation made, captured when the notice
+  // was built — never from live plan state. So a later background refresh, or
+  // another writer's change, is never attributed to this generation; and when
+  // that read failed there is no "now" at all rather than a stale one.
+  const now = report.nowShowing ? (report.nowShowing.get(n) || null) : null;
   return {
     beat_number: n,
     changed,
     has_saved_work: Boolean(found.has_saved_work),
     was,
     now,
+    // Shown only when both names are known AND they differ: identical names
+    // are not a meaningful old-to-new transition, whatever the server reported.
+    comparable: Boolean(was && now && was !== now),
     moved: changed.includes('scene_set_id'),
   };
 }
@@ -80,7 +87,7 @@ function ChangedBadges({ change }) {
       key={f}
       className="scene-planner-card-tag changed"
       data-testid={`beat-changed-${change.beat_number}`}
-      title={f === 'scene_set_id' && change.was ? `Was showing: ${change.was}` : undefined}
+      title={f === 'scene_set_id' && change.comparable ? `Was showing: ${change.was}` : undefined}
     >
       {CHANGE_LABELS[f]}
     </span>
@@ -116,11 +123,21 @@ function PlanChangesNotice({ report, plan, episodeId }) {
           work, which was kept — worth checking it still fits.
         </p>
       )}
+      {/* The POST and the plan read that follows it are separate results. The
+          re-plan saved either way — that is what the 200 means — but without a
+          successful read there are no updated details to compare against, so
+          none are shown and the page says so. It never says the save failed. */}
+      {report.reread === false && (
+        <p className="scene-planner-plan-changes-stale" data-testid="planner-plan-changes-stale">
+          The new plan was saved. Its updated details couldn&apos;t be loaded, so what is shown
+          below may be out of date.
+        </p>
+      )}
       <ul className="scene-planner-plan-changes-list">
         {moved.map((e) => (
           <li key={e.beat_number} data-testid={`planner-plan-change-${e.beat_number}`}>
             Beat {e.beat_number}
-            {e.was && e.now ? ` — was showing ${e.was}, now ${e.now}` : ''}
+            {e.comparable ? ` — was showing ${e.was}, now ${e.now}` : ''}
           </li>
         ))}
       </ul>
@@ -343,6 +360,11 @@ export default function ScenePlannerPage() {
   // The newest generation wins, as the newest read does below: an older POST
   // answer never shows its notice against a plan it did not produce.
   const genSeq = useRef(0);
+  // The plan as the last SUCCESSFUL read left it, and a count of those reads.
+  // A generation compares the count across its own re-read to tell a read that
+  // worked from one that failed — the POST's 200 says nothing about the read.
+  const planRef = useRef([]);
+  const planReadOk = useRef(0);
 
   // The newest read of the brief and plan wins: an older answer or failure
   // never replaces a newer one.
@@ -356,6 +378,8 @@ export default function ScenePlannerPage() {
       ]);
       if (seq === loadSeq.current) {
         setBrief(briefRes.data.data);
+        planRef.current = planRes.data.data || [];
+        planReadOk.current += 1;
         setPlan(planRes.data.data || []);
         setReadiness(planRes.data.readiness || null);
         setLoadFailed(false);
@@ -422,13 +446,23 @@ export default function ScenePlannerPage() {
     try {
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/generate-plan`);
       showToast(`Scene plan generated — ${res.data.data.length} beats mapped`);
+      const okBefore = planReadOk.current;
       await fetchAll();
-      // After the re-read, so the notice names the plan now on screen. A 409
-      // (PLAN_OUTPUT_INVALID, PLAN_BEAT_UNAVAILABLE) never reaches here: it
-      // throws, nothing was written, and the error toast below is the answer.
+      // Two separate results: the POST saved the plan (that is what its 200
+      // means) and the read that follows either worked or did not. Only a read
+      // that worked supplies the updated names; a failed one leaves `now`
+      // unknown rather than stale. A 409 (PLAN_OUTPUT_INVALID,
+      // PLAN_BEAT_UNAVAILABLE) never reaches here: it throws, nothing was
+      // written, and the error toast below is the whole answer.
       if (seq === genSeq.current) {
         const changes = Array.isArray(res.data?.plan_changes) ? res.data.plan_changes : [];
-        setPlanChanges(changes.length ? { changes, wasShowing } : null);
+        const reread = planReadOk.current > okBefore;
+        // Captured now, from this generation's own read, so a later refresh or
+        // another writer's change is never shown as part of this generation.
+        const nowShowing = reread
+          ? new Map(planRef.current.map((b) => [Number(b.beat_number), beatSetName(b, null)]))
+          : null;
+        setPlanChanges(changes.length ? { changes, wasShowing, nowShowing, reread } : null);
       }
     } catch (err) {
       showToast(adminOnlyMessage(err) || err.response?.data?.error || 'Generation failed', 'error');

@@ -623,6 +623,7 @@
 .scene-planner-plan-changes { margin: 6px 0 0; font-size: 12px; color: #92400e; }
 .scene-planner-plan-changes-head { margin: 0; font-weight: 600; }
 .scene-planner-plan-changes-work { margin: 2px 0 0; }
+.scene-planner-plan-changes-stale { margin: 2px 0 0; font-style: italic; }
 .scene-planner-plan-changes-list { margin: 2px 0 2px; padding-left: 16px; list-style: disc; }
 .scene-planner-plan-changes a { color: #B8962E; font-weight: 600; }
 .scene-planner-card-tag.changed { background: rgba(146,64,14,0.12); color: #92400e; }
