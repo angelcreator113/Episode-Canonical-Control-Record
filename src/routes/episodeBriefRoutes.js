@@ -310,11 +310,26 @@ router.post('/:episodeId/generate-plan', requireAuth, authorize(['ADMIN']), aiRa
       message: `Scene plan generated — ${plan.length} beats mapped.`,
       data: plan,
       scene_sync: { outcome: sync.outcome, warnings: sync.warnings },
+      // Gap 2 (Evoni, 2026-11-25): what this re-plan changed on beats that
+      // already existed, and whether those beats carry saved work. Computed
+      // from rows the save already read, stored nowhere, and NOT a claim that
+      // a saved scene is still creatively right for its beat.
+      plan_changes: plan.plan_changes || [],
     });
   } catch (err) {
     console.error('[ScenePlanner] generate error:', err);
     // A refused budget is a 429 with its code, not a 500 (eighth audit).
     if (err?.code === 'AI_BUDGET_EXCEEDED' || err?.status === 429) return res.status(429).json({ error: err.message, code: 'AI_BUDGET_EXCEEDED' });
+    // Gap 2: the planner refused before writing anything. Both are 409 with a
+    // code of their own and never 'RETRY', which this codebase reserves for a
+    // lost lock race — neither of these is one, and an immediate retry is not
+    // promised. The existing plan, its scenes and its operator's work stand.
+    if (err?.code === 'PLAN_OUTPUT_INVALID') {
+      return res.status(409).json({ success: false, code: err.code, error: err.message, problems: err.problems || [] });
+    }
+    if (err?.code === 'PLAN_BEAT_UNAVAILABLE') {
+      return res.status(409).json({ success: false, code: err.code, error: err.message, beats: err.beats || [] });
+    }
     return res.status(500).json({ error: err.message });
   }
 });

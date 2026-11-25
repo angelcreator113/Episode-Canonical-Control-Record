@@ -29,6 +29,7 @@ const chosenMigration = require('../../src/migrations/20261002140000-add-scene-p
 const lookAnglesMigration = require('../../src/migrations/20261002150000-create-scene-set-look-angles');
 const planIdMigration = require('../../src/migrations/20261002160000-add-scenes-scene-plan-id');
 const { generateScenePlan } = require('../../src/services/scenePlannerService');
+const { CANONICAL_BEATS } = require('../../src/constants/canonicalBeats');
 const lockTrace = require('../helpers/lockTrace');
 
 const { sequelize } = models;
@@ -177,8 +178,14 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const ep = await episode();
     expect(await scenesOf(ep)).toEqual([]);
     await run(`INSERT INTO episode_briefs (id, episode_id, show_id, created_at, updated_at) VALUES (gen_random_uuid(), :ep, :show, NOW(), NOW())`, { ep, show });
-    mockCreate.mockResolvedValue({ content: [{ text: JSON.stringify([1, 2, 3, 10, 11, 14].map((n) => ({
-      beat_number: n, scene_set_id: n === 14 ? null : (n >= 10 ? sets.glasshouse : sets.apartment), angle_label: n === 2 ? 'VANITY' : null,
+    // Gap 2 (Evoni, 2026-11-25): the planner refuses a reply that is not the
+    // complete canonical beat set, so this reply names every beat. Only the
+    // beats this case is about are given a set; the rest get none, so the
+    // scene rows under test are exactly the ones they always were.
+    mockCreate.mockResolvedValue({ content: [{ text: JSON.stringify(CANONICAL_BEATS.map(({ number: n }) => ({
+      beat_number: n,
+      scene_set_id: (n === 1 || n === 2 || n === 3) ? sets.apartment : ((n === 10 || n === 11) ? sets.glasshouse : null),
+      angle_label: n === 2 ? 'VANITY' : null,
       shot_type: 'medium', emotional_intent: 'x', transition_in: 'cut',
     }))) }] });
     const made = await auth(request(app).post(`/api/v1/episode-brief/${ep}/generate-plan`)).send({});
@@ -391,17 +398,26 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     await run('DELETE FROM scene_set_look_angles WHERE look_id = :look AND scene_angle_id = :door', { look, door: sets.doorway });
   });
 
-  it("a re-plan keeps each beat's scene and its Timeline edits; a beat losing its set keeps its scene too", async () => {
+  it("a re-plan keeps each beat's scene, its plan row and its Timeline edits; a beat losing its set keeps its scene too", async () => {
     const ep = await episode();
     await sync(ep);
     const before = await scenesOf(ep);
     await run(`UPDATE scenes SET duration_seconds = 12 WHERE id = :id`, { id: before[1].id });
-    mockCreate.mockResolvedValue({ content: [{ text: JSON.stringify([1, 2, 3, 10, 11, 14].map((n) => ({
-      beat_number: n, scene_set_id: n === 3 ? null : (n >= 10 ? sets.glasshouse : sets.apartment), angle_label: n === 2 ? 'VANITY' : null,
+    // Gap 2 (Evoni, 2026-11-25): the planner now refuses a reply that is not
+    // the complete canonical beat set, so this reply names every beat. The
+    // beats this episode does not use keep no set, exactly as beats 3 and 14
+    // always did here, so the scenes under test are unchanged.
+    mockCreate.mockResolvedValue({ content: [{ text: JSON.stringify(CANONICAL_BEATS.map(({ number: n }) => ({
+      beat_number: n,
+      scene_set_id: (n === 1 || n === 2) ? sets.apartment : ((n === 10 || n === 11) ? sets.glasshouse : null),
+      angle_label: n === 2 ? 'VANITY' : null,
       shot_type: 'medium', emotional_intent: 'x', transition_in: 'cut',
     }))) }] });
     await generateScenePlan(ep, show, {}, { save: true });
-    expect(await planId(ep, 2)).not.toBe(before[1].scene_plan_id);
+    // Gap 2: the beat's plan row is updated in place, so its id is the SAME
+    // one the scene is tied to. This assertion used to require the opposite;
+    // that it changed was the defect, not the guarantee.
+    expect(await planId(ep, 2)).toBe(before[1].scene_plan_id);
     // The service is called here without its route; POST generate-plan runs this sync after it.
     await sync(ep);
     const after = await scenesOf(ep);
@@ -600,7 +616,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       expect((await exportIt(ep)).status).toBe(202);
     });
 
-    it('MEASURED gap: after a re-plan a tombstone is matched by number alone, and holds a beat it never belonged to', async () => {
+    it('MEASURED gap: when a plan row is replaced, a tombstone is matched by number alone, and holds a beat it never belonged to', async () => {
       // Its own episode: five beats at the apartment with contiguous numbers,
       // so the renumbering a delete does is easy to read off.
       const ep = uuid();
@@ -630,8 +646,13 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       expect(owner.get(second)).toBe(5);
       expect(Number(tomb.scene_number)).toBe(4);
 
-      // A re-plan hard-deletes the unlocked, unchosen plan rows and writes new
-      // ones (scenePlannerService), so the tombstone's plan link dangles.
+      // The plan rows are replaced here directly, by this test's own SQL, so
+      // the tombstone's plan link dangles and the number-only branch is what
+      // classify has left to go on. Gap 2 (Evoni, 2026-11-25) stopped the
+      // re-plan from being a way to reach this state — generateScenePlan now
+      // updates the rows in place and keeps their ids — but the branch is
+      // still reachable whenever a plan row is replaced by any other means,
+      // so the case keeps its subject and every assertion below stands.
       await run('DELETE FROM scene_plans WHERE episode_id = :ep AND locked = false AND chosen_by_user = false', { ep });
       for (const b of [1, 2, 3, 4, 5]) {
         await run(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, scene_set_id, angle_label, sort_order, locked, ai_suggested, chosen_by_user, created_at, updated_at)

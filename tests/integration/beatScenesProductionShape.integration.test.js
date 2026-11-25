@@ -245,12 +245,15 @@ const PRODUCTION_SCENES = `
     expect(back).toMatchObject({ scene_set_id: sets.apartment, duration_seconds: 8, title: 'Kept three' });
   });
 
-  it('a re-plan moves each tied scene to its beat\'s new plan row, so the scene and its edits survive', async () => {
+  it('a replaced plan row still adopts its beat\'s tied scene, so the scene and its edits survive', async () => {
     const ep = await episode();
     await syncBeatScenes(db, ep);
     const two = (await live(ep)).find((s) => s.scene_number === 2);
     await run('UPDATE scenes SET duration_seconds = 12 WHERE id = :id', { id: two.id });
-    // A re-plan replaces the rows (one row per beat number, live or not).
+    // The beat's plan row is replaced here by this test's own SQL. Gap 2
+    // (Evoni, 2026-11-25) means a re-plan no longer does this — it updates
+    // the row in place and keeps its id — so this case is about the orphan
+    // adoption that any replacement still needs, whatever replaced the row.
     await run('DELETE FROM scene_plans WHERE id = :p', { p: two.scene_plan_id });
     await run(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, scene_set_id, angle_label, sort_order, locked, ai_suggested, created_at, updated_at)
                VALUES (gen_random_uuid(), :ep, 2, 'Beat 2', :apt, 'VANITY', 2, false, true, NOW(), NOW())`, { ep, apt: sets.apartment });
