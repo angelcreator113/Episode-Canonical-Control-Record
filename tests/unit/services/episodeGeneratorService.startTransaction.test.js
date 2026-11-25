@@ -129,8 +129,9 @@ describe('generateEpisodeFromEvent — transactional Start (Task #1906)', () => 
 
     expect(result.episode.id).toBe('ep-new');
     // The Start's own transaction, then (A1.1) the season slot assignment's,
-    // opened only after the Start has committed.
-    expect(log.transactions).toHaveLength(2);
+    // opened only after the Start has committed, and then (S1-A) the beat
+    // scene synchronisation's own bounded transaction, which runs last.
+    expect(log.transactions).toHaveLength(3);
     const [t] = log.transactions;
     expect(t.state).toBe('committed');
     expect(models.Episode.create.mock.calls[0][1]).toEqual({ transaction: t });
@@ -218,9 +219,10 @@ describe('generateEpisodeFromEvent — transactional Start (Task #1906)', () => 
 
     const result = await generateEpisodeFromEvent(EVENT, models, { showId: 'show-1', locations: LOCATIONS, eventSceneSetId: EVENT.scene_set_id ?? null });
 
-    // Start, then the season slot assignment (A1.1); the locations' own
+    // Start, then the season slot assignment (A1.1), then (S1-A) the beat
+    // scene synchronisation's own bounded transaction; the locations' own
     // transaction is the finalizer's, inside applyStartLocations.
-    expect(log.transactions).toHaveLength(2);
+    expect(log.transactions).toHaveLength(3);
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply.mock.calls[0][1]).toEqual({ episodeId: 'ep-new', eventId: 'ev-1', showId: 'show-1', sourceSetId: EVENT.scene_set_id ?? null, locations: LOCATIONS });
     expect(models.Episode.create.mock.calls[0][1]).toEqual({ transaction: log.transactions[0] });
