@@ -91,6 +91,29 @@ router.post('/episodes/:episodeId/export', authMiddleware, async (req, res) => {
       });
     }
 
+    // S1-A gap 1 (Evoni, 2026-11-25): a synchronisation that lost a race
+    // wrote nothing, and it lost it because another writer was changing this
+    // episode's scenes at that moment — so the list this export would freeze
+    // is not verified, and the check below would read it mid-change. The
+    // answer is the repo's own retryable refusal (409 with code RETRY, as
+    // utils/episodeLocks.RetryableConflictError carries): nothing was
+    // changed, ask again. A material failure is not a refusal of its own:
+    // the authoritative checks decide, exactly as they did before, so a
+    // warning alone never fails an export. `sync` can also be undefined
+    // (a caller's test double), which is not a failure either.
+    if (sync?.outcome === 'failed' && sync.retryable === true) {
+      console.error(`[Export] refused for episode ${episodeId}: the beats' scene sync lost a race, so the scene list is unverified`);
+      return res.status(409).json({
+        success: false,
+        error: 'This episode cannot be exported yet',
+        message: "Someone else was changing this episode's scenes at the same moment, so the scene list could not be verified. "
+          + 'Nothing was changed: try the export again.',
+        code: 'RETRY',
+        retryable: true,
+        scene_sync: { outcome: sync.outcome, retryable: true, warnings: sync.warnings },
+      });
+    }
+
     // S1-A, Decision 3 (Evoni, 2026-11-25): the non-empty check above is no
     // longer the only integrity decision. A beat of the CURRENT plan with a
     // live Scene Set, no live scene and no previously removed scene of its

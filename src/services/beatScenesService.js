@@ -326,14 +326,28 @@ async function syncBeatScenes(sequelize, episodeId, { transaction: outer } = {})
 
 /**
  * syncBeatScenes for a caller that must not be blocked by it: a failure is
- * logged and null is returned, as before.
+ * logged, and the failure itself is returned.
+ *
+ * S1-A gap 1 (Evoni, 2026-11-25): it used to swallow every error and return a
+ * bare null, so no caller could tell a lost race — nothing written, ask again
+ * — from a material failure. It now returns failedSyncOutcome's structured
+ * failure, with `retryable` saying which kind it was.
+ *
+ * `outcome` stays 'failed' for both kinds, which is exactly what the callers
+ * that wrote `syncBeatScenesQuietly(...) || failedSyncOutcome()` already
+ * recorded: episodeGeneratorService.scenePlanStep keeps a Start or a resume
+ * whose sync did not finish at `partial`, so the next resume takes it on
+ * again. Only the warning code now says which kind it was, and `retryable`
+ * is the field a caller reads to answer with a retry (src/routes/export.js).
+ * It is never a claim that a committed write was rolled back.
  */
 async function syncBeatScenesQuietly(sequelize, episodeId, where) {
   try {
     return await syncBeatScenes(sequelize, episodeId);
   } catch (err) {
     console.error(`[BeatScenes] sync for ${where} failed:`, err.message);
-    return null;
+    const failed = failedSyncOutcome(err);
+    return { ...failed, outcome: 'failed', retryable: failed.outcome === 'retryable' };
   }
 }
 

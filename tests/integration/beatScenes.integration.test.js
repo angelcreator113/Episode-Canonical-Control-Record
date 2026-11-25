@@ -482,6 +482,173 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       expect((await scenesOf(ep)).map((s) => Number(s.scene_number))).toEqual([1, 2, 3, 10, 11]);
     });
 
+    // ── S1-A gap 1 (Evoni, 2026-11-25): a sync that failed must not be
+    // reported as a successful export unless the authoritative checks
+    // establish the output is trustworthy, and a lost race — nothing written,
+    // another writer mid-change — must come back as a retryable refusal.
+    // syncBeatScenesQuietly used to swallow every error to a bare null, so no
+    // caller could tell the two apart.
+    it("a sync that lost a race reports it: nothing written, outcome failed, retryable; a material failure says so instead", async () => {
+      const svc = require('../../src/services/beatScenesService');
+      // No stub of the service: the real wrapper, over a handle whose
+      // transaction raises the error. 55P03 is Postgres's lock-wait timeout
+      // and 22P02 is invalid input syntax; no index name is involved.
+      const raise = (err) => ({ transaction: async () => { throw err; } });
+      const lockTimeout = Object.assign(new Error('canceling statement due to lock timeout'), { original: { code: '55P03' } });
+      const deadlock = Object.assign(new Error('deadlock detected'), { original: { code: '40P01' } });
+      const material = Object.assign(new Error('invalid input syntax for type uuid'), { original: { code: '22P02' } });
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      for (const err of [lockTimeout, deadlock]) {
+        const out = await svc.syncBeatScenesQuietly(raise(err), uuid(), 'export');
+        expect(out).toMatchObject({ created: 0, updated: 0, removed: 0, held: 0, outcome: 'failed', retryable: true });
+        expect(out.warnings).toEqual([{ beat_number: null, scope: 'episode', code: 'sync_failed_retryable' }]);
+      }
+      const bad = await svc.syncBeatScenesQuietly(raise(material), uuid(), 'export');
+      expect(bad).toMatchObject({ outcome: 'failed', retryable: false });
+      expect(bad.warnings).toEqual([{ beat_number: null, scope: 'episode', code: 'sync_failed_material' }]);
+      // It still never throws and still never returns null.
+      expect(bad).not.toBeNull();
+    });
+
+    it('a retryable sync refuses the export as a retry, and a material one leaves the authoritative checks to decide', async () => {
+      const ep = await episode();
+      await sync(ep); // every required beat has its scene: the list itself is complete
+      const svc = require('../../src/services/beatScenesService');
+      const failure = (err) => svc.syncBeatScenesQuietly({ transaction: async () => { throw err; } }, ep, 'export');
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Both failures are produced by the real wrapper before it is stood in
+      // for, so what the route sees is exactly what the service returns.
+      const retryable = await failure(Object.assign(new Error('lock timeout'), { original: { code: '55P03' } }));
+      const materialFailure = await failure(Object.assign(new Error('bad uuid'), { original: { code: '22P02' } }));
+      expect([retryable.retryable, materialFailure.retryable]).toEqual([true, false]);
+
+      // The lost race: the scenes were being changed at that moment, so the
+      // list this export would freeze is not verified. The repo's own
+      // retryable answer, and nothing was written.
+      const spy = jest.spyOn(svc, 'syncBeatScenesQuietly').mockResolvedValue(retryable);
+      const retried = await exportIt(ep);
+      expect(retried.status).toBe(409);
+      expect(retried.body).toMatchObject({ success: false, code: 'RETRY', retryable: true });
+      expect(retried.body.scene_sync).toMatchObject({ outcome: 'failed', retryable: true });
+      expect(retried.body.message).toMatch(/try the export again/i);
+
+      // A material failure is not a refusal of its own: the existing
+      // authoritative checks establish this output is trustworthy, so the
+      // export is still queued. A warning never fails an export by itself.
+      spy.mockResolvedValue(materialFailure);
+      const allowed = await exportIt(ep);
+      expect(allowed.status).toBe(202);
+      expect(allowed.body.success).toBe(true);
+
+      // And a caller's test double that resolves undefined is not a failure.
+      spy.mockResolvedValue(undefined);
+      expect((await exportIt(ep)).status).toBe(202);
+
+      // None of the three changed a scene.
+      expect((await scenesOf(ep)).map((s) => Number(s.scene_number))).toEqual([1, 2, 3, 10, 11]);
+    });
+
+    it('a held scene does not block a valid export, and optional omissions are allowed', async () => {
+      const ep = await episode();
+      await sync(ep);
+      // Beat 1 loses its set (its scene stays, S1-A), beat 14 never had one:
+      // both are held, neither is a required scene the export is short of.
+      await run('UPDATE scene_plans SET scene_set_id = NULL WHERE episode_id = :ep AND beat_number = 1', { ep });
+      const out = await sync(ep);
+      expect(out.outcome).toBe('held');
+      expect(out.warnings.map((w) => [w.beat_number, w.code]))
+        .toEqual(expect.arrayContaining([[1, 'beat_no_location'], [14, 'beat_no_location']]));
+      const res = await exportIt(ep);
+      expect(res.status).toBe(202);
+      expect(res.body.success).toBe(true);
+      // The held beat's scene is still there, untouched.
+      expect((await scenesOf(ep)).map((s) => Number(s.scene_number))).toEqual([1, 2, 3, 10, 11]);
+    });
+
+    // ── S1-A gap 2 (tombstone matching) ──────────────────────────────────────
+    // classify's tombFor and the export's omitted-beats query both treat a
+    // tombstone as a beat's when EITHER its scene_plan_id matches OR its
+    // scene_number equals the beat number. Only the plan-id link is
+    // authoritative. These two tests pin down what each branch does today:
+    // the first is the authoritative link and is correct; the second is the
+    // number-only branch, and it is MEASURED to associate a tombstone with a
+    // beat it never belonged to. Narrowing it is a behaviour change with a
+    // measured blast radius (/root/writer8-evidence/s1a-export-gaps/), so it
+    // is reported for Evoni's ruling rather than changed here.
+    it('a historical tombstone of the beat itself (the authoritative plan-id link): the beat is held, the export is allowed', async () => {
+      const ep = await episode();
+      await sync(ep);
+      const before = await scenesOf(ep);
+      const two = before.find((s) => Number(s.scene_number) === 2);
+      // Deleted through the route, so the episode's remaining scenes are
+      // renumbered exactly as a real delete leaves them. No re-plan: the
+      // tombstone's plan row is still there, so the link is authoritative.
+      expect((await auth(request(app).delete(`/api/v1/scenes/${two.id}`))).status).toBe(200);
+      const [tomb] = await rows('SELECT scene_plan_id, scene_number FROM scenes WHERE id = :id', { id: two.id });
+      expect(tomb.scene_plan_id).toBe(await planId(ep, 2));
+      expect((await rows('SELECT id FROM scene_plans WHERE id = :id AND deleted_at IS NULL', { id: tomb.scene_plan_id }))).toHaveLength(1);
+
+      const out = await sync(ep);
+      expect(out.created).toBe(0);
+      expect(out.outcome).toBe('held');
+      expect(out.warnings.map((w) => [w.beat_number, w.code]))
+        .toEqual(expect.arrayContaining([[2, 'scene_removed_previously_ambiguous']]));
+      // The beat's scene is not recreated, and the export is allowed.
+      expect((await scenesOf(ep)).some((s) => s.scene_plan_id === tomb.scene_plan_id)).toBe(false);
+      expect((await exportIt(ep)).status).toBe(202);
+    });
+
+    it('MEASURED gap: after a re-plan a tombstone is matched by number alone, and holds a beat it never belonged to', async () => {
+      // Its own episode: five beats at the apartment with contiguous numbers,
+      // so the renumbering a delete does is easy to read off.
+      const ep = uuid();
+      await run(`INSERT INTO episodes (id, show_id, title, episode_number, status, created_at, updated_at)
+                 VALUES (:ep, :show, 'Gap 2 ep', :n, 'draft', NOW(), NOW())`,
+        { ep, show, n: Math.floor(Math.random() * 100000) + 500 });
+      for (const b of [1, 2, 3, 4, 5]) {
+        await run(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, scene_set_id, angle_label, sort_order, locked, ai_suggested, chosen_by_user, created_at, updated_at)
+                   VALUES (gen_random_uuid(), :ep, :b, :name, :setId, NULL, :b, false, true, false, NOW(), NOW())`,
+        { ep, b, name: `Beat ${b}`, setId: sets.apartment });
+      }
+      await sync(ep);
+      const owner = new Map((await rows('SELECT s.id, p.beat_number FROM scenes s JOIN scene_plans p ON p.id = s.scene_plan_id WHERE s.episode_id = :ep', { ep }))
+        .map((r) => [r.id, Number(r.beat_number)]));
+      // Two deletes through the route. Each one renumbers the survivors
+      // 1..n (sceneController.renumberLiveScenes), so the second scene
+      // removed no longer holds the number of the beat it belongs to.
+      const del = async (n) => {
+        const target = (await scenesOf(ep)).find((s) => Number(s.scene_number) === n);
+        expect((await auth(request(app).delete(`/api/v1/scenes/${target.id}`))).status).toBe(200);
+        return target.id;
+      };
+      await del(1);
+      const second = await del(4);
+      const [tomb] = await rows('SELECT scene_number FROM scenes WHERE id = :id', { id: second });
+      // The removed scene is beat 5's, and it is sitting on number 4.
+      expect(owner.get(second)).toBe(5);
+      expect(Number(tomb.scene_number)).toBe(4);
+
+      // A re-plan hard-deletes the unlocked, unchosen plan rows and writes new
+      // ones (scenePlannerService), so the tombstone's plan link dangles.
+      await run('DELETE FROM scene_plans WHERE episode_id = :ep AND locked = false AND chosen_by_user = false', { ep });
+      for (const b of [1, 2, 3, 4, 5]) {
+        await run(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, scene_set_id, angle_label, sort_order, locked, ai_suggested, chosen_by_user, created_at, updated_at)
+                   VALUES (gen_random_uuid(), :ep, :b, :name, :setId, NULL, :b, false, true, false, NOW(), NOW())`,
+        { ep, b, name: `Beat ${b} v2`, setId: sets.apartment });
+      }
+      const out = await sync(ep);
+      // What the number-only branch does today: beat 4 is reported as having
+      // had a scene removed, on the strength of a tombstone that was beat 5's;
+      // beat 5 is given a brand-new scene; and the export is allowed.
+      expect(out.warnings.map((w) => [w.beat_number, w.code]))
+        .toEqual(expect.arrayContaining([[4, 'scene_removed_previously_ambiguous']]));
+      expect(out.created).toBe(1);
+      expect(out.outcome).toBe('held');
+      expect((await exportIt(ep)).status).toBe(202);
+    });
+
     it('allows an export whose held beat was removed before: the beat is warned about, never recreated', async () => {
       const ep = await episode();
       await sync(ep);

@@ -303,9 +303,16 @@ const PRODUCTION_SCENES = `
     expect(again).toMatchObject({ created: 0, updated: 0, removed: 0, outcome: 'unresolved' });
     expect((await rows('SELECT * FROM scenes WHERE id = :older', { older }))[0]).toEqual(snap);
     expect((await live(ep)).map((s) => s.scene_number)).toEqual([1, 2, 3, 10, 11]);
-    // The quiet wrapper still swallows a real failure to null, and logs it.
+    // S1-A gap 1 (Evoni, 2026-11-25): the quiet wrapper still never throws and
+    // still logs, but a real failure is now reported instead of swallowed to a
+    // bare null — it says it failed, that nothing was written, and whether
+    // asking again could help. This one cannot: it is a material failure.
     const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await syncBeatScenesQuietly(db, 'not-a-uuid', 'the plan')).toBeNull();
+    const failure = await syncBeatScenesQuietly(db, 'not-a-uuid', 'the plan');
+    expect(failure).toMatchObject({
+      created: 0, updated: 0, removed: 0, held: 0, outcome: 'failed', retryable: false,
+    });
+    expect(failure.warnings).toEqual([{ beat_number: null, scope: 'episode', code: 'sync_failed_material' }]);
     expect(logged.mock.calls[0][0]).toBe('[BeatScenes] sync for the plan failed:');
   });
 });
