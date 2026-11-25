@@ -257,7 +257,7 @@ function calculateFinancials(event, wardrobeItems = null) {
  * beatScenesService makes one. Start's feed-moment generation, which does,
  * stays outside and after it.
  */
-async function planAndSyncUnderEpisodeLock(models, { episode, event, locations, where }) {
+async function planAndSyncUnderEpisodeLock(models, { episode, event, locations }) {
   const { inEpisodeFirstTransaction } = require('./eventPlaceSync');
   const { lockEpisodes } = require('../utils/episodeLocks');
   const { episodeFreeze, frozenWriteRefusal } = require('../utils/frozenEpisode');
@@ -446,7 +446,7 @@ async function resumeEpisodeSetup(models, episodeId) {
   let result; let sync;
   try {
     ({ result, sync } = await planAndSyncUnderEpisodeLock(models, {
-      episode, event: event || { show_id: episode.show_id }, locations, where: 'resume setup',
+      episode, event: event || { show_id: episode.show_id }, locations,
     }));
   } catch (unitErr) {
     const { isFrozenEpisodeError } = require('../utils/frozenEpisode');
@@ -1096,7 +1096,7 @@ Return ONLY JSON.` }],
   let scenePlanResult; let beatSceneSync;
   try {
     ({ result: scenePlanResult, sync: beatSceneSync } = await planAndSyncUnderEpisodeLock(models, {
-      episode, event, locations, where: 'Start Episode',
+      episode, event, locations,
     }));
   } catch (unitErr) {
     console.error('[EpisodeGenerator] Start plan+scenes unit failed; nothing of it was written:', unitErr.message);

@@ -228,35 +228,84 @@ const CANON = CANONICAL_BEATS.map((b) => b.number);
     expect(orphans).toEqual([]);
   });
 
-  it('a failure inside the unit rolls back the plan rows as well as the scenes', async () => {
-    // Beats 1-3 with scenes; beat 5 missing, so Resume will create it. A
-    // second connection holds one of this episode's scene rows, which the
-    // sync's own read locks — so the unit fails AFTER the plan row is written
-    // and must take it back with it.
+  it('a failure inside the unit rolls back the plan rows that were already written', async () => {
+    // Beats 1-3 with their scenes; the rest missing, so the unit writes plan
+    // rows for them FIRST and then runs the sync. A second connection holds
+    // one of this episode's scene rows, which the sync's own read locks, so
+    // the failure lands AFTER the plan-row writes — the only arrangement that
+    // can prove a rollback rather than a refusal before any write.
     const ep = await episode({ beats: [1, 2, 3], withScenes: true });
-    const plansBefore = await planCount(ep);
-    const scenesBefore = await sceneCount(ep);
-    const [scene] = await rows('SELECT id FROM scenes WHERE episode_id = :ep ORDER BY scene_number LIMIT 1', { ep });
+    const plansBefore = await rows(`SELECT beat_number, id, beat_name, scene_set_id, sort_order
+      FROM scene_plans WHERE episode_id = :ep ORDER BY beat_number`, { ep });
+    const scenesBefore = await rows(`SELECT id, scene_plan_id, scene_number, background_url
+      FROM scenes WHERE episode_id = :ep ORDER BY scene_number`, { ep });
+    expect(plansBefore.map((r) => Number(r.beat_number))).toEqual([1, 2, 3]);
+
     const { c } = await connect();
+    let resumed;
     try {
       await c.query('BEGIN');
-      await c.query('SELECT id FROM scenes WHERE id = $1 FOR UPDATE', [scene.id]);
+      await c.query('SELECT id FROM scenes WHERE id = $1 FOR UPDATE', [scenesBefore[0].id]);
 
       // inEpisodeFirstTransaction retries a lock conflict three times, each
-      // bounded by the 10s lock_timeout, then gives up. Nothing is committed.
-      await expect(resumeEpisodeSetup(models, ep)).resolves.toBeDefined();
+      // bounded by lockEpisodes' 10s lock_timeout, then gives up.
+      resumed = await resumeEpisodeSetup(models, ep);
 
       await c.query('ROLLBACK');
     } finally { await c.end(); }
 
-    // Whatever the outcome reported, no half-unit was left behind: the plan
-    // rows and the scenes moved together.
-    const plansAfter = await planCount(ep);
-    const scenesAfter = await sceneCount(ep);
-    const movedTogether = (plansAfter === plansBefore && scenesAfter === scenesBefore)
-      || (plansAfter > plansBefore && scenesAfter > scenesBefore);
-    expect(movedTogether).toBe(true);
+    // 1. the failure happened, and the service says so rather than presenting
+    //    a successful unit.
+    const step = resumed?.setup_status?.steps?.scene_plan;
+    expect(step).toBeDefined();
+    expect(step.status).toBe('failed');
+    expect(step.created).toBe(0);
+    expect(step.sync.outcome).toBe('failed');
+    expect(step.sync.warnings.map((w) => w.code)).toContain('sync_failed_retryable');
+    // every canonical beat is still reported missing: none of them landed
+    expect(step.missing).toEqual(CANON);
+
+    // 2 & 3. the transaction rolled back: the rows it wrote are gone, and the
+    //    rows that were already there are byte-identical — not merely equal in
+    //    number.
+    const plansAfter = await rows(`SELECT beat_number, id, beat_name, scene_set_id, sort_order
+      FROM scene_plans WHERE episode_id = :ep ORDER BY beat_number`, { ep });
+    const scenesAfter = await rows(`SELECT id, scene_plan_id, scene_number, background_url
+      FROM scenes WHERE episode_id = :ep ORDER BY scene_number`, { ep });
+    expect(plansAfter).toEqual(plansBefore);
+    expect(scenesAfter).toEqual(scenesBefore);
+    // and specifically: not one of the beats the unit tried to add survived
+    for (const n of CANON.filter((b) => ![1, 2, 3].includes(b))) {
+      expect(plansAfter.some((r) => Number(r.beat_number) === n)).toBe(false);
+    }
   }, 120000);
+
+  it('a swallowed per-beat INSERT failure cannot commit a partial unit', async () => {
+    // createScenePlanRows catches each beat's INSERT and carries on. Inside the
+    // unit's single transaction that cannot leave half a plan behind, because
+    // PostgreSQL aborts the whole transaction on a failed statement: every
+    // later statement is refused 25P02 and the COMMIT discards everything.
+    // This pins the database behaviour the atomicity rests on.
+    const ep = await episode({ beats: [], withScenes: false });
+    const { c } = await connect();
+    try {
+      await c.query('BEGIN');
+      await c.query(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, sort_order, locked, chosen_by_user, ai_suggested, created_at, updated_at)
+                     VALUES (gen_random_uuid(), $1, 1, 'good A', 1, false, false, true, NOW(), NOW())`, [ep]);
+      // the same beat again: idx_scene_plans_episode_beat refuses it
+      await expect(c.query(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, sort_order, locked, chosen_by_user, ai_suggested, created_at, updated_at)
+                     VALUES (gen_random_uuid(), $1, 1, 'dupe', 1, false, false, true, NOW(), NOW())`, [ep]))
+        .rejects.toMatchObject({ code: '23505' });
+      // swallowed, and the loop carries on — but the transaction is aborted
+      await expect(c.query(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, sort_order, locked, chosen_by_user, ai_suggested, created_at, updated_at)
+                     VALUES (gen_random_uuid(), $1, 2, 'good B', 2, false, false, true, NOW(), NOW())`, [ep]))
+        .rejects.toMatchObject({ code: '25P02' });
+      await c.query('COMMIT');
+    } finally { await c.end(); }
+
+    // nothing at all: not even the beat that inserted cleanly
+    expect(await rows('SELECT beat_number FROM scene_plans WHERE episode_id = :ep', { ep })).toEqual([]);
+  });
 
   // ── the direct path cannot be got round ──────────────────────────────────
 
