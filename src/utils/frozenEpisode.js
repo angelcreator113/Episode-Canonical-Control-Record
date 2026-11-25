@@ -198,13 +198,20 @@ async function episodeFreeze(sequelize, episodeId, { transaction } = {}) {
  * scene-set callers, and EPISODE_SNAPSHOT_FROZEN keeps its meaning for
  * deleting and relinking; neither is widened here.
  */
-function frozenWriteRefusal(episodeId, freeze, what = 'plan') {
+function frozenWriteRefusal(episodeId, freeze, what = 'plan', { acceptedCode = null } = {}) {
   const why = freeze.accepted && freeze.frozenAt
     ? `has been accepted and filmed (since ${day(freeze.frozenAt)})`
     : (freeze.accepted ? 'has been accepted' : `has been filmed (since ${day(freeze.frozenAt)})`);
+  // S1-B (Evoni, 2026-11-25, option 3): where a narrower contract already
+  // covers an accepted episode on this path, keep its code — the beat save
+  // has answered EPISODE_ACCEPTED since L11 and its callers are pinned on
+  // that. EPISODE_FROZEN is for a filmed-only refusal, and for the freeze-
+  // protected paths that had no accepted contract of their own. An episode
+  // that is both accepted and filmed answers as accepted.
+  const code = freeze.accepted && acceptedCode ? acceptedCode : 'EPISODE_FROZEN';
   return new FrozenEpisodeError(
     `This episode ${why}, so its ${what} is kept as it was. Nothing was changed.`,
-    'EPISODE_FROZEN',
+    code,
     { episode_id: episodeId, accepted: freeze.accepted, frozen_at: freeze.frozenAt });
 }
 

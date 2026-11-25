@@ -545,7 +545,9 @@ router.put('/:episodeId/plan/:beatNumber', requireAuth, authorize(['ADMIN']), as
         // a director's note, shot type, intent, transition or "chosen" went
         // through on an accepted episode.
         const freeze = await episodeFreeze(models.sequelize, episodeId, { transaction });
-        if (freeze.frozen) throw frozenWriteRefusal(episodeId, freeze, 'beat');
+        // Accepted keeps EPISODE_ACCEPTED, the code this save has always
+        // answered; filmed-only is EPISODE_FROZEN. Both refuse every field.
+        if (freeze.frozen) throw frozenWriteRefusal(episodeId, freeze, 'beat', { acceptedCode: 'EPISODE_ACCEPTED' });
         if (updates.scene_set_id) {
           if (!await holdLiveSet(models.sequelize, updates.scene_set_id, { transaction, nowait: true })) {
             throw new EpisodeLocationsError('That scene set no longer exists', 404, 'SCENE_SET_NOT_FOUND');
