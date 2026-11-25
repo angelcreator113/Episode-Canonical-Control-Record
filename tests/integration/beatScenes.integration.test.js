@@ -461,7 +461,10 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                  VALUES (:cut, :ep, 40, 'Cut scene', NOW(), NOW())`, { cut, ep });
       const asset = uuid(); const outfit = uuid();
       await run(`INSERT INTO assets (id, asset_type, created_at, updated_at) VALUES (:id, 'image', NOW(), NOW())`, { id: asset });
-      await run(`INSERT INTO wardrobe (id, name, clothing_category, created_at, updated_at) VALUES (:id, 'Cut look', 'top', NOW(), NOW())`, { id: outfit });
+      // show_id is set deliberately: wardrobeSlotCoverage counts a show's own
+      // rows AND show-less ones, so a global piece here would be inventory for
+      // every other show (readinessGates GATE-02 reads that endpoint).
+      await run(`INSERT INTO wardrobe (id, name, clothing_category, show_id, created_at, updated_at) VALUES (:id, 'Cut look', 'top', :show, NOW(), NOW())`, { id: outfit, show });
       await run(`INSERT INTO scene_assets (id, scene_id, asset_id, usage_type, created_at, updated_at)
                  VALUES (gen_random_uuid(), :cut, :asset, 'overlay', NOW(), NOW())`, { cut, asset });
       await run(`INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, scene_id, created_at, updated_at)
