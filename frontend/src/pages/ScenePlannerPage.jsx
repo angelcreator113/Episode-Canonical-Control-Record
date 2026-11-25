@@ -33,6 +33,119 @@ function LocationsStrip({ locations, showId, episodeId }) {
   );
 }
 
+// ─── WHAT THE LAST RE-PLAN CHANGED ────────────────────────────────────────────
+//
+// Gap 2 (Evoni, 2026-11-25): POST generate-plan answers with `plan_changes`,
+// which names the beats whose generated fields changed and says whether each
+// one carries saved work. It is INFORMATION, not a fault: the plan saved, the
+// scenes and the operator's own writing were kept, and nothing here asks for a
+// decision. So it follows the readiness line's register (L5, Q21: "flagged,
+// never blocking") and never role="alert" or an error colour.
+//
+// It is stored nowhere — the response is the only copy — so this notice lives
+// in the page's own state and is gone on a reload or a navigation. It says
+// "in this plan" rather than pretending to be a record.
+const CHANGE_LABELS = {
+  scene_set_id: 'Location changed',
+  operator_fields_kept: 'Your wording kept',
+};
+
+/** The entry for one beat, with the names resolved where they genuinely are. */
+function changeFor(report, beat) {
+  if (!report?.changes?.length || !beat) return null;
+  const n = Number(beat.beat_number);
+  const found = report.changes.find((c) => Number(c.beat_number) === n);
+  if (!found) return null;
+  const changed = Array.isArray(found.changed) ? found.changed : [];
+  // "Was showing" is the plan that was on screen when Generate was pressed —
+  // what she was looking at, not a stored history of the row. Null when the
+  // beat had no set, was not on screen, or its set cannot be named.
+  const was = report.wasShowing?.get(n) || null;
+  // "Now" comes from the read THIS generation made, captured when the notice
+  // was built — never from live plan state. So a later background refresh, or
+  // another writer's change, is never attributed to this generation; and when
+  // that read failed there is no "now" at all rather than a stale one.
+  const now = report.nowShowing ? (report.nowShowing.get(n) || null) : null;
+  return {
+    beat_number: n,
+    changed,
+    has_saved_work: Boolean(found.has_saved_work),
+    was,
+    now,
+    // Shown only when both names are known AND they differ: identical names
+    // are not a meaningful old-to-new transition, whatever the server reported.
+    comparable: Boolean(was && now && was !== now),
+    moved: changed.includes('scene_set_id'),
+  };
+}
+
+/** The tag beside "Chosen by you" and "Event look", in both views. */
+function ChangedBadges({ change }) {
+  if (!change?.changed.length) return null;
+  return change.changed.filter((f) => CHANGE_LABELS[f]).map((f) => (
+    <span
+      key={f}
+      className="scene-planner-card-tag changed"
+      data-testid={`beat-changed-${change.beat_number}`}
+      title={f === 'scene_set_id' && change.comparable ? `Was showing: ${change.was}` : undefined}
+    >
+      {CHANGE_LABELS[f]}
+    </span>
+  ));
+}
+
+function PlanChangesNotice({ report, plan, episodeId }) {
+  if (!report?.changes?.length) return null;
+  const byBeat = new Map(plan.map((b) => [Number(b.beat_number), b]));
+  const entries = report.changes
+    .map((c) => changeFor(report, byBeat.get(Number(c.beat_number)) || { beat_number: c.beat_number }))
+    .filter(Boolean)
+    .sort((a, b) => a.beat_number - b.beat_number);
+  if (!entries.length) return null;
+  const moved = entries.filter((e) => e.moved);
+  const kept = entries.filter((e) => e.changed.includes('operator_fields_kept'));
+  const withWork = entries.filter((e) => e.has_saved_work);
+  const list = (es) => es.map((e) => e.beat_number).join(', ');
+  return (
+    <div className="scene-planner-plan-changes" role="status" data-testid="planner-plan-changes">
+      <p className="scene-planner-plan-changes-head">
+        {moved.length > 0 && `Beat${moved.length === 1 ? '' : 's'} ${list(moved)} changed location in this plan. `}
+        {kept.length > 0 && `Beat${kept.length === 1 ? '' : 's'} ${list(kept)} kept your wording.`}
+      </p>
+      {/* The preservation claim is made ONLY where has_saved_work establishes
+          there is work to preserve. has_saved_work false means the server
+          found no live tied scene with an image and no director note, feed
+          moment or script lines — so there may be no saved scene at all, and
+          saying one was kept would assert something the contract does not. */}
+      {withWork.length > 0 && (
+        <p className="scene-planner-plan-changes-work" data-testid="planner-plan-changes-work">
+          Beat{withWork.length === 1 ? '' : 's'} {list(withWork)} {withWork.length === 1 ? 'has' : 'have'} saved
+          work, which was kept — worth checking it still fits.
+        </p>
+      )}
+      {/* The POST and the plan read that follows it are separate results. The
+          re-plan saved either way — that is what the 200 means — but without a
+          successful read there are no updated details to compare against, so
+          none are shown and the page says so. It never says the save failed. */}
+      {report.reread === false && (
+        <p className="scene-planner-plan-changes-stale" data-testid="planner-plan-changes-stale">
+          The new plan was saved. Its updated details couldn&apos;t be loaded, so what is shown
+          below may be out of date.
+        </p>
+      )}
+      <ul className="scene-planner-plan-changes-list">
+        {moved.map((e) => (
+          <li key={e.beat_number} data-testid={`planner-plan-change-${e.beat_number}`}>
+            Beat {e.beat_number}
+            {e.comparable ? ` — was showing ${e.was}, now ${e.now}` : ''}
+          </li>
+        ))}
+      </ul>
+      <Link to={scenesPath(episodeId)}>Check them on the Beat Plan →</Link>
+    </div>
+  );
+}
+
 // ─── BEAT CARD ────────────────────────────────────────────────────────────────
 
 // S9 (d) (Evoni, 2026-10-02; §8(hh)): "the Beat Plan page keeps
@@ -57,7 +170,7 @@ function Beat11Piece({ beat, piece }) {
   );
 }
 
-function BeatCard({ beat, index, episodeId, beat11 }) {
+function BeatCard({ beat, index, episodeId, beat11, change }) {
   return (
     <div className={`scene-planner-card ${beat.locked ? 'locked' : ''}`} data-testid={`beat-card-${beat.beat_number}`}>
       <div className="scene-planner-card-image">
@@ -83,6 +196,7 @@ function BeatCard({ beat, index, episodeId, beat11 }) {
           {beat.angle_label && <span className="scene-planner-card-tag angle">{beat.angle_label}</span>}
           {beat.shot_type && <span className="scene-planner-card-tag shot">{SHOT_LABELS[beat.shot_type]}</span>}
           {isDressed(beat) && <span className="scene-planner-card-tag dressed" data-testid={`beat-dressed-tag-${beat.beat_number}`}>Event look</span>}
+          <ChangedBadges change={change} />
         </div>
 
         {beat.emotional_intent && (
@@ -103,7 +217,7 @@ function BeatCard({ beat, index, episodeId, beat11 }) {
 
 // ─── BEAT ROW ─────────────────────────────────────────────────────────────────
 
-function BeatRow({ beat, index, episodeId, beat11 }) {
+function BeatRow({ beat, index, episodeId, beat11, change }) {
   return (
     <div className={`scene-planner-row ${beat.locked ? 'locked' : ''}`}>
       <div className="scene-planner-row-number">{index + 1}</div>
@@ -125,6 +239,7 @@ function BeatRow({ beat, index, episodeId, beat11 }) {
           {beat.chosen_by_user
             ? <ChosenBadge beat={beat} className="scene-planner-card-tag chosen" />
             : beat.ai_suggested && <span className="scene-planner-card-tag angle">AI</span>}
+          <ChangedBadges change={change} />
         </div>
       </div>
 
@@ -239,6 +354,22 @@ export default function ScenePlannerPage() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  // What the last re-plan changed (Gap 2). Its own state, so a background
+  // refresh (usePlanRefresh) re-reads the plan without erasing the notice.
+  const [planChanges, setPlanChanges] = useState(null);
+  // The newest generation wins, as the newest read does below: an older POST
+  // answer never shows its notice against a plan it did not produce.
+  const genSeq = useRef(0);
+  // A generation that SAVED and then could not re-read the plan. The banner
+  // below must not say "Nothing was changed" in that case: something was.
+  // Cleared by the next attempt and by any successful read.
+  const [savedNotLoaded, setSavedNotLoaded] = useState(false);
+  // The plan as the last SUCCESSFUL read left it, and a count of those reads.
+  // A generation compares the count across its own re-read to tell a read that
+  // worked from one that failed — the POST's 200 says nothing about the read.
+  const planRef = useRef([]);
+  const planReadOk = useRef(0);
+
   // The newest read of the brief and plan wins: an older answer or failure
   // never replaces a newer one.
   const loadSeq = useRef(0);
@@ -251,6 +382,10 @@ export default function ScenePlannerPage() {
       ]);
       if (seq === loadSeq.current) {
         setBrief(briefRes.data.data);
+        planRef.current = planRes.data.data || [];
+        planReadOk.current += 1;
+        // A read that worked: whatever could not be loaded before, can now.
+        setSavedNotLoaded(false);
         setPlan(planRes.data.data || []);
         setReadiness(planRes.data.readiness || null);
         setLoadFailed(false);
@@ -304,11 +439,44 @@ export default function ScenePlannerPage() {
   };
 
   const handleGenerate = async () => {
+    const seq = ++genSeq.current;
+    // Captured before the call: the plan that is on screen right now is the
+    // only honest source for "was showing". beatSetName gives null rather
+    // than a placeholder when a beat has no set or its set cannot be named,
+    // and an unresolved name is left out instead of invented.
+    const wasShowing = new Map(plan.map((b) => [Number(b.beat_number), beatSetName(b, null)]));
+    // A new attempt drops the previous notice at once, so nothing stale is on
+    // screen while this one runs, or afterwards if it fails. The same for the
+    // saved-but-not-loaded state: a POST that fails must not leave the page
+    // claiming a plan was saved.
+    setPlanChanges(null);
+    setSavedNotLoaded(false);
     setGenerating(true);
     try {
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/generate-plan`);
       showToast(`Scene plan generated — ${res.data.data.length} beats mapped`);
+      const okBefore = planReadOk.current;
       await fetchAll();
+      // Two separate results: the POST saved the plan (that is what its 200
+      // means) and the read that follows either worked or did not. Only a read
+      // that worked supplies the updated names; a failed one leaves `now`
+      // unknown rather than stale. A 409 (PLAN_OUTPUT_INVALID,
+      // PLAN_BEAT_UNAVAILABLE) never reaches here: it throws, nothing was
+      // written, and the error toast below is the whole answer.
+      if (seq === genSeq.current) {
+        const changes = Array.isArray(res.data?.plan_changes) ? res.data.plan_changes : [];
+        const reread = planReadOk.current > okBefore;
+        // Captured now, from this generation's own read, so a later refresh or
+        // another writer's change is never shown as part of this generation.
+        const nowShowing = reread
+          ? new Map(planRef.current.map((b) => [Number(b.beat_number), beatSetName(b, null)]))
+          : null;
+        setPlanChanges(changes.length ? { changes, wasShowing, nowShowing, reread } : null);
+        // The save is confirmed by the POST either way, so this is set whether
+        // or not any beat changed: the banner's wording depends on the save,
+        // not on the report.
+        if (!reread) setSavedNotLoaded(true);
+      }
     } catch (err) {
       showToast(adminOnlyMessage(err) || err.response?.data?.error || 'Generation failed', 'error');
     } finally {
@@ -341,6 +509,7 @@ export default function ScenePlannerPage() {
               {readiness.ready < readiness.total && <Link to={scenesPath(episodeId)}>Fix them on the Beat Plan →</Link>}
             </p>
           )}
+          <PlanChangesNotice report={planChanges} plan={plan} episodeId={episodeId} />
         </div>
 
         <div className="scene-planner-actions">
@@ -361,10 +530,21 @@ export default function ScenePlannerPage() {
       {!loading && loadFailed && (
         <div className="scene-planner-empty" role="alert" data-testid="beat-plan-load-failed">
           <p className="scene-planner-empty-title">{plan.length > 0 ? "Couldn't refresh the beat plan" : "Couldn't load the beat plan"}</p>
+          {/* Three cases, not two. An ordinary failed read changed nothing and
+              says so. But a generation that SAVED and then could not re-read
+              the plan did change something, so "Nothing was changed" would be
+              false — it says the plan was saved and the details could not be
+              loaded. A generation that FAILED never reaches here with
+              savedNotLoaded set, so the page never claims a save that did not
+              happen. */}
           <p className="scene-planner-empty-text">
-            {plan.length > 0
-              ? "The plan below is from the last successful load and may be out of date. Nothing was changed."
-              : "The brief and the plan didn't load. Nothing was changed."}
+            {savedNotLoaded
+              ? (plan.length > 0
+                ? "The new plan was saved, but its updated details couldn't be loaded. The plan below is from the last successful load and may be out of date."
+                : "The new plan was saved, but it couldn't be loaded.")
+              : (plan.length > 0
+                ? "The plan below is from the last successful load and may be out of date. Nothing was changed."
+                : "The brief and the plan didn't load. Nothing was changed.")}
           </p>
           <button type="button" className="scene-planner-btn primary" onClick={() => { setLoading(true); fetchAll(); }}>Retry</button>
         </div>
@@ -393,13 +573,15 @@ export default function ScenePlannerPage() {
         view === 'storyboard' ? (
           <div className="scene-planner-storyboard">
             {plan.map((beat, i) => (
-              <BeatCard key={beat.id || i} beat={beat} index={i} episodeId={episodeId} beat11={beat11} />
+              <BeatCard key={beat.id || i} beat={beat} index={i} episodeId={episodeId} beat11={beat11}
+                change={changeFor(planChanges, beat)} />
             ))}
           </div>
         ) : (
           <div className="scene-planner-list">
             {plan.map((beat, i) => (
-              <BeatRow key={beat.id || i} beat={beat} index={i} episodeId={episodeId} beat11={beat11} />
+              <BeatRow key={beat.id || i} beat={beat} index={i} episodeId={episodeId} beat11={beat11}
+                change={changeFor(planChanges, beat)} />
             ))}
           </div>
         )
