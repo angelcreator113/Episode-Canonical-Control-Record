@@ -302,11 +302,19 @@ describe('ScenePlannerPage: what the last re-plan changed (Gap 2)', () => {
     wireRereadFailure();
     await generate();
 
-    await screen.findByTestId('planner-plan-changes-stale');
+    const stale = await screen.findByTestId('planner-plan-changes-stale');
     // the stale plan is still rendered, with its old location
     expect(within(screen.getByTestId('beat-card-4')).getByText('Lala apartment')).toBeTruthy();
-    // and the page's own staleness presentation is there too
-    expect(screen.getByTestId('beat-plan-load-failed')).toBeTruthy();
+
+    // and the page's own banner says the SAME thing as the notice: the plan
+    // was saved, its details could not be loaded, and nothing claims the save
+    // failed or that nothing was changed.
+    const banner = screen.getByTestId('beat-plan-load-failed');
+    expect(banner.textContent).toContain('The new plan was saved');
+    expect(banner.textContent).toContain('updated details couldn\'t be loaded');
+    expect(banner.textContent).not.toContain('Nothing was changed');
+    expect(stale.textContent).toContain('The new plan was saved.');
+    expect(stale.textContent).toContain('couldn\'t be loaded');
   });
 
   test('a failed reread shows no previous-to-new comparison and no was-showing tooltip', async () => {

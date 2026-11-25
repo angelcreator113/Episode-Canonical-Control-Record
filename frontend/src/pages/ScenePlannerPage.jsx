@@ -360,6 +360,10 @@ export default function ScenePlannerPage() {
   // The newest generation wins, as the newest read does below: an older POST
   // answer never shows its notice against a plan it did not produce.
   const genSeq = useRef(0);
+  // A generation that SAVED and then could not re-read the plan. The banner
+  // below must not say "Nothing was changed" in that case: something was.
+  // Cleared by the next attempt and by any successful read.
+  const [savedNotLoaded, setSavedNotLoaded] = useState(false);
   // The plan as the last SUCCESSFUL read left it, and a count of those reads.
   // A generation compares the count across its own re-read to tell a read that
   // worked from one that failed — the POST's 200 says nothing about the read.
@@ -380,6 +384,8 @@ export default function ScenePlannerPage() {
         setBrief(briefRes.data.data);
         planRef.current = planRes.data.data || [];
         planReadOk.current += 1;
+        // A read that worked: whatever could not be loaded before, can now.
+        setSavedNotLoaded(false);
         setPlan(planRes.data.data || []);
         setReadiness(planRes.data.readiness || null);
         setLoadFailed(false);
@@ -440,8 +446,11 @@ export default function ScenePlannerPage() {
     // and an unresolved name is left out instead of invented.
     const wasShowing = new Map(plan.map((b) => [Number(b.beat_number), beatSetName(b, null)]));
     // A new attempt drops the previous notice at once, so nothing stale is on
-    // screen while this one runs, or afterwards if it fails.
+    // screen while this one runs, or afterwards if it fails. The same for the
+    // saved-but-not-loaded state: a POST that fails must not leave the page
+    // claiming a plan was saved.
     setPlanChanges(null);
+    setSavedNotLoaded(false);
     setGenerating(true);
     try {
       const res = await api.post(`/api/v1/episode-brief/${episodeId}/generate-plan`);
@@ -463,6 +472,10 @@ export default function ScenePlannerPage() {
           ? new Map(planRef.current.map((b) => [Number(b.beat_number), beatSetName(b, null)]))
           : null;
         setPlanChanges(changes.length ? { changes, wasShowing, nowShowing, reread } : null);
+        // The save is confirmed by the POST either way, so this is set whether
+        // or not any beat changed: the banner's wording depends on the save,
+        // not on the report.
+        if (!reread) setSavedNotLoaded(true);
       }
     } catch (err) {
       showToast(adminOnlyMessage(err) || err.response?.data?.error || 'Generation failed', 'error');
@@ -517,10 +530,21 @@ export default function ScenePlannerPage() {
       {!loading && loadFailed && (
         <div className="scene-planner-empty" role="alert" data-testid="beat-plan-load-failed">
           <p className="scene-planner-empty-title">{plan.length > 0 ? "Couldn't refresh the beat plan" : "Couldn't load the beat plan"}</p>
+          {/* Three cases, not two. An ordinary failed read changed nothing and
+              says so. But a generation that SAVED and then could not re-read
+              the plan did change something, so "Nothing was changed" would be
+              false — it says the plan was saved and the details could not be
+              loaded. A generation that FAILED never reaches here with
+              savedNotLoaded set, so the page never claims a save that did not
+              happen. */}
           <p className="scene-planner-empty-text">
-            {plan.length > 0
-              ? "The plan below is from the last successful load and may be out of date. Nothing was changed."
-              : "The brief and the plan didn't load. Nothing was changed."}
+            {savedNotLoaded
+              ? (plan.length > 0
+                ? "The new plan was saved, but its updated details couldn't be loaded. The plan below is from the last successful load and may be out of date."
+                : "The new plan was saved, but it couldn't be loaded.")
+              : (plan.length > 0
+                ? "The plan below is from the last successful load and may be out of date. Nothing was changed."
+                : "The brief and the plan didn't load. Nothing was changed.")}
           </p>
           <button type="button" className="scene-planner-btn primary" onClick={() => { setLoading(true); fetchAll(); }}>Retry</button>
         </div>
