@@ -337,16 +337,34 @@ async function createScenePlanRows(episode, event, models, locations = null) {
  * The scene-plan step's record for setup_status: complete when every
  * canonical beat exists (made now or before), partial when some are
  * missing, with the failures by beat and reason.
+ *
+ * S1-A (Decision 2, Evoni, 2026-11-25): the beats' scene rows are reported
+ * inside this same step as `sync` — no new step, no new table, no stored
+ * status model and no readiness service. Historical warnings alone never
+ * make the step, or setup_status.complete, false: `held` is not a failure.
+ * Required current-plan work that is demonstrably missing (`unresolved`) or
+ * that failed materially (`failed`) does keep this step from being called
+ * complete, so a committed Start is never described as complete when the
+ * work it needed did not happen — and never as rolled back either.
  */
-function scenePlanStep({ scenePlanRows, existingBeats = [], failedBeats = [] }) {
+function scenePlanStep({ scenePlanRows, existingBeats = [], failedBeats = [], sync = null }) {
   const have = new Set([...existingBeats, ...scenePlanRows.map((r) => r.beat_number)]);
   const missing = BEAT_TEMPLATES.map((b) => b.beat).filter((n) => !have.has(n));
+  const planStatus = missing.length === 0 ? 'complete' : (have.size === 0 ? 'failed' : 'partial');
+  const incomplete = sync && (sync.outcome === 'unresolved' || sync.outcome === 'failed');
   return {
-    status: missing.length === 0 ? 'complete' : (have.size === 0 ? 'failed' : 'partial'),
+    status: planStatus === 'complete' && incomplete ? 'partial' : planStatus,
     created: scenePlanRows.length,
     existing: existingBeats.length,
     missing,
     failed: failedBeats,
+    ...(sync ? {
+      sync: {
+        outcome: sync.outcome,
+        created: sync.created, updated: sync.updated, held: sync.held,
+        warnings: sync.warnings,
+      },
+    } : {}),
   };
 }
 
@@ -390,8 +408,13 @@ async function resumeEpisodeSetup(models, episodeId) {
   }
   const result = await createScenePlanRows(episode, event || { show_id: episode.show_id }, models, locations);
   // L12a: the beats made here get their scene rows now (the plan's read no longer makes them).
-  await require('./beatScenesService').syncBeatScenesQuietly(models.sequelize, episodeId, 'resume setup');
-  const steps = { ...(episode.setup_status?.steps || {}), scene_plan: scenePlanStep(result) };
+  // S1-A: its outcome is recorded inside the scene_plan step. Resume keeps
+  // its retry and partial-completion behaviour: a sync that could not finish
+  // leaves the step partial, so the next resume takes it on again.
+  const beatScenes = require('./beatScenesService');
+  const sync = await beatScenes.syncBeatScenesQuietly(models.sequelize, episodeId, 'resume setup')
+    || beatScenes.failedSyncOutcome();
+  const steps = { ...(episode.setup_status?.steps || {}), scene_plan: scenePlanStep({ ...result, sync }) };
   if (!steps.locations) steps.locations = { status: 'complete' };
   // A locations step that failed at Start (B3) is not saved again here: the
   // locations are set from the episode's Locations, and its beats in the
@@ -1017,9 +1040,14 @@ Return ONLY JSON.` }],
   const scenePlanResult = await createScenePlanRows(episode, event, models, locations);
   // L12a: each beat's scene row is made with the plan (the plan's read no
   // longer makes them). A failure is logged and never stops Start Episode.
-  await require('./beatScenesService').syncBeatScenesQuietly(models.sequelize, episode.id, 'Start Episode');
+  // S1-A: its outcome is recorded inside the scene_plan step, so a Start
+  // whose scene rows did not all land is not reported complete. The Start
+  // itself has committed and is never described as rolled back.
+  const beatScenesSvc = require('./beatScenesService');
+  const beatSceneSync = await beatScenesSvc.syncBeatScenesQuietly(models.sequelize, episode.id, 'Start Episode')
+    || beatScenesSvc.failedSyncOutcome();
   const { scenePlanRows } = scenePlanResult;
-  const setupSteps = { scene_plan: scenePlanStep(scenePlanResult), season_slot: seasonSlotStep };
+  const setupSteps = { scene_plan: scenePlanStep({ ...scenePlanResult, sync: beatSceneSync }), season_slot: seasonSlotStep };
 
   // ── 3b. The approved invitation is this episode's invitation overlay ──
   // P10 (Evoni, 2026-09-30; Task #2386): approved before Start, it is

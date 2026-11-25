@@ -87,6 +87,144 @@ describe('EpisodeScenesTab feed moment warning', () => {
     expect(screen.queryByText(/Could not check whether this episode's Pulse moments were saved/)).toBeNull();
   });
 
+  // S1-A (Evoni, 2026-11-25): the same surface carries what the scene
+  // synchronization held or could not resolve, following the
+  // feed_moment_missing precedent — the plan's answer reports it (the beat
+  // save's and generate-plan's answers carry the same scene_sync shape) and
+  // the tab names those beats. Nothing is stored for it.
+  describe('scene synchronization warnings (S1-A)', () => {
+    const REMOVED = 'A scene associated with this beat was removed previously. '
+      + 'Automatic synchronization will not recreate it. Review the beat if a scene is expected.';
+
+    test('names the beats whose scene was removed previously, in Evoni\'s words', async () => {
+      planResponse({ scene_sync: { outcome: 'held', warnings: [
+        { beat_number: 3, code: 'scene_removed_previously_ambiguous', text: REMOVED },
+        { beat_number: 7, code: 'scene_removed_previously_ambiguous', text: REMOVED },
+      ] } });
+
+      renderTab();
+
+      const alert = await screen.findByTestId('est-scene-removed-previously');
+      expect(alert.getAttribute('role')).toBe('alert');
+      expect(alert.textContent).toContain(REMOVED);
+      expect(alert.textContent).toContain('Beats 3 and 7.');
+      // It claims nothing about who removed the scene, or how.
+      expect(alert.textContent).not.toMatch(/manual|by hand|deleted by|operator removed/i);
+      // And nothing about the scene being required.
+      expect(alert.textContent).not.toMatch(/required|must be|needed for/i);
+    });
+
+    test('a single beat reads in the singular', async () => {
+      planResponse({ scene_sync: { outcome: 'held', warnings: [
+        { beat_number: 5, code: 'scene_removed_previously_ambiguous', text: REMOVED },
+      ] } });
+
+      renderTab();
+
+      expect((await screen.findByTestId('est-scene-removed-previously')).textContent).toContain('Beat 5.');
+    });
+
+    test('a removal with live production records reads as the stronger review warning', async () => {
+      planResponse({ scene_sync: { outcome: 'held', warnings: [
+        { beat_number: 4, code: 'scene_removed_previously_with_linked_work', text: REMOVED },
+      ] } });
+
+      renderTab();
+
+      const alert = await screen.findByTestId('est-scene-removed-previously');
+      expect(alert.textContent).toContain(REMOVED);
+      expect(alert.textContent).toContain('Production records are still linked to the removed scene for beat 4');
+      // Linked work is not a claim that the scene belongs in the episode.
+      expect(alert.textContent).not.toMatch(/required|restore it|recreate the scene/i);
+    });
+
+    test('a beat the sync could not resolve says the episode cannot be exported yet', async () => {
+      planResponse({ scene_sync: { outcome: 'unresolved', warnings: [
+        { beat_number: 3, code: 'scene_number_conflict', scene_number: 3 },
+        { beat_number: 9, code: 'required_scene_missing' },
+      ] } });
+
+      renderTab();
+
+      const alert = await screen.findByTestId('est-scene-unresolved');
+      expect(alert.getAttribute('role')).toBe('alert');
+      expect(alert.textContent).toContain('The scene for beats 3 and 9 could not be synchronized');
+      expect(alert.textContent).toContain('cannot be exported until they are resolved');
+      expect(screen.queryByTestId('est-scene-removed-previously')).toBeNull();
+    });
+
+    test('a retryable failure says to try again, and never that anything was removed', async () => {
+      planResponse({ scene_sync: { outcome: 'retryable', warnings: [
+        { beat_number: null, scope: 'episode', code: 'sync_failed_retryable' },
+      ] } });
+
+      renderTab();
+
+      const alert = await screen.findByTestId('est-scene-sync-failed');
+      expect(alert.textContent).toContain('Nothing was changed');
+      expect(alert.textContent).toMatch(/retry/i);
+    });
+
+    test('a material failure says the list may be incomplete, and that nothing was removed', async () => {
+      planResponse({ scene_sync: { outcome: 'failed', warnings: [
+        { beat_number: null, scope: 'episode', code: 'sync_failed_material' },
+      ] } });
+
+      renderTab();
+
+      expect((await screen.findByTestId('est-scene-sync-failed')).textContent)
+        .toContain('may be incomplete. Nothing was removed.');
+    });
+
+    test('a beat the readiness surface already covers is not repeated here', async () => {
+      // beat_no_location, beat_removed_set and beat_scene_set_incomplete are
+      // already on the status bar and in the issues list.
+      planResponse({ feed_moment_missing: [], scene_sync: { outcome: 'held', warnings: [
+        { beat_number: 1, code: 'beat_no_location' },
+        { beat_number: 2, code: 'beat_removed_set' },
+        { beat_number: 3, code: 'beat_scene_set_incomplete' },
+      ] } });
+
+      renderTab();
+
+      await waitFor(() => expect(screen.queryByText('Loading scenes...')).toBeNull());
+      expect(screen.queryByTestId('est-scene-removed-previously')).toBeNull();
+      expect(screen.queryByTestId('est-scene-unresolved')).toBeNull();
+      expect(screen.queryByTestId('est-scene-sync-failed')).toBeNull();
+    });
+
+    test('an episode-scope removal holds no beat up and names none', async () => {
+      planResponse({ scene_sync: { outcome: 'complete', warnings: [
+        { beat_number: null, scope: 'episode', scene_number: 40, code: 'scene_removed_previously_with_linked_work' },
+      ] } });
+
+      renderTab();
+
+      await waitFor(() => expect(screen.queryByText('Loading scenes...')).toBeNull());
+      expect(screen.queryByTestId('est-scene-removed-previously')).toBeNull();
+      expect(screen.queryByTestId('est-scene-unresolved')).toBeNull();
+    });
+
+    test('says nothing at all when the synchronization is complete', async () => {
+      planResponse({ feed_moment_missing: [], scene_sync: { outcome: 'complete', warnings: [] } });
+
+      renderTab();
+
+      await waitFor(() => expect(screen.queryByText('Loading scenes...')).toBeNull());
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    test('a plan with no scene_sync at all shows no synchronization warning', async () => {
+      planResponse({ feed_moment_missing: [] });
+
+      renderTab();
+
+      await waitFor(() => expect(screen.queryByText('Loading scenes...')).toBeNull());
+      expect(screen.queryByTestId('est-scene-removed-previously')).toBeNull();
+      expect(screen.queryByTestId('est-scene-sync-failed')).toBeNull();
+    });
+  });
+
   describe('Retry Pulse moments (Task #2220)', () => {
     // The plan reports `before` until the retry has run, then `after`.
     const planSequence = (before, after) => {

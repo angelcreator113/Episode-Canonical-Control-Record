@@ -135,7 +135,7 @@ const PRODUCTION_SCENES = `
 
   it('creates one scene per beat with a set: plan link, beat number, set, angle, background, 5s, main, draft; a beat with no set has none', async () => {
     const ep = await episode();
-    expect(await syncBeatScenes(db, ep)).toEqual({ created: 5, updated: 0, removed: 0 });
+    expect(await syncBeatScenes(db, ep)).toMatchObject({ created: 5, updated: 0, removed: 0, outcome: 'held' });
     const scenes = await live(ep);
     expect(scenes.map((s) => [s.scene_number, s.scene_set_id, s.scene_angle_id, s.background_url])).toEqual([
       [1, sets.apartment, null, 'https://x/apartment.jpg'],
@@ -157,7 +157,7 @@ const PRODUCTION_SCENES = `
     const ep = await episode();
     await syncBeatScenes(db, ep);
     const first = await live(ep);
-    expect(await syncBeatScenes(db, ep)).toEqual({ created: 0, updated: 0, removed: 0 });
+    expect(await syncBeatScenes(db, ep)).toMatchObject({ created: 0, updated: 0, removed: 0 });
     const again = await live(ep);
     expect(again.map((s) => [s.id, String(s.updated_at)])).toEqual(first.map((s) => [s.id, String(s.updated_at)]));
 
@@ -168,40 +168,81 @@ const PRODUCTION_SCENES = `
     // Whatever the race, no beat has two live scenes; a sync that lost the race on the
     // scene-number index fails (it is logged by the readers' quiet sync) and the next read completes.
     for (const r of both) if (r.status === 'rejected') expect(r.reason.original.code).toBe('23505');
-    expect(await syncBeatScenes(db, other)).toEqual({ created: 0, updated: 0, removed: 0 });
+    expect(await syncBeatScenes(db, other)).toMatchObject({ created: 0, updated: 0, removed: 0 });
   });
 
-  it("keeps the Timeline's edits on a beat's scene; a beat's change updates only its set, angle, background and number", async () => {
+  // S1-A (Evoni, 2026-11-25): the background is the one column of these four
+  // the sync no longer overwrites. On an UPDATE it is assigned only while
+  // the stored background_url IS NULL, because Scene Studio's editing is
+  // authoritative; the set, the angle and the plan link still follow the
+  // beat, and the scene number is never written onto an existing row at all.
+  it("keeps the Timeline's edits on a beat's scene; a beat's change updates its set, angle and link, and never its stored background or number", async () => {
     const ep = await episode();
     await syncBeatScenes(db, ep);
     const [one] = await live(ep);
     await run(`UPDATE scenes SET duration_seconds = 9, title = 'Morning', characters = '[{"id":"lala"}]', ui_elements = '[{"id":"phone"}]',
                dialogue_clips = '[{"id":"c1"}]', production_status = 'in_progress', description = 'kept' WHERE id = :id`, { id: one.id });
     await run(`UPDATE scene_plans SET scene_set_id = :cafe WHERE id = :p`, { cafe: sets.cafe, p: one.scene_plan_id });
-    expect(await syncBeatScenes(db, ep)).toEqual({ created: 0, updated: 1, removed: 0 });
+    expect(await syncBeatScenes(db, ep)).toMatchObject({ created: 0, updated: 1, removed: 0 });
     const [after] = await live(ep);
-    expect(after).toMatchObject({ id: one.id, scene_set_id: sets.cafe, background_url: 'https://x/cafe.jpg', scene_number: 1,
+    // The stored background stays the apartment's: the move to the cafe set
+    // does not reach into a background that is already set.
+    expect(after).toMatchObject({ id: one.id, scene_set_id: sets.cafe, background_url: 'https://x/apartment.jpg', scene_number: 1,
       duration_seconds: 9, title: 'Morning', characters: [{ id: 'lala' }], ui_elements: [{ id: 'phone' }], dialogue_clips: [{ id: 'c1' }],
       production_status: 'in_progress', description: 'kept' });
+
+    // Cleared by hand, the next sync does fill it in from the beat's set.
+    await run('UPDATE scenes SET background_url = NULL WHERE id = :id', { id: one.id });
+    expect(await syncBeatScenes(db, ep)).toMatchObject({ created: 0, updated: 1, removed: 0 });
+    expect((await live(ep))[0]).toMatchObject({ id: one.id, background_url: 'https://x/cafe.jpg', scene_number: 1 });
+
+    // An operator's own background is then never replaced again.
+    await run(`UPDATE scenes SET background_url = 'https://x/studio-edit.png' WHERE id = :id`, { id: one.id });
+    await run(`UPDATE scene_plans SET scene_set_id = :apt WHERE id = :p`, { apt: sets.apartment, p: one.scene_plan_id });
+    await syncBeatScenes(db, ep);
+    expect((await live(ep))[0]).toMatchObject({ id: one.id, scene_set_id: sets.apartment, background_url: 'https://x/studio-edit.png' });
   });
 
-  it("soft-deletes a beat's scene when its set is cleared or the beat is gone; a set given again makes a new scene", async () => {
+  // S1-A (Evoni, 2026-11-25): the sync takes nothing away. The guarantee this
+  // case protects is now the opposite one and a stronger one: a beat that
+  // loses its set, and a beat that is gone, both keep their scene, with its
+  // id, its edits and its child rows; and when the beat comes back the SAME
+  // row serves it again, so nothing that hung off the old id is orphaned.
+  // (Before the repair the sync soft-deleted both and then inserted a new
+  // row with a new id — `back.id).not.toBe(three.id)` — which is exactly the
+  // identity loss this case now forbids.)
+  it("keeps a beat's scene when its set is cleared or the beat is gone, and the same row serves the beat again", async () => {
     const ep = await episode();
     await syncBeatScenes(db, ep);
     const before = await live(ep);
     const three = before.find((s) => s.scene_number === 3);
     const eleven = before.find((s) => s.scene_number === 11);
+    await run(`UPDATE scenes SET duration_seconds = 8, title = 'Kept three' WHERE id = :id`, { id: three.id });
     await run('UPDATE scene_plans SET scene_set_id = NULL WHERE id = :p', { p: three.scene_plan_id });
     await run('UPDATE scene_plans SET deleted_at = NOW() WHERE id = :p', { p: eleven.scene_plan_id });
-    expect(await syncBeatScenes(db, ep)).toEqual({ created: 0, updated: 0, removed: 2 });
-    expect((await live(ep)).map((s) => s.scene_number)).toEqual([1, 2, 10]);
-    const gone = await rows('SELECT id, deleted_at FROM scenes WHERE id IN (:ids)', { ids: [three.id, eleven.id] });
-    expect(gone.every((s) => s.deleted_at)).toBe(true); // soft, not removed
 
+    const held = await syncBeatScenes(db, ep);
+    expect(held).toMatchObject({ created: 0, updated: 0, removed: 0, outcome: 'held' });
+    // Nothing was removed: every scene is still live, with its own id.
+    expect((await live(ep)).map((s) => s.scene_number)).toEqual([1, 2, 3, 10, 11]);
+    const kept = await rows('SELECT id, deleted_at, scene_plan_id, duration_seconds, title FROM scenes WHERE id IN (:ids)',
+      { ids: [three.id, eleven.id] });
+    expect(kept.every((s) => s.deleted_at === null)).toBe(true);
+    // The dangling link is preserved, so the orphan adoption can still find it.
+    expect(kept.find((s) => s.id === eleven.id).scene_plan_id).toBe(eleven.scene_plan_id);
+    expect(kept.find((s) => s.id === three.id)).toMatchObject({ duration_seconds: 8, title: 'Kept three' });
+    // The beat with no set is reported, not silently dropped.
+    expect(held.warnings.map((w) => [w.beat_number, w.code])).toEqual(expect.arrayContaining([[3, 'beat_no_location']]));
+
+    // The set given again: the SAME row serves beat 3, so nothing that hung
+    // off its id is orphaned, and its Timeline edits are still there.
     await run('UPDATE scene_plans SET scene_set_id = :apt WHERE id = :p', { apt: sets.apartment, p: three.scene_plan_id });
-    expect(await syncBeatScenes(db, ep)).toEqual({ created: 1, updated: 0, removed: 0 });
+    // Nothing needs writing: the row the beat had is already what the beat
+    // says, down to its background, so the sync writes nothing at all.
+    expect(await syncBeatScenes(db, ep)).toMatchObject({ created: 0, updated: 0, removed: 0, outcome: 'held' });
     const back = (await live(ep)).find((s) => s.scene_number === 3);
-    expect(back.id).not.toBe(three.id); // the soft-deleted row stays deleted; the partial indexes allow the new one
+    expect(back.id).toBe(three.id);
+    expect(back).toMatchObject({ scene_set_id: sets.apartment, duration_seconds: 8, title: 'Kept three' });
   });
 
   it('a re-plan moves each tied scene to its beat\'s new plan row, so the scene and its edits survive', async () => {
@@ -213,7 +254,7 @@ const PRODUCTION_SCENES = `
     await run('DELETE FROM scene_plans WHERE id = :p', { p: two.scene_plan_id });
     await run(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, scene_set_id, angle_label, sort_order, locked, ai_suggested, created_at, updated_at)
                VALUES (gen_random_uuid(), :ep, 2, 'Beat 2', :apt, 'VANITY', 2, false, true, NOW(), NOW())`, { ep, apt: sets.apartment });
-    expect(await syncBeatScenes(db, ep)).toEqual({ created: 0, updated: 1, removed: 0 });
+    expect(await syncBeatScenes(db, ep)).toMatchObject({ created: 0, updated: 1, removed: 0 });
     const moved = (await live(ep)).find((s) => s.scene_number === 2);
     expect(moved).toMatchObject({ id: two.id, scene_plan_id: await planId(ep, 2), duration_seconds: 12 });
   });
@@ -231,23 +272,40 @@ const PRODUCTION_SCENES = `
     expect((await live(ep)).map((s) => s.scene_number)).toEqual([1, 2, 3, 10, 11, 50]);
   });
 
-  it('an older scene holding a beat\'s number: the sync stops at that beat (23505), changes no existing scene, and the quiet sync logs it', async () => {
+  // S1-A (Evoni, 2026-11-25): the guarantee this case protects is that the
+  // older scene is never touched and that the collision never costs the
+  // episode its other beats. Before the repair the sync had no transaction,
+  // so it raised 23505 at beat 3 and left beats 1-2 committed and beats
+  // 10-11 absent — a truncated episode that export then shipped with a 200.
+  // Now the number conflict is seen before anything is written, the beat is
+  // reported instead, and every other beat still gets its scene in one
+  // transaction. No SQLSTATE and no index name is asserted here, because
+  // neither is raised any more; the two indexed shapes and the shape without
+  // the index now behave identically.
+  it('an older scene holding a beat\'s number: that beat is reported, no existing scene changes, and every other beat still gets its scene', async () => {
     const ep = await episode();
     const older = crypto.randomUUID();
     await run(`INSERT INTO scenes (id, episode_id, scene_number, title, duration_seconds) VALUES (:older, :ep, 3, 'Old scene three', 7)`, { older, ep });
     const [snap] = await rows('SELECT * FROM scenes WHERE id = :older', { older });
 
-    const err = await syncBeatScenes(db, ep).catch((e) => e);
-    expect(err.original.code).toBe('23505');
-    expect(err.original.constraint).toMatch(/episode_id_scene_number/);
-    // Beats before the collision got their scenes; beat 3 and the beats after it did not (no transaction: a partial sync).
-    expect((await live(ep)).map((s) => [s.scene_number, s.scene_plan_id ? 'beat' : 'older'])).toEqual([[1, 'beat'], [2, 'beat'], [3, 'older']]);
+    const out = await syncBeatScenes(db, ep);
+    expect(out).toMatchObject({ created: 4, updated: 0, removed: 0, outcome: 'unresolved' });
+    expect(out.warnings.map((w) => [w.beat_number, w.code])).toEqual(expect.arrayContaining([[3, 'scene_number_conflict']]));
+    // Nothing partial: the beats before AND after the collision all have
+    // their scenes, and the older scene keeps number 3.
+    expect((await live(ep)).map((s) => [s.scene_number, s.scene_plan_id ? 'beat' : 'older']))
+      .toEqual([[1, 'beat'], [2, 'beat'], [3, 'older'], [10, 'beat'], [11, 'beat']]);
     expect((await rows('SELECT * FROM scenes WHERE id = :older', { older }))[0]).toEqual(snap);
 
-    const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await syncBeatScenesQuietly(db, ep, 'the plan')).toBeNull();
-    expect(logged.mock.calls[0][0]).toBe('[BeatScenes] sync for the plan failed:');
+    // Syncing again is idempotent and still reports the same beat; the quiet
+    // wrapper has nothing to swallow, so it returns the outcome, not null.
+    const again = await syncBeatScenesQuietly(db, ep, 'the plan');
+    expect(again).toMatchObject({ created: 0, updated: 0, removed: 0, outcome: 'unresolved' });
     expect((await rows('SELECT * FROM scenes WHERE id = :older', { older }))[0]).toEqual(snap);
-    expect((await live(ep)).map((s) => s.scene_number)).toEqual([1, 2, 3]);
+    expect((await live(ep)).map((s) => s.scene_number)).toEqual([1, 2, 3, 10, 11]);
+    // The quiet wrapper still swallows a real failure to null, and logs it.
+    const logged = jest.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await syncBeatScenesQuietly(db, 'not-a-uuid', 'the plan')).toBeNull();
+    expect(logged.mock.calls[0][0]).toBe('[BeatScenes] sync for the plan failed:');
   });
 });

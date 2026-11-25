@@ -192,9 +192,11 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const body = await plan(ep);
     expect(body.data.find((b) => b.beat_number === 2).scene_id).toBe(scenes[1].id);
 
-    // A beat's save moves its scene, again with no read.
+    // A beat's save moves its scene, again with no read. S1-A: the set and the
+    // link follow the beat; the background it already had is left alone
+    // (Scene Studio is authoritative), and the scene keeps its id.
     expect((await auth(request(app).put(`/api/v1/episode-brief/${ep}/plan/1`)).send({ scene_set_id: sets.cafe, chosen: true })).status).toBe(200);
-    expect((await scenesOf(ep))[0]).toMatchObject({ id: scenes[0].id, scene_set_id: sets.cafe, background_url: 'https://x/cafe.jpg' });
+    expect((await scenesOf(ep))[0]).toMatchObject({ id: scenes[0].id, scene_set_id: sets.cafe, background_url: 'https://x/apartment.jpg' });
     await run('DELETE FROM episode_briefs WHERE episode_id = :ep', { ep });
   });
 
@@ -268,8 +270,14 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const put = await auth(request(app).put(`/api/v1/episode-brief/${ep}/plan/1`)).send({ scene_set_id: sets.cafe, chosen: true });
     expect(put.status).toBe(200);
     const [after] = await scenesOf(ep);
-    expect(after).toMatchObject({ id: s1.id, scene_set_id: sets.cafe, background_url: 'https://x/cafe.jpg', characters: [{ id: 'lala' }] });
+    // S1-A: the set and the link move; the stored background does not (the
+    // apartment's image was already there, and only Scene Studio replaces it).
+    expect(after).toMatchObject({ id: s1.id, scene_set_id: sets.cafe, background_url: 'https://x/apartment.jpg', characters: [{ id: 'lala' }] });
     expect(Number(after.duration_seconds)).toBe(9);
+    // Cleared by hand, the next save does fill it in from the beat's set.
+    await run('UPDATE scenes SET background_url = NULL WHERE id = :id', { id: s1.id });
+    expect((await auth(request(app).put(`/api/v1/episode-brief/${ep}/plan/1`)).send({ scene_set_id: sets.cafe, chosen: true })).status).toBe(200);
+    expect((await scenesOf(ep))[0]).toMatchObject({ id: s1.id, background_url: 'https://x/cafe.jpg' });
   });
 
   it("the Timeline's save never removes a beat's scene, and an older scene stays untied", async () => {
@@ -286,16 +294,70 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect((await rows('SELECT scene_plan_id FROM scenes WHERE id = :older', { older }))[0].scene_plan_id).toBeNull();
   });
 
-  it('the Timeline (GET /episodes/:id/scenes) loads the beats\' scenes, and a finished image reaches its scene there', async () => {
+  // S1-A (Evoni, 2026-11-25): GET /episodes/:id/scenes is a read and writes
+  // nothing. It used to run the sync as middleware, which is how a read came
+  // to soft-delete and recreate rows and lose their identity and child rows.
+  // This test therefore makes the rows with the sync itself, exactly as Start
+  // Episode, generate-plan and a beat's save do, and then checks that the
+  // read lists them, writes nothing, and leaves every stored background as it
+  // is — while the Scenes tab's beat card still shows the newest image,
+  // because the beat card derives it at read time (planLocationsService).
+  it('the Timeline (GET /episodes/:id/scenes) loads the beats\' scenes, writes nothing, and keeps every stored background', async () => {
     const ep = await episode();
-    let res = await auth(request(app).get(`/api/v1/episodes/${ep}/scenes`));
+    // Before any sync the read makes nothing: it is a read.
+    const empty = await statementsOf(() => auth(request(app).get(`/api/v1/episodes/${ep}/scenes`)));
+    expect(empty.res.status).toBe(200);
+    expect(empty.records.length).toBeGreaterThan(0);
+    expect(writesIn(empty.records).map((r) => r.sql || r.kind)).toEqual([]);
+    expect(await scenesOf(ep)).toEqual([]);
+
+    await sync(ep);
+    const res = await auth(request(app).get(`/api/v1/episodes/${ep}/scenes`));
     expect(res.status).toBe(200);
     const list = res.body.data || res.body.scenes || [];
     expect(list.map((s) => s.scene_number)).toEqual([1, 2, 3, 10, 11]);
+    // The entrance angle has no image yet, so beat 10's background is empty —
+    // the NULL case this test has always guaranteed.
+    expect(list.find((s) => s.scene_number === 10).background_url).toBeNull();
+    const before = await scenesOf(ep);
 
     await run(`UPDATE scene_angles SET still_image_url = 'https://x/doorway.jpg', generation_status = 'complete' WHERE id = :d`, { d: sets.doorway });
-    res = await auth(request(app).get(`/api/v1/episodes/${ep}/scenes`));
-    expect((res.body.data || res.body.scenes).find((s) => s.scene_number === 10).background_url).toBe('https://x/doorway.jpg');
+    // The read does not write the finished image onto the row, and runs no
+    // write of any kind, for a viewer, an editor or an admin.
+    for (const groups of [['viewer'], ['USER', 'EDITOR'], ['ADMIN']]) {
+      const token2 = TokenService.generateTokenPair({ id: `scenes-${groups.join('-')}`, email: 'scenes@beatscenes.dev', name: 'Reader', groups, role: groups[0] }).accessToken;
+      const seen = await statementsOf(() => request(app).get(`/api/v1/episodes/${ep}/scenes`).set('Authorization', `Bearer ${token2}`));
+      expect([groups, seen.res.status]).toEqual([groups, 200]);
+      expect(seen.records.length).toBeGreaterThan(0);
+      expect(writesIn(seen.records).map((r) => r.sql || r.kind)).toEqual([]);
+    }
+    expect(await scenesOf(ep)).toEqual(before);
+
+    // The beat card shows the newest derived image all the same: the plan's
+    // read resolves it from the angle, without writing it anywhere.
+    const body = await plan(ep);
+    const beat10 = body.data.find((b) => b.beat_number === 10);
+    expect(JSON.stringify(beat10.location)).toContain('https://x/doorway.jpg');
+    expect(beat10.scene_id).toBe(before.find((s) => Number(s.scene_number) === 10).id);
+
+    // The sync is what moves it onto the row, and it only does so while the
+    // stored background is empty: a non-null fallback and an operator's own
+    // background are both kept, and no scene changes its id.
+    await sync(ep);
+    const filled = await scenesOf(ep);
+    expect(filled.find((s) => Number(s.scene_number) === 10).background_url).toBe('https://x/doorway.jpg');
+    expect(filled.map((s) => s.id)).toEqual(before.map((s) => s.id));
+    // A non-null fallback (the set's base image on beat 1) survives a change
+    // of angle image, and an operator's own background survives everything.
+    await run(`UPDATE scenes SET background_url = 'https://x/studio-edit.png' WHERE id = :id`, { id: before[0].id });
+    await run(`UPDATE scene_angles SET still_image_url = 'https://x/doorway-v2.jpg' WHERE id = :d`, { d: sets.doorway });
+    await sync(ep);
+    const kept = await scenesOf(ep);
+    expect(kept.find((s) => Number(s.scene_number) === 1).background_url).toBe('https://x/studio-edit.png');
+    expect(kept.find((s) => Number(s.scene_number) === 3).background_url).toBe('https://x/apartment.jpg');
+    expect(kept.find((s) => Number(s.scene_number) === 10).background_url).toBe('https://x/doorway.jpg');
+    expect(kept.map((s) => s.id)).toEqual(before.map((s) => s.id));
+
     await run(`UPDATE scene_angles SET still_image_url = NULL, generation_status = 'pending' WHERE id = :d`, { d: sets.doorway });
   });
 
@@ -329,7 +391,7 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     await run('DELETE FROM scene_set_look_angles WHERE look_id = :look AND scene_angle_id = :door', { look, door: sets.doorway });
   });
 
-  it("a re-plan keeps each beat's scene and its Timeline edits; a beat losing its set loses its scene", async () => {
+  it("a re-plan keeps each beat's scene and its Timeline edits; a beat losing its set keeps its scene too", async () => {
     const ep = await episode();
     await sync(ep);
     const before = await scenesOf(ep);
@@ -348,9 +410,90 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(two.scene_plan_id).toBe(await planId(ep, 2));
     expect(Number(two.duration_seconds)).toBe(12);
 
+    // S1-A (Evoni, 2026-11-25): a beat that loses its set no longer loses its
+    // scene. Nothing is soft-deleted, the scene keeps its id, its edits and
+    // its dangling link, and the beat is reported instead — the save says so
+    // in scene_sync, and says nothing about anything having been rolled back.
     const one = after.find((s) => s.scene_number === 1);
-    expect((await auth(request(app).put(`/api/v1/episode-brief/${ep}/plan/1`)).send({ scene_set_id: null })).status).toBe(200);
-    expect((await scenesOf(ep)).find((s) => s.scene_number === 1)).toBeUndefined();
-    expect((await rows('SELECT deleted_at FROM scenes WHERE id = :id', { id: one.id }))[0].deleted_at).not.toBeNull();
+    const cleared = await auth(request(app).put(`/api/v1/episode-brief/${ep}/plan/1`)).send({ scene_set_id: null });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.scene_sync.outcome).toBe('held');
+    expect(cleared.body.scene_sync.warnings.map((w) => [w.beat_number, w.code]))
+      .toEqual(expect.arrayContaining([[1, 'beat_no_location']]));
+    const stillThere = (await scenesOf(ep)).find((s) => Number(s.scene_number) === 1);
+    expect(stillThere.id).toBe(one.id);
+    expect(stillThere.scene_plan_id).toBe(one.scene_plan_id);
+    expect((await rows('SELECT deleted_at FROM scenes WHERE id = :id', { id: one.id }))[0].deleted_at).toBeNull();
+  });
+
+  // ── S1-A: the export's integrity decision (Decision 3) ────────────────────
+  // The non-empty check is no longer the only one. A beat of the current plan
+  // with a live set, no live scene and no previously removed scene of its own
+  // is content the intended export is short of, so the export is refused
+  // rather than shipped truncated. Held scenes, historical removals and the
+  // live production rows still pointing at them never block it.
+  describe('export (Decision 3)', () => {
+    const exportIt = (ep) => auth(request(app).post(`/api/v1/episodes/${ep}/export`)).send({ platform: 'youtube', quality: '720p', format: 'mp4' });
+
+    it('refuses when a required current-plan beat has no scene, and says which beats', async () => {
+      const ep = await episode();
+      // An older untied scene holds beat 3's number, so beat 3 cannot get one.
+      await run(`INSERT INTO scenes (id, episode_id, scene_number, title, created_at, updated_at)
+                 VALUES (gen_random_uuid(), :ep, 3, 'Older three', NOW(), NOW())`, { ep });
+      const out = await sync(ep);
+      expect(out.outcome).toBe('unresolved');
+      expect(out.warnings.map((w) => [w.beat_number, w.code])).toEqual(expect.arrayContaining([[3, 'scene_number_conflict']]));
+      const res = await exportIt(ep);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('EXPORT_SCENES_UNVERIFIED');
+      expect(res.body.beats).toEqual([3]);
+      // Every other beat still has its scene: nothing partial was committed.
+      expect((await scenesOf(ep)).map((s) => Number(s.scene_number))).toEqual([1, 2, 3, 10, 11]);
+    });
+
+    it('allows a valid export that carries a historical warning, and one with live production rows on the removed scene', async () => {
+      const ep = await episode();
+      await sync(ep);
+      // A scene removed earlier that no current beat needs, with live
+      // scene_assets and episode_wardrobe rows still pointing at it.
+      const cut = uuid();
+      await run(`INSERT INTO scenes (id, episode_id, scene_number, title, created_at, updated_at)
+                 VALUES (:cut, :ep, 40, 'Cut scene', NOW(), NOW())`, { cut, ep });
+      const asset = uuid(); const outfit = uuid();
+      await run(`INSERT INTO assets (id, asset_type, created_at, updated_at) VALUES (:id, 'image', NOW(), NOW())`, { id: asset });
+      await run(`INSERT INTO wardrobe (id, name, clothing_category, created_at, updated_at) VALUES (:id, 'Cut look', 'top', NOW(), NOW())`, { id: outfit });
+      await run(`INSERT INTO scene_assets (id, scene_id, asset_id, usage_type, created_at, updated_at)
+                 VALUES (gen_random_uuid(), :cut, :asset, 'overlay', NOW(), NOW())`, { cut, asset });
+      await run(`INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, scene_id, created_at, updated_at)
+                 VALUES (gen_random_uuid(), :ep, :outfit, :cut, NOW(), NOW())`, { ep, outfit, cut });
+      await run('UPDATE scenes SET deleted_at = NOW() WHERE id = :cut', { cut });
+
+      const out = await sync(ep);
+      // The removed scene is reported for review, and holds nothing up.
+      expect(out.outcome).toBe('held');
+      expect(out.warnings.some((w) => w.code === 'scene_removed_previously_with_linked_work')).toBe(true);
+      const res = await exportIt(ep);
+      expect(res.status).toBeLessThan(300);
+      expect(res.body.error).toBeUndefined();
+      // The removed scene is not recreated and not resurrected by the export.
+      expect((await scenesOf(ep)).map((s) => Number(s.scene_number))).toEqual([1, 2, 3, 10, 11]);
+    });
+
+    it('allows an export whose held beat was removed before: the beat is warned about, never recreated', async () => {
+      const ep = await episode();
+      await sync(ep);
+      const two = (await scenesOf(ep)).find((s) => Number(s.scene_number) === 2);
+      await run('UPDATE scenes SET deleted_at = NOW() WHERE id = :id', { id: two.id });
+      const out = await sync(ep);
+      expect(out.outcome).toBe('held');
+      expect(out.created).toBe(0);
+      expect(out.warnings.map((w) => [w.beat_number, w.code]))
+        .toEqual(expect.arrayContaining([[2, 'scene_removed_previously_ambiguous']]));
+      expect(out.warnings.find((w) => w.beat_number === 2).text)
+        .toBe('A scene associated with this beat was removed previously. Automatic synchronization will not recreate it. Review the beat if a scene is expected.');
+      expect((await scenesOf(ep)).some((s) => Number(s.scene_number) === 2)).toBe(false);
+      const res = await exportIt(ep);
+      expect(res.status).toBeLessThan(300);
+    });
   });
 });

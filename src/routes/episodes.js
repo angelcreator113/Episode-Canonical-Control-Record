@@ -900,17 +900,17 @@ router.post(
  */
 
 // GET /api/v1/episodes/:episodeId/scenes - Get all scenes for episode
-// L12a (§8(hh)): each beat's scene row is brought up to date first, so the
-// Timeline and the Scenes tab load the beats' current images.
+// This read writes nothing (Evoni, 2026-11-25; S1-A). It lists the episode's
+// scenes as they are. The beats' scene rows are brought up to date where the
+// plan is made or changed (Start Episode, resume, generate-plan, a beat's
+// save) and at export, never here: a read that soft-deleted and recreated
+// rows lost scene identity and the child rows hanging off it. A beat's
+// later-finished image still reaches the Scenes tab's beat cards, which
+// derive it at read time (planLocationsService).
 router.get(
   '/:episodeId/scenes',
   validateUUIDParam('episodeId'),
   requireAuth,
-  asyncHandler(async (req, _res, next) => {
-    const { syncBeatScenesQuietly } = require('../services/beatScenesService');
-    await syncBeatScenesQuietly(require('../models').sequelize, req.params.episodeId, 'GET /episodes/:id/scenes');
-    next();
-  }),
   asyncHandler(sceneController.getEpisodeScenes)
 );
 
