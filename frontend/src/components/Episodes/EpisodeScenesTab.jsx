@@ -149,6 +149,10 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
 
   // Beats whose feed moment was not saved at generation (§8(w) P5, Task #2216)
   const [feedMomentCheck, setFeedMomentCheck] = useState({ missing: [], error: null });
+  // S1-A: what the scene synchronization held or could not resolve, as the
+  // plan's answer reports it (the same shape the beat save and generate-plan
+  // answers carry). Nothing is stored for it; it is recomputed on each read.
+  const [sceneSync, setSceneSync] = useState({ outcome: 'complete', warnings: [] });
   const [planFailed, setPlanFailed] = useState(false);
   // Retry for just those beats (Task #2220): { running, note } — note is a plain-words outcome
   const [feedMomentRetry, setFeedMomentRetry] = useState({ running: false, note: null });
@@ -176,6 +180,10 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
         missing: Array.isArray(data.feed_moment_missing) ? data.feed_moment_missing : [],
         error: data.feed_moment_check_error || null,
       });
+      setSceneSync({
+        outcome: data.scene_sync?.outcome || 'complete',
+        warnings: Array.isArray(data.scene_sync?.warnings) ? data.scene_sync.warnings : [],
+      });
     } catch (err) {
       console.error('Failed to load the beats:', err);
       // An older request's failure never marks a newer answer as failed.
@@ -186,6 +194,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       // stay on the page, marked as possibly out of date. Evoni, 2026-11-12.
       setPlanFailed(true);
       setFeedMomentCheck({ missing: [], error: null });
+      setSceneSync({ outcome: 'complete', warnings: [] });
     } finally {
       // Only the newest request ends the loading state.
       if (seq === planSeq.current) setLoadingPlan(false);
@@ -336,6 +345,18 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
     || locations.locations.find((x) => x.role === 'event') || locations.locations[0] || null;
   const editingNumber = beats.editingBeat?.beat_number ?? null;
 
+  // S1-A: the synchronization's own report, by reason code. The readiness
+  // codes (beat_no_location, beat_removed_set, beat_scene_set_incomplete)
+  // are already on the status bar and in the issues list, so they are not
+  // repeated here: this surface carries only what readiness does not say.
+  const syncBeats = (...codes) => [...new Set(sceneSync.warnings
+    .filter((w) => codes.includes(w.code) && w.beat_number !== null && w.beat_number !== undefined)
+    .map((w) => Number(w.beat_number)))].sort((a, b) => a - b);
+  const removedBeats = syncBeats('scene_removed_previously_ambiguous', 'scene_removed_previously_with_linked_work');
+  const removedWithWork = syncBeats('scene_removed_previously_with_linked_work');
+  const unresolvedBeats = syncBeats('required_scene_missing', 'scene_number_conflict');
+  const syncFailure = sceneSync.warnings.find((w) => w.code === 'sync_failed_material' || w.code === 'sync_failed_retryable') || null;
+
   return (
     <div className="est-container est-workspace">
       {feedMomentCheck.missing.length > 0 && (
@@ -363,6 +384,42 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
         <div className="est-warning" role="alert">
           <AlertTriangle size={16} className="est-warning-icon" />
           <p>Could not check whether this episode's Pulse moments were saved: {feedMomentCheck.error}</p>
+        </div>
+      )}
+      {/* S1-A: a scene that was removed before is never recreated. The
+          sentence is Evoni's, word for word, and claims nothing about how
+          the scene was removed. */}
+      {removedBeats.length > 0 && (
+        <div className="est-warning" role="alert" data-testid="est-scene-removed-previously">
+          <AlertTriangle size={16} className="est-warning-icon" />
+          <p>
+            A scene associated with this beat was removed previously. Automatic synchronization will not recreate it.
+            Review the beat if a scene is expected. {removedBeats.length === 1 ? 'Beat' : 'Beats'} {listBeats(removedBeats)}.
+            {removedWithWork.length > 0 && (
+              <> Production records are still linked to the removed {removedWithWork.length === 1 ? 'scene' : 'scenes'} for
+                {' '}{removedWithWork.length === 1 ? 'beat' : 'beats'} {listBeats(removedWithWork)}, so review {removedWithWork.length === 1 ? 'it' : 'them'} first.</>
+            )}
+          </p>
+        </div>
+      )}
+      {unresolvedBeats.length > 0 && (
+        <div className="est-warning" role="alert" data-testid="est-scene-unresolved">
+          <AlertTriangle size={16} className="est-warning-icon" />
+          <p>
+            The scene for {unresolvedBeats.length === 1 ? 'beat' : 'beats'} {listBeats(unresolvedBeats)} could not be
+            synchronized, so {unresolvedBeats.length === 1 ? 'that beat has' : 'those beats have'} no scene yet.
+            This episode cannot be exported until {unresolvedBeats.length === 1 ? 'it is' : 'they are'} resolved.
+          </p>
+        </div>
+      )}
+      {syncFailure && (
+        <div className="est-warning" role="alert" data-testid="est-scene-sync-failed">
+          <AlertTriangle size={16} className="est-warning-icon" />
+          <p>
+            {syncFailure.code === 'sync_failed_retryable'
+              ? 'The beats\' scenes could not be synchronized because something else was changing this episode at the same moment. Nothing was changed: open this tab again to retry.'
+              : 'The beats\' scenes could not be synchronized, so this episode\'s scene list may be incomplete. Nothing was removed.'}
+          </p>
         </div>
       )}
 

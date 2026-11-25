@@ -72,7 +72,7 @@ router.post('/episodes/:episodeId/export', authMiddleware, async (req, res) => {
 
     // L12a (§8(hh)): the beats' scenes are brought up to date first.
     const { syncBeatScenesQuietly } = require('../services/beatScenesService');
-    await syncBeatScenesQuietly(sequelize, episodeId, 'export');
+    const sync = await syncBeatScenesQuietly(sequelize, episodeId, 'export');
 
     // Fetch scenes for this episode
     const [scenes] = await sequelize.query(
@@ -88,6 +88,64 @@ router.post('/episodes/:episodeId/export', authMiddleware, async (req, res) => {
       return res.status(400).json({
         error: 'No scenes found',
         message: 'Episode must have at least one scene to export',
+      });
+    }
+
+    // S1-A gap 1 (Evoni, 2026-11-25): a synchronisation that lost a race
+    // wrote nothing, and it lost it because another writer was changing this
+    // episode's scenes at that moment — so the list this export would freeze
+    // is not verified, and the check below would read it mid-change. The
+    // answer is the repo's own retryable refusal (409 with code RETRY, as
+    // utils/episodeLocks.RetryableConflictError carries): nothing was
+    // changed, ask again. A material failure is not a refusal of its own:
+    // the authoritative checks decide, exactly as they did before, so a
+    // warning alone never fails an export. `sync` can also be undefined
+    // (a caller's test double), which is not a failure either.
+    if (sync?.outcome === 'failed' && sync.retryable === true) {
+      console.error(`[Export] refused for episode ${episodeId}: the beats' scene sync lost a race, so the scene list is unverified`);
+      return res.status(409).json({
+        success: false,
+        error: 'This episode cannot be exported yet',
+        message: "Someone else was changing this episode's scenes at the same moment, so the scene list could not be verified. "
+          + 'Nothing was changed: try the export again.',
+        code: 'RETRY',
+        retryable: true,
+        scene_sync: { outcome: sync.outcome, retryable: true, warnings: sync.warnings },
+      });
+    }
+
+    // S1-A, Decision 3 (Evoni, 2026-11-25): the non-empty check above is no
+    // longer the only integrity decision. A beat of the CURRENT plan with a
+    // live Scene Set, no live scene and no previously removed scene of its
+    // own is content the intended export is short of, so the export is
+    // refused rather than shipped truncated. Everything else is allowed:
+    // safely held scenes, historical removals and the live production rows
+    // still pointing at them, a beat with no location, and a beat at a
+    // removed Scene Set — none of those is a reason to block, and no count
+    // of scenes is required. This uses the plan and the scenes the sync
+    // already reads; it adds no readiness engine and no stored state.
+    const [omitted] = await sequelize.query(
+      `SELECT DISTINCT p.beat_number, p.beat_name
+         FROM scene_plans p
+         JOIN scene_sets st ON st.id = p.scene_set_id AND st.deleted_at IS NULL
+         LEFT JOIN scenes live ON live.scene_plan_id = p.id AND live.deleted_at IS NULL
+         LEFT JOIN scenes gone ON gone.episode_id = p.episode_id AND gone.deleted_at IS NOT NULL
+              AND (gone.scene_plan_id = p.id OR gone.scene_number = p.beat_number)
+        WHERE p.episode_id = $1 AND p.deleted_at IS NULL
+          AND live.id IS NULL AND gone.id IS NULL
+        ORDER BY p.beat_number ASC`,
+      { bind: [episodeId] }
+    );
+    if (omitted.length > 0) {
+      const beats = omitted.map((b) => b.beat_number);
+      console.error(`[Export] refused for episode ${episodeId}: required beats without a scene:`, beats.join(', '));
+      return res.status(409).json({
+        error: 'This episode cannot be exported yet',
+        message: `The scene for ${beats.length === 1 ? 'beat' : 'beats'} ${beats.join(', ')} could not be `
+          + 'synchronized, so the exported episode would be missing it. Open the Scenes tab to resolve those beats, then export again.',
+        code: 'EXPORT_SCENES_UNVERIFIED',
+        beats,
+        scene_sync: sync ? { outcome: sync.outcome, warnings: sync.warnings } : { outcome: 'failed' },
       });
     }
 

@@ -299,12 +299,17 @@ router.post('/:episodeId/generate-plan', requireAuth, authorize(['ADMIN']), aiRa
 
     const plan = await generateScenePlan(episodeId, episode.show_id, brief.toJSON(), { save: true });
     // L12a: the beats' scene rows follow the new plan (the plan's read no longer does this).
-    await require('../services/beatScenesService').syncBeatScenesQuietly(models.sequelize, episodeId, 'generate-plan');
+    // S1-A: what the sync held, or could not resolve, is reported here so the
+    // Scenes tab can name those beats. Nothing is stored for it.
+    const beatScenes = require('../services/beatScenesService');
+    const sync = await beatScenes.syncBeatScenesQuietly(models.sequelize, episodeId, 'generate-plan')
+      || beatScenes.failedSyncOutcome();
 
     return res.json({
       success: true,
       message: `Scene plan generated — ${plan.length} beats mapped.`,
       data: plan,
+      scene_sync: { outcome: sync.outcome, warnings: sync.warnings },
     });
   } catch (err) {
     console.error('[ScenePlanner] generate error:', err);
@@ -364,6 +369,17 @@ router.get('/:episodeId/plan', requireAuth, async (req, res) => {
       console.error('[ScenePlanner] beat angle status failed:', angleErr.message);
     }
 
+    // S1-A: what the synchronization holds, as the same classification the
+    // sync itself uses — computed per request from rows it already reads,
+    // with no transaction, no lock, no write and nothing stored. It is
+    // reported beside readiness, never inside readiness.not_ready.
+    let sceneSync = null;
+    try {
+      sceneSync = await require('../services/beatScenesService').beatSyncReport(models.sequelize, req.params.episodeId);
+    } catch (syncErr) {
+      console.error('[ScenePlanner] beat scene sync report failed:', syncErr.message);
+    }
+
     return res.json({
       data,
       count: plans.length,
@@ -371,6 +387,7 @@ router.get('/:episodeId/plan', requireAuth, async (req, res) => {
       readiness,
       feed_moment_missing: feedMomentMissing,
       ...(feedMomentCheckError ? { feed_moment_check_error: feedMomentCheckError } : {}),
+      ...(sceneSync ? { scene_sync: sceneSync } : {}),
     });
   } catch (err) {
     console.error('[ScenePlanner] plan read failed:', err.message);
@@ -518,10 +535,16 @@ router.put('/:episodeId/plan/:beatNumber', requireAuth, authorize(['ADMIN']), as
       throw linkErr;
     }
     // L12a: the beat's scene row follows the beat. Derived, idempotent and
-    // quiet, after the commit as before (it is S1's to correct).
-    const { syncBeatScenesQuietly } = require('../services/beatScenesService');
-    await syncBeatScenesQuietly(models.sequelize, episodeId, 'beat save');
-    return res.json({ data: plan, ...(location ? { location } : {}) });
+    // quiet, after the commit as before. S1-A: the committed save is never
+    // described as rolled back, whatever the derived sync did; what the sync
+    // held or could not resolve is reported beside it, only when there is
+    // something to say, and nothing is stored for it.
+    const beatScenes = require('../services/beatScenesService');
+    const sync = await beatScenes.syncBeatScenesQuietly(models.sequelize, episodeId, 'beat save')
+      || beatScenes.failedSyncOutcome();
+    const report = sync.outcome === 'complete' && sync.warnings.length === 0
+      ? {} : { scene_sync: { outcome: sync.outcome, warnings: sync.warnings } };
+    return res.json({ data: plan, ...(location ? { location } : {}), ...report });
   } catch (err) {
     // No database or ORM text in the answer (C2 PR 3): the error's class is
     // logged, the browser gets a fixed sentence.
