@@ -147,7 +147,7 @@ export function unlinkLockReason(ev, episodeId) {
   return null;
 }
 
-function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null, onRead = null, checksStatus = null, checksRead = null }) {
+function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null, balance = null, onRead = null, checksStatus = null, checksRead = null, onChanged = null }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [allEvents, setAllEvents] = useState([]);  // every event in the show — drives the linker dropdown
@@ -359,6 +359,11 @@ function EpisodeOverviewTab({ episode, show, onUpdate, onOpenTab, checks = null,
     try {
       const { data } = await api.put(`/api/v1/episode-brief/${episode.id}`, { [field]: value });
       setBrief(data?.data || brief);
+      // Saved: the arc position, the archetype and the designed intent are
+      // required checklist items, and the purpose and hook are counted ones,
+      // so the page's production checks are a generation behind from here
+      // (Evoni, 2026-11-26). Only on success — a refusal leaves them alone.
+      try { onChanged?.(); } catch (err) { console.error('[EpisodeOverview] onChanged failed:', err); }
     } catch (err) {
       // A1.2a: a filmed episode's Start record and intent are refused (409);
       // the field shows its saved value again, so the page never shows an

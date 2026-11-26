@@ -132,7 +132,7 @@ export function whereText(beat) {
   return `${set}${angle ? ` · ${angle.name || angle.label}` : beat.angle_label ? ` · ${beat.angle_label}` : ''}`;
 }
 
-const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
+const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null, onChanged = null }) => {
   const episodeId = episode?.id;
 
   const [plan, setPlan] = useState([]);
@@ -233,6 +233,13 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
     await Promise.all([loadPlan(), loadLocations(), loadOlderScenes()]);
   }, [loadPlan, loadLocations, loadOlderScenes]);
 
+  // Told to the page after a write that went through, so its production
+  // checks are read again: the plan's scene sets and its beats are checklist
+  // items. A failure never reaches it, and neither does a load or a focus.
+  const notifyChanged = useCallback(() => {
+    try { onChanged?.(); } catch (err) { console.error('[Scenes] onChanged failed:', err); }
+  }, [onChanged]);
+
   useEffect(() => { reload(); }, [reload]);
 
   // Display bug 3 (Evoni, 2026-10-02): re-read while a beat's image is still generating.
@@ -248,8 +255,17 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
   const linkedIds = new Set(locations.locations.map((l) => l.scene_set_id));
   // Scene Sets' way back names the episode ("Back to Episode 10").
   const scenesFromLabel = episode?.episode_number ? `Episode ${episode.episode_number}` : 'Scenes tab';
+  // The beat actions and the removed-set move are given a reload that also
+  // tells the page its production checks are out of date: the plan's sets and
+  // its beats are checklist items. Both call it only after a write succeeded.
+  // Bare `reload` stays for the first load and for the window-focus refresh,
+  // neither of which is a change (Evoni, 2026-11-26).
+  const reloadAfterWrite = useCallback(async () => {
+    await reload();
+    notifyChanged();
+  }, [reload, notifyChanged]);
   const beats = useBeatActions({
-    episodeId, showToast: toast, reload, showId: locations.show_id || episode?.show_id || null, loadShowId: loadLocations, linkedIds, fromLabel: scenesFromLabel,
+    episodeId, showToast: toast, reload: reloadAfterWrite, showId: locations.show_id || episode?.show_id || null, loadShowId: loadLocations, linkedIds, fromLabel: scenesFromLabel,
   });
 
   // Re-run the save for the missing beats only, then refresh the warning
@@ -301,6 +317,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       setLocationsEdit(null);
       toast('Locations saved', 'success');
       await reload();
+      notifyChanged();
     } catch (err) {
       console.error('Failed to save episode locations:', err);
       toast(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not save the locations', 'error');
@@ -450,7 +467,7 @@ const EpisodeScenesTab = ({ episode, onToast, sourceEvent = null }) => {
       {/* D2: the removed sets' repair, "Move my beats to…". Always in view
           when the episode uses a removed set (a beat, a location, a scene or
           its event), never behind Review issues; nothing otherwise. */}
-      <RemovedSetsBanner key={`removed-${plan.map((b) => b.scene_set_id).join(',')}`} episodeId={episodeId} showId={showId} onMoved={reload} />
+      <RemovedSetsBanner key={`removed-${plan.map((b) => b.scene_set_id).join(',')}`} episodeId={episodeId} showId={showId} onMoved={reloadAfterWrite} />
 
       {/* S9 (a): each beat that needs attention, with its fix. */}
       {showIssues && issues.length > 0 && (

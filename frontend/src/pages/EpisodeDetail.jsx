@@ -226,6 +226,22 @@ const EpisodeDetail = () => {
   const [balanceFailed, setBalanceFailed] = useState(false);
   // Bumped by the wardrobe game after a purchase or a paid lock, so the chip
   // follows the balance (Evoni, 2026-10-05: it kept the old number).
+  // Which generation of the episode's facts the checklist record was read from
+  // (Evoni, 2026-11-26, Option 3). A successful write on one of this page's
+  // own tabs changes a fact a check is worked out from, and the record then
+  // describes the episode as it WAS. The counter is the page's existing
+  // pattern (balanceVersion, overlaysVersion): an editor reports its save,
+  // the number goes up, and the record stops counting as current — so the
+  // Checklist tab reuses it only while it still is. An editor on another
+  // PAGE (the Beat Plan, the Event Package, Scene Sets, Producer Mode) needs
+  // no report: this page unmounts, and everything is read again on return.
+  const [checksVersion, setChecksVersion] = useState(0);
+  const checksVersionNow = useRef(0);
+  checksVersionNow.current = checksVersion;
+  // Called only where a write SUCCEEDED (never on a load, a focus, a failed
+  // save or a cancelled one), so a refusal — a frozen episode's 409 included
+  // — leaves the record exactly as it was.
+  const invalidateChecks = useCallback(() => setChecksVersion((v) => v + 1), []);
   const [balanceVersion, setBalanceVersion] = useState(0);
   const bumpBalance = useCallback(() => setBalanceVersion((v) => v + 1), []);
   const chipShowId = episode?.show_id || episode?.showId;
@@ -244,7 +260,10 @@ const EpisodeDetail = () => {
   // P15: the banner's title chip opens Production → Overlays; the tab bumps
   // overlaysVersion after an action so the chip reloads.
   const [overlaysVersion, setOverlaysVersion] = useState(0);
-  const bumpOverlays = useCallback(() => setOverlaysVersion((v) => v + 1), []);
+  // EpisodeOverlaysTab calls onChanged only after a successful change, and
+  // the title overlay and the overlays placed on the video are both checklist
+  // items, so the same signal marks the checks out of date.
+  const bumpOverlays = useCallback(() => { setOverlaysVersion((v) => v + 1); invalidateChecks(); }, [invalidateChecks]);
   const openOverlaysTab = () => openTab('overlays');
 
   // The Production tab's "N left" badge (Evoni's Episode mock): the open
@@ -276,30 +295,58 @@ const EpisodeDetail = () => {
   const checksEpisodeNow = useRef(checksEpisodeId);
   checksEpisodeNow.current = checksEpisodeId;
   const checksMine = checksEpisodeId != null && checksInfo.episodeId === checksEpisodeId ? checksInfo : null;
+  // Two questions, not one. `checksMine` is "these are this episode's", which
+  // decides what may be shown at all. `checksFresh` adds "and they were read
+  // from the episode as it is now", which decides what may be called current:
+  // only a record of this version is handed to the Checklist tab in place of
+  // its own read, and only it is shown as verified.
+  const checksFresh = checksMine?.status === 'ready' && checksMine.version === checksVersion ? checksMine : null;
+  // A record of an older version, kept so an edit never blanks the count.
+  const checksLast = checksMine?.status === 'ready' ? checksMine : null;
+  // The last count is still on screen while the new read is in flight, said
+  // to be updating; if that read fails the record is marked 'stale' and the
+  // count says so. Neither is ever presented as freshly verified.
+  const checksUpdating = Boolean(checksLast) && !checksFresh;
+  const checksStale = checksMine?.status === 'stale';
   const checksStatus = checksMine?.status || 'loading';
   const checksProgress = useMemo(
-    () => (checksMine?.status === 'ready' ? checklistProgress(checksMine.checks, checksMine.sections) : null),
-    [checksMine],
+    () => (checksLast ? checklistProgress(checksLast.checks, checksLast.sections) : null),
+    [checksLast],
   );
+  // The step bar reads the last answers rather than emptying itself while a
+  // re-read is in flight: with no checks every step reads "not done", which
+  // would be a worse untruth than a step bar one edit behind. The badge
+  // beside it carries the updating note.
   const productionChecks = useMemo(
-    () => (checksMine?.status === 'ready' ? { checks: checksMine.checks, sections: checksMine.sections } : { checks: null, sections: null }),
-    [checksMine],
+    () => (checksLast ? { checks: checksLast.checks, sections: checksLast.sections } : { checks: null, sections: null }),
+    [checksLast],
   );
   const checksLeft = checksProgress?.left ?? null;
   const hasShowForChecks = !!(episode?.show_id || episode?.showId);
   // Done, incomplete and unreadable, when the loader said what it read; else null.
   const checksRead = useMemo(
-    () => (checksMine?.status === 'ready' ? checklistReadability(checksMine.checks, checksMine.sections, checksMine.read, { hasShow: hasShowForChecks }) : null),
-    [checksMine, hasShowForChecks],
+    () => (checksLast ? checklistReadability(checksLast.checks, checksLast.sections, checksLast.read, { hasShow: hasShowForChecks }) : null),
+    [checksLast, hasShowForChecks],
   );
   // The badge keeps "N left"; how many of those could not be read goes in its hover and spoken label.
   const checksUnreadNote = checksRead?.unreadable || 0;
-  // The Checklist tab's re-checks ({ read, episodeId } with them): one for
-  // another episode is dropped.
+  // The Checklist tab's re-checks ({ read, episodeId, version } with them):
+  // one for another episode is dropped, and so is one read from a version
+  // that has since been written over — a slow answer cannot replace a newer
+  // one for the same episode. The tab reports only what its OWN read
+  // returned; a record it was handed is never reported back as if it had
+  // just been verified.
   const reportChecks = useCallback((checks, sections, meta) => {
     const forEpisodeId = meta?.episodeId ?? checksEpisodeNow.current;
     if (forEpisodeId == null || forEpisodeId !== checksEpisodeNow.current) return;
-    setChecksInfo({ episodeId: forEpisodeId, status: 'ready', checks, sections, read: meta?.read || null });
+    const forVersion = meta?.version ?? checksVersionNow.current;
+    if (forVersion !== checksVersionNow.current) return;
+    setChecksInfo({
+      episodeId: forEpisodeId, version: forVersion, status: 'ready', checks, sections,
+      read: meta?.read || null,
+      notes: meta?.notes || null, coverage: meta?.coverage ?? null,
+      sceneStep: meta?.sceneStep ?? null, linkedEvent: meta?.linkedEvent ?? null,
+    });
   }, []);
   const reportOverviewRead = useCallback((forEpisodeId, key, result) => {
     if (forEpisodeId !== checksEpisodeNow.current) return;
@@ -317,30 +364,53 @@ const EpisodeDetail = () => {
   useEffect(() => { pageAlive.current = true; return () => { pageAlive.current = false; }; }, []);
   useEffect(() => {
     if (!checksEpisodeId || !episode) return;
-    if (checksStartedFor.current === checksEpisodeId) return;
+    // Once per episode AND per version: a successful write bumps the version,
+    // so the read is made again — and only then.
+    const runKey = `${checksEpisodeId}:${checksVersion}`;
+    if (checksStartedFor.current === runKey) return;
     const events = sourceEventRead && sourceEventRead.episodeId === String(checksEpisodeId) ? sourceEventRead : null;
     if (!events) return;
     const reports = overviewReads.episodeId === checksEpisodeId ? overviewReads : {};
     if (tabKey === 'overview' && !(reports.brief && reports.sceneSets)) return;
-    checksStartedFor.current = checksEpisodeId;
+    checksStartedFor.current = runKey;
+    const forVersion = checksVersion;
     const loaded = {};
     if (events.usable) loaded.linkedEvent = events.event;
     if (reports.brief?.ok) loaded.brief = reports.brief.value;
     if (reports.sceneSets?.ok) loaded.sceneSets = reports.sceneSets.value;
     import('../components/Episodes/EpisodeProductionChecklist')
       .then((m) => m.loadProductionChecks(episode, episode.show_id || episode.showId, { loaded })
-        .then(({ checks, read }) => {
+        .then(({ checks, notes, coverage, sceneStep, linkedEvent, read }) => {
+          // Dropped when the page has gone, when another episode is on it,
+          // or when this answer was read from a version already written over.
           if (!pageAlive.current || checksEpisodeNow.current !== checksEpisodeId) return;
-          setChecksInfo({ episodeId: checksEpisodeId, status: 'ready', checks, sections: m.CHECKLIST_SECTIONS, read: read || null });
+          if (checksVersionNow.current !== forVersion) return;
+          // The whole result is kept, not only the checks: the Checklist tab
+          // needs the notes, the coverage, the scenes' next step and the
+          // source event to show the same page without reading them again.
+          setChecksInfo({
+            episodeId: checksEpisodeId, version: forVersion, status: 'ready',
+            checks, sections: m.CHECKLIST_SECTIONS, read: read || null,
+            notes: notes || null, coverage: coverage ?? null, sceneStep: sceneStep ?? null, linkedEvent: linkedEvent ?? null,
+          });
         }))
       .catch((err) => {
         console.error('[EpisodeDetail] production checks load failed:', err);
         if (!pageAlive.current || checksEpisodeNow.current !== checksEpisodeId) return;
-        // Said on the page; checks the Checklist tab has since reported stand.
-        setChecksInfo((prev) => (prev.episodeId === checksEpisodeId && prev.status === 'ready' ? prev : { episodeId: checksEpisodeId, status: 'failed' }));
+        if (checksVersionNow.current !== forVersion) return;
+        // A re-read that failed does not throw the last answers away, and
+        // does not pass them off as current either: they are marked 'stale',
+        // which the badge says out loud. Checks the Checklist tab has
+        // reported for THIS version stand as they are.
+        setChecksInfo((prev) => {
+          if (prev.episodeId !== checksEpisodeId) return { episodeId: checksEpisodeId, version: forVersion, status: 'failed' };
+          if (prev.status === 'ready' && prev.version === forVersion) return prev;
+          if (prev.status === 'ready') return { ...prev, status: 'stale' };
+          return { episodeId: checksEpisodeId, version: forVersion, status: 'failed' };
+        });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checksEpisodeId, sourceEventRead, overviewReads, tabKey]);
+  }, [checksEpisodeId, checksVersion, sourceEventRead, overviewReads, tabKey]);
 
   const [showMoreActions, setShowMoreActions] = useState(false);
   // The header's ⋮ menu closes on Escape (focus back on the ⋮) and on a
@@ -1182,8 +1252,28 @@ const EpisodeDetail = () => {
                 {Icon && <Icon size={16} className="ed-tab-icon" aria-hidden="true" />}
                 <span className="ed-tab-label">{t.label}</span>
                 {t.key === 'production' && checksLeft > 0 && (
-                  <span className="ed-tab-badge" title={checksUnreadNote ? `${checksUnreadNote} of these couldn't be checked` : undefined}
-                    data-testid="ed-production-left" aria-label={`${checksLeft} left${checksUnreadNote ? `, ${checksUnreadNote} couldn't be checked` : ''}`}>{checksLeft}<span className="ed-tab-badge-word"> left</span></span>
+                  // The count stays up while a re-read is in flight, and says
+                  // it is updating; if that read failed it says the number is
+                  // out of date. It is never shown plain unless it was read
+                  // from the episode as it is now.
+                  <span className={`ed-tab-badge${checksStale ? ' is-stale' : checksUpdating ? ' is-updating' : ''}`}
+                    title={[
+                      checksStale ? "This count is out of date: the last check couldn't be read" : checksUpdating ? 'Checking again…' : null,
+                      checksUnreadNote ? `${checksUnreadNote} of these couldn't be checked` : null,
+                    ].filter(Boolean).join(' · ') || undefined}
+                    data-testid="ed-production-left"
+                    data-currency={checksStale ? 'stale' : checksUpdating ? 'updating' : 'current'}
+                    // Said on the badge itself, not only in its hover and
+                    // spoken label: dimmed while the count is being read
+                    // again, dimmed and underlined where that read failed and
+                    // the number is known to be behind. Inline because the
+                    // page's stylesheet is outside this change's scope.
+                    style={checksStale
+                      ? { opacity: 0.6, textDecoration: 'underline dotted', textDecorationThickness: '1px', textUnderlineOffset: 2 }
+                      : checksUpdating ? { opacity: 0.6 } : undefined}
+                    aria-label={`${checksLeft} left${checksStale ? ', out of date' : checksUpdating ? ', updating' : ''}${checksUnreadNote ? `, ${checksUnreadNote} couldn't be checked` : ''}`}>
+                    {checksLeft}<span className="ed-tab-badge-word"> left</span>
+                  </span>
                 )}
               </button>
             );
@@ -1256,9 +1346,14 @@ const EpisodeDetail = () => {
             show={episode.show}
             onUpdate={handleUpdateEpisode}
             onOpenTab={openTab}
-            checks={checksProgress}
-            checksStatus={checksStatus}
-            checksRead={checksRead}
+            onChanged={invalidateChecks}
+            // Only a count read from the episode as it is now; while a
+            // re-read is in flight, or after one failed, the Overview is
+            // told the checks are not known rather than shown an old number
+            // as current (Evoni, 2026-11-26).
+            checks={checksFresh ? checksProgress : null}
+            checksStatus={checksStale ? 'failed' : checksFresh ? 'ready' : checksStatus === 'failed' ? 'failed' : 'loading'}
+            checksRead={checksFresh ? checksRead : null}
             balance={headerBalance}
             onRead={reportOverviewRead}
           />
@@ -1308,6 +1403,7 @@ const EpisodeDetail = () => {
           <EpisodeSceneWorkspace
             episode={episode}
             onOpenTab={openTab}
+            onChanged={invalidateChecks}
             onToast={(msg, type) => (type === 'error' ? toast?.showError?.(msg) : toast?.showSuccess?.(msg))}
           />
         )}
@@ -1317,6 +1413,7 @@ const EpisodeDetail = () => {
           <EpisodeScenesTab
             episode={episode}
             sourceEvent={sourceEvent}
+            onChanged={invalidateChecks}
             // The toast's own names (eighth audit: toast[type] was undefined,
             // so every message, refusals included, went to the console).
             onToast={(msg, type) => (type === 'error' ? toast?.showError?.(msg) : type === 'success' ? toast?.showSuccess?.(msg) : toast?.showInfo?.(msg))}
@@ -1374,6 +1471,8 @@ const EpisodeDetail = () => {
                     onCoinsChange={bumpBalance}
                     onOutfitComplete={(result) => {
                       console.log('Outfit locked:', result.slots, 'Synergy:', result.synergy.total);
+                      // A locked outfit is the checklist's "Outfit picked".
+                      invalidateChecks();
                     }}
                   />
                 )}
@@ -1404,7 +1503,7 @@ const EpisodeDetail = () => {
 
         {/* Style Page (was Lookbook) — the style sheet as its own editor (Task #2876) */}
         {tabKey === 'production.lookbook' && (
-          <EpisodeStylePage episode={episode} onOpenTab={openTab} />
+          <EpisodeStylePage episode={episode} onOpenTab={openTab} onChanged={invalidateChecks} />
         )}
 
         {/* Results → Summary (Evoni's Episode mock): the one page, with the
@@ -1450,7 +1549,7 @@ const EpisodeDetail = () => {
             {/* The on-screen to-do lists (moved from the old Files tab, 2026-10-17) */}
             {(episode?.show_id || episode?.showId) && (
               <section className="ed-todo-lists" aria-label="On-screen to-do lists">
-                <EpisodeTodoList episodeId={episode.id} showId={episode.show_id || episode.showId} />
+                <EpisodeTodoList episodeId={episode.id} showId={episode.show_id || episode.showId} onChanged={invalidateChecks} />
               </section>
             )}
           </>
@@ -1463,6 +1562,11 @@ const EpisodeDetail = () => {
             showId={episode?.show_id || episode?.showId}
             onChecks={reportChecks}
             onOpenTab={openTab}
+            // The page's own complete record, handed over only while it was
+            // read from the episode as it is now; the tab then asks nothing
+            // again. ↻ there still reads afresh.
+            initial={checksFresh}
+            checksVersion={checksVersion}
           />
         )}
 

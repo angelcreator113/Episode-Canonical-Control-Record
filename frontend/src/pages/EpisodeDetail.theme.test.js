@@ -60,8 +60,16 @@ describe('Episode shell theme', () => {
     expect(redesign).toMatch(/\.ed-page\.ed-studio \.ed-tabs-modern \{[^}]*border: 1px solid var\(--studio-line\);[^}]*background: var\(--studio-card\);/);
     expect(redesign).toMatch(/\.ed-page\.ed-studio \.ed-tab\.ed-tab-active,\s*\.ed-page\.ed-studio \.ed-tab\.ed-tab-active:hover \{\s*background: var\(--studio-gradient\);\s*color: var\(--text-inverse\);/);
     expect(redesign).toMatch(/\.ed-tab-badge \{[^}]*background: var\(--studio-magenta-soft\);\s*color: var\(--studio-magenta\);/);
-    // On a phone the badge is the number alone (Evoni, 2026-10-22 layout list).
-    expect(jsx).toMatch(/data-testid="ed-production-left" aria-label=\{`\$\{checksLeft\} left\$\{checksUnreadNote \? `, \$\{checksUnreadNote\} couldn't be checked` : ''\}`\}>\{checksLeft\}<span className="ed-tab-badge-word"> left<\/span>/);
+    // On a phone the badge is the number alone (Evoni, 2026-10-22 layout list):
+    // the count stands on its own and only the word " left" is the span the
+    // phone hides. The badge now also says whether that count is current,
+    // updating or out of date (Evoni, 2026-11-26), so the attributes around
+    // it are asserted by name rather than as one fixed string.
+    expect(jsx).toMatch(/\{checksLeft\}<span className="ed-tab-badge-word"> left<\/span>/);
+    expect(jsx).toMatch(/data-testid="ed-production-left"/);
+    expect(jsx).toMatch(/data-currency=\{checksStale \? 'stale' : checksUpdating \? 'updating' : 'current'\}/);
+    expect(jsx).toMatch(/aria-label=\{`\$\{checksLeft\} left\$\{checksStale \? ', out of date' : checksUpdating \? ', updating' : ''\}/);
+    expect(jsx).toMatch(/className=\{`ed-tab-badge\$\{checksStale \? ' is-stale' : checksUpdating \? ' is-updating' : ''\}`\}/);
     expect(jsx).toMatch(/aria-current=\{activeTab === t\.key \? 'page' : undefined\}/);
     expect(redesign).toMatch(/\.ed-page\.ed-studio \.eds-show-pill \{[^}]*background: var\(--studio-purple-soft\); color: var\(--studio-purple\);/);
     expect(redesign).toMatch(/\.ed-page\.ed-studio \.eds-primary \{[^}]*background: var\(--studio-gradient\); color: var\(--text-inverse\);/);

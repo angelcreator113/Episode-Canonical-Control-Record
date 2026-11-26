@@ -1,5 +1,5 @@
 import { adminOnlyMessage } from '../../utils/authGroups';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
@@ -598,7 +598,24 @@ export async function loadProductionChecks(episode, showId, options) {
   return { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep, linkedEvent, read };
 }
 
-export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate, onChecks, onOpenTab }) {
+/**
+ * `initial` (optional): the page's own complete loadProductionChecks result
+ * for THIS episode, read from the episode as it is now — { episodeId,
+ * version, checks, sections, notes, coverage, sceneStep, linkedEvent, read }.
+ * Where it is given, the tab shows it and makes no read of its own: the page
+ * has already asked these questions (PR-08's `loaded` hand-off made the
+ * page's read the cheap one; this stops the second read altogether). It is
+ * taken only while its episode AND its `checksVersion` are the ones here, so
+ * a record from before a save is never reused, and it is never reported back
+ * through onChecks — the page already holds it, and nothing unverified is
+ * passed off as a fresh answer.
+ *
+ * `checksVersion` (optional): the page's generation counter, which goes up
+ * after a successful write on one of its tabs. A read of this tab's own is
+ * tagged with it and dropped if it has moved on, so a slow answer cannot
+ * replace a newer one for the same episode.
+ */
+export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate, onChecks, onOpenTab, initial = null, checksVersion = 0 }) {
   const [checks, setChecks] = useState({});
   const [notes, setNotes] = useState({});
   // Audit STATE-01: the server's beat coverage, and the setup repair.
@@ -615,27 +632,74 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   const [linkedEvent, setLinkedEvent] = useState(null);
   const [version, setVersion] = useState(0);
 
-  useEffect(() => {
-    if (!episode?.id) return;
-    checkReadiness();
-  }, [episode?.id]);
+  // What the loader could read, kept for what the page will show of it.
+  const [read, setRead] = useState(null);
+  // The episode and the generation on screen now, so an answer that arrives
+  // after either moved on is dropped instead of being shown.
+  const episodeNow = useRef(episode?.id);
+  episodeNow.current = episode?.id;
+  const versionNow = useRef(checksVersion);
+  versionNow.current = checksVersion;
+  // The episode and generation already shown, so the same pair is not read twice.
+  const shownFor = useRef(null);
+
+  // Shown, not read: the page's record for this episode and generation.
+  const showRecord = (record) => {
+    setLinkedEvent(record.linkedEvent || null);
+    setCoverage(record.coverage ?? null);
+    setSceneStep(record.sceneStep ?? null);
+    setChecks(record.checks || {});
+    setNotes(record.notes || {});
+    setRead(record.read || null);
+    setLoading(false);
+    // Deliberately no onChecks: the page gave this record, and a record it
+    // already holds must not come back as a freshly verified one.
+  };
 
   const checkReadiness = async () => {
     setLoading(true);
     const forEpisodeId = episode.id;
-    const { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep: step, linkedEvent: ev, read } = await loadProductionChecks(episode, showId);
+    const forVersion = versionNow.current;
+    const { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep: step, linkedEvent: ev, read: readFrom } = await loadProductionChecks(episode, showId);
+    // A read for an episode that has since been left, or from a generation
+    // written over while it was in flight, is thrown away: it would be older
+    // than what is on screen.
+    if (episodeNow.current !== forEpisodeId || versionNow.current !== forVersion) return;
     setLinkedEvent(ev || null);
     setVersion((v) => v + 1);
     setCoverage(planCoverage);
     setSceneStep(step);
     setChecks(results);
     setNotes(checkNotes);
+    setRead(readFrom || null);
     setLoading(false);
     // The page's Production badge follows each re-check.
-    // With what the loader could read and the episode these are for, so
-    // the page never takes them for another episode's.
-    onChecks?.(results, CHECKLIST_SECTIONS, { read, episodeId: forEpisodeId });
+    // With what the loader could read, the episode these are for and the
+    // generation they were read from, so the page never takes them for
+    // another episode's or for newer than they are.
+    onChecks?.(results, CHECKLIST_SECTIONS, {
+      read: readFrom, episodeId: forEpisodeId, version: forVersion,
+      notes: checkNotes, coverage: planCoverage, sceneStep: step, linkedEvent: ev,
+    });
   };
+
+  // One read per episode and generation — or none at all, where the page's
+  // own record is already the answer. ↻ does not come through here: it calls
+  // checkReadiness itself, which always reads afresh.
+  useEffect(() => {
+    if (!episode?.id) return;
+    const key = `${episode.id}:${checksVersion}`;
+    if (shownFor.current === key) return;
+    shownFor.current = key;
+    const usable = initial
+      && String(initial.episodeId) === String(episode.id)
+      && initial.version === checksVersion
+      && initial.status === 'ready'
+      && initial.checks;
+    if (usable) showRecord(initial);
+    else checkReadiness();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [episode?.id, checksVersion, initial]);
 
   const handleGenerateScript = async () => {
     setGenerating(true);
