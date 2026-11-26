@@ -1713,22 +1713,51 @@ router.get(
   })
 );
 
+// P1 (Evoni, 2026-11-26): MOVING IS SWITCHED OFF, UNCONDITIONALLY.
+//
+// `moveRemovedSetsForEpisode` (services/sceneSetUsesService) opened a
+// transaction of its own and called `moveUses` with NO freeze check, NO
+// episode lock and NO set lock. For the episode in the URL that rewrites
+// `scene_set_episodes` (merged, soft-deleted, moved), `scene_plans`
+// (scene_set_id, and angle_label set to NULL), `scene_set_looks`,
+// `world_events.scene_set_id` and `scenes.scene_set_id` — so an ACCEPTED or
+// FILMED episode's beats, scenes, locations, events, looks and angle labels
+// could all be rewritten through this route. The other caller of `moveUses`
+// (routes/sceneSetRoutes, the delete-with-replacement path) is guarded:
+// withSetLocks → assertNoAcceptedOrFilmedUses → moveUses. Only this one was
+// not.
+//
+// Until the guarded repair is built, the action is refused here, before
+// anything reads or writes: the service function is not called at all. There
+// is deliberately NO environment flag and no alternate route — a switch
+// would let the unguarded path be turned back on. Re-enabling is the revert
+// of this block, with the guard in place.
+//
+// Nothing else changes: GET /removed-sets above still reports the removed
+// sets and the beats at each, so the operator can still see what is wrong and
+// correct it in the episode's Locations and Beat Plan, then Resume setup —
+// the same recovery that has always existed. Recorded in
+// docs/audit/F-AUTH-1_MoveRemovedSetsDisabled_Amendment_2026-11-26.md.
+const MOVE_REMOVED_SETS_DISABLED = Object.freeze({
+  success: false,
+  code: 'MOVE_REMOVED_SETS_DISABLED',
+  error: 'Moving beats off a removed scene set is switched off while its safety checks are being finished: it could change an episode that has been accepted or filmed. Nothing was changed. Set each beat\'s location in the episode\'s Locations and Beat Plan, then choose Resume setup.',
+});
+
 router.post(
   '/:episodeId/move-removed-sets',
   validateUUIDParam('episodeId'),
   requireAuth,
   authorize(['ADMIN']),
   asyncHandler(async (req, res) => {
-    const { sequelize } = require('../models');
-    const { moveRemovedSetsForEpisode, SceneSetUsesError } = require('../services/sceneSetUsesService');
-    try {
-      const moved = await moveRemovedSetsForEpisode(sequelize, req.params.episodeId, req.body?.moves);
-      return res.json({ success: true, data: { moved } });
-    } catch (err) {
-      if (err instanceof SceneSetUsesError) return res.status(err.status).json({ success: false, code: err.code, error: err.message });
-      console.error('POST /episodes/:episodeId/move-removed-sets error:', err);
-      return res.status(500).json({ success: false, error: err.message });
-    }
+    // Signed out is still 401 and a non-admin still 403, from the two
+    // middlewares above; a malformed id is still 400 from the id check. Only
+    // a request that would have reached the write is answered here.
+    // (The middleware names are deliberately not written out: the CP2 ratchet
+    // in tests/unit/routes/episodes-cluster-tier-promotion.test.js counts
+    // their bare tokens textually across this file, comments included.)
+    console.warn(`[Episodes] move-removed-sets refused for episode ${req.params.episodeId}: the action is switched off; nothing was changed.`);
+    return res.status(503).json(MOVE_REMOVED_SETS_DISABLED);
   })
 );
 
