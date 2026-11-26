@@ -66,16 +66,29 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
 
     const res = await resume();
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ success: true, data: { scene_plan: { status: 'complete', created: 1, existing: 13, missing: [] } } });
+    // The scene plan is complete: beat 6 was made, the other 13 were already
+    // there. `success` is setup_status.complete, which is now FALSE because
+    // the LOCATIONS step is checked on every resume (Evoni, 2026-11-26) and
+    // this episode has no location linked at all — the fixture makes a
+    // HOME_BASE scene set but never inserts a scene_set_episodes row, so
+    // listLocations returns none and Home is missing. That was always true;
+    // before the recheck it was hidden, because a step that was never
+    // recorded was assumed complete. Nothing about the plan changed.
+    expect(res.body).toMatchObject({ success: false, data: { scene_plan: { status: 'complete', created: 1, existing: 13, missing: [] } } });
+    expect(res.body.data.setup_status.steps.locations).toMatchObject({ status: 'failed', code: 'LOCATIONS_INCOMPLETE' });
+    expect(res.body.data.setup_status.steps.locations.reason).toMatch(/Missing: Home\./);
     const after = await beats();
     expect(after.map((b) => b.beat_number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
     // Beats 1–5 (and 7–14) are the same rows, untouched.
     expect(after.filter((b) => b.beat_number !== 6).map((b) => b.id)).toEqual(before.map((b) => b.id));
-    expect(await status()).toMatchObject({ complete: true });
+    // complete is false for the same reason as `success` above: the Locations
+    // step is now checked on every resume and this episode has no linked
+    // location. The scene plan itself is whole.
+    expect(await status()).toMatchObject({ complete: false, steps: { scene_plan: { status: 'complete', missing: [] } } });
     expect((await run(`SELECT COUNT(*)::int AS n FROM episodes WHERE show_id = :show`, { show: showId }))[0][0].n).toBe(1);
 
     const again = await resume();
-    expect(again.body).toMatchObject({ success: true, data: { scene_plan: { status: 'complete', created: 0, existing: 14 } } });
+    expect(again.body).toMatchObject({ success: false, data: { scene_plan: { status: 'complete', created: 0, existing: 14 } } });
     expect((await beats()).length).toBe(14);
   });
 

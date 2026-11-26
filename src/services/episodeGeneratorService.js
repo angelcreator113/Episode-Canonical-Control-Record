@@ -529,19 +529,30 @@ async function resumeEpisodeSetup(models, episodeId) {
   }
   const steps = { ...(episode.setup_status?.steps || {}), scene_plan: scenePlanStep({ ...result, sync }) };
   if (!steps.locations) steps.locations = { status: 'complete' };
-  // A locations step that failed at Start (B3) is not saved again here: the
-  // locations are set from the episode's Locations, and its beats in the
-  // Beat Plan. This only reads (episodeLocationsService.checkLocationsStep):
-  // the step is done when every location Start tried to save is there, the
-  // Event location is the event's set, and every beat names its location's
-  // set; until then it stays failed, with what is missing. A check that
+  // The locations step is not saved again here: the locations are set from
+  // the episode's Locations, and its beats in the Beat Plan. This only reads
+  // (episodeLocationsService.checkLocationsStep): the step is done when every
+  // location Start tried to save is there, the Event location is the event's
+  // set, every beat names its location's set, and NO beat is left with no set
+  // at all; until then it stays failed, with what is missing. A check that
   // cannot be read leaves the step as it was.
-  if (steps.locations.status === 'failed') {
-    try {
-      steps.locations = await require('./episodeLocationsService').checkLocationsStep(models.sequelize, { episodeId, step: steps.locations });
-    } catch (checkErr) {
-      console.error(`[EpisodeGenerator] The locations step of episode ${episodeId} could not be checked on resume:`, checkErr.message);
-    }
+  //
+  // Checked on EVERY resume (Evoni, 2026-11-26), not only a step that failed
+  // at Start. A step recorded as complete, or never recorded at all, could
+  // still be untrue: a location removed afterwards is dropped by the
+  // Locations read, and beats made before their role had a location were
+  // never counted. An episode previously reported complete may therefore
+  // truthfully become incomplete after a fresh check. Nothing is repaired
+  // here — a missing role is never assigned and no beat's set is written.
+  //
+  // A frozen episode never reaches this: the unit above refuses it before
+  // setup_status or any other setup write (S1-B), so no status is mutated on
+  // an accepted or filmed episode — and it therefore never sees this report
+  // either, which is a RECORDED GAP, not an oversight.
+  try {
+    steps.locations = await require('./episodeLocationsService').checkLocationsStep(models.sequelize, { episodeId, step: steps.locations });
+  } catch (checkErr) {
+    console.error(`[EpisodeGenerator] The locations step of episode ${episodeId} could not be checked on resume:`, checkErr.message);
   }
   const setup_status = await recordSetupStatus(models, episodeId, steps);
   return { episode_id: episodeId, scene_plan: steps.scene_plan, setup_status };
