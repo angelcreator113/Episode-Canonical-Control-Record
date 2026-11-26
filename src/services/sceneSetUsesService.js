@@ -412,27 +412,74 @@ async function lockSetReferences(sequelize, { setId = null, setIds = null, repla
   // (`isLockConflict`), so a scene_sets lock never waits and so can never be
   // an edge in a deadlock cycle. The waited locks — episodes and events —
   // are the ones taken in a globally ascending order above.
-  const [versionRows] = sources.length
-    ? await sequelize.query(
-      'SELECT id FROM scene_sets WHERE version_of_set_id IN (:sources) AND deleted_at IS NULL ORDER BY id',
-      { replacements: { sources }, transaction })
-    : [[]];
   const forUpdate = sources;
-  const noKeyUpdate = [...new Set(versionRows.map((r) => String(r.id)))].filter((id) => !forUpdate.includes(id)).sort();
-  const keyShare = [...new Set(asked.filter((id) => UUID_RE.test(id)))]
-    .filter((id) => !forUpdate.includes(id) && !noKeyUpdate.includes(id)).sort();
+  const single = sources.length === 1 ? sources[0] : null;
+  const lone = asked.length === 1 && UUID_RE.test(asked[0]) && asked[0] !== single ? asked[0] : null;
+  // Whether the legacy statement would be FAITHFUL is decided by one
+  // targeted read, not by the batch's full version scan, so the delete
+  // path's statement sequence stays as close to the original as it can:
+  // that statement locks its own versions by `version_of_set_id = :setId`,
+  // so the only thing that could make it unfaithful is a replacement that is
+  // itself a live version of the source — the row the deduplication would
+  // otherwise move from FOR KEY SHARE to FOR NO KEY UPDATE.
+  let legacyIsFaithful = Boolean(single) && asked.length <= 1;
+  if (legacyIsFaithful && lone) {
+    const [[clash]] = await sequelize.query(
+      'SELECT 1 AS yes FROM scene_sets WHERE id = :lone AND version_of_set_id = :single AND deleted_at IS NULL',
+      { replacements: { lone, single }, transaction });
+    if (clash) legacyIsFaithful = false;
+  }
 
   const held = new Set();
-  const take = async (ids, clause, liveOnly) => {
-    if (!ids.length) return;
-    const [rows] = await sequelize.query(
-      `SELECT id FROM scene_sets WHERE id IN (:ids)${liveOnly ? ' AND deleted_at IS NULL' : ''} ORDER BY id ${clause}`,
-      { replacements: { ids }, transaction });
-    for (const r of rows) held.add(String(r.id));
-  };
-  await take(forUpdate, 'FOR UPDATE NOWAIT', false);
-  await take(noKeyUpdate, 'FOR NO KEY UPDATE NOWAIT', true);
-  await take(keyShare, 'FOR KEY SHARE NOWAIT', true);
+  // ── the single-set specialization ────────────────────────────────────
+  // The delete-with-replacement path's merged suite
+  // (tests/integration/sceneSetDeleteLockOrder.integration.test.js:245,
+  // :532, :533) pins this statement by its TEXT: the gate that says "the
+  // delete holds all its rows" matches /^WITH gone AS/, and one case asserts
+  // the literal `id = :setId` form and that exactly one such statement runs
+  // per transaction. So that call keeps its statement verbatim.
+  //
+  // The branch is NOT "one source": it is "the legacy statement would
+  // acquire exactly the rows and modes the deduplication computed". It locks
+  // its versions by `version_of_set_id = :setId` and does no deduplication,
+  // so it is faithful only while the replacement is neither the source nor
+  // one of its versions. When the dedup would move anything — a replacement
+  // that is also a version, which is the upgrade hazard — the generalized
+  // form is used even for a single source. An incompatible request can
+  // therefore never select the legacy path.
+  if (legacyIsFaithful) {
+    const [locked] = await sequelize.query(
+      `WITH gone AS (SELECT id FROM scene_sets WHERE id = :setId FOR UPDATE NOWAIT),
+          repl AS (SELECT id FROM scene_sets WHERE id = CAST(:replacement AS uuid) AND deleted_at IS NULL FOR KEY SHARE NOWAIT),
+          vers AS (SELECT id FROM scene_sets WHERE version_of_set_id = :setId AND deleted_at IS NULL ORDER BY id FOR NO KEY UPDATE NOWAIT)
+     SELECT 'gone' AS k, id FROM gone UNION ALL SELECT 'repl', id FROM repl UNION ALL SELECT 'vers', id FROM vers`,
+      { replacements: { setId: single, replacement: lone }, transaction });
+    for (const r of locked) held.add(String(r.id));
+  } else {
+    // ── the generalized form, for a genuine batch ──────────────────────
+    const [versionRows] = await sequelize.query(
+      'SELECT id FROM scene_sets WHERE version_of_set_id IN (:sources) AND deleted_at IS NULL ORDER BY id',
+      { replacements: { sources }, transaction });
+    const noKeyUpdate = [...new Set(versionRows.map((r) => String(r.id)))].filter((id) => !forUpdate.includes(id)).sort();
+    const keyShare = [...new Set(asked.filter((id) => UUID_RE.test(id)))]
+      .filter((id) => !forUpdate.includes(id) && !noKeyUpdate.includes(id)).sort();
+    // Three statements over DISJOINT id sets, strongest mode first, each
+    // `ORDER BY id`. The ordering of separate CTEs is NOT relied on as proof
+    // of a global scene_sets order — there is none, and none is obtainable
+    // with three modes. What makes it safe is that each id is locked once at
+    // its strongest mode (no upgrade) and every acquisition is NOWAIT (no
+    // wait, so no cycle).
+    const take = async (ids, clause, liveOnly) => {
+      if (!ids.length) return;
+      const [rows] = await sequelize.query(
+        `SELECT id FROM scene_sets WHERE id IN (:ids)${liveOnly ? ' AND deleted_at IS NULL' : ''} ORDER BY id ${clause}`,
+        { replacements: { ids }, transaction });
+      for (const r of rows) held.add(String(r.id));
+    };
+    await take(forUpdate, 'FOR UPDATE NOWAIT', false);
+    await take(noKeyUpdate, 'FOR NO KEY UPDATE NOWAIT', true);
+    await take(keyShare, 'FOR KEY SHARE NOWAIT', true);
+  }
 
   // ── 5. re-read under the locks; an incomplete held set is a retry ───────
   const after = {};
@@ -442,11 +489,10 @@ async function lockSetReferences(sequelize, { setId = null, setIds = null, repla
     || after[id].events.some((e) => !heldEvents.has(e))
     || after[id].versions.some((v) => !held.has(v)));
 
-  const single = sources.length === 1 ? sources[0] : null;
   return {
     // the delete path's shape, unchanged
     refs: single ? after[single] : null,
-    replacementHeld: asked.length === 1 ? held.has(asked[0]) && String(asked[0]) !== single : false,
+    replacementHeld: Boolean(lone) && held.has(lone),
     // the batch's shape
     refsBySource: after,
     replacementsHeld: Object.fromEntries(asked.map((id) => [id, held.has(id)])),

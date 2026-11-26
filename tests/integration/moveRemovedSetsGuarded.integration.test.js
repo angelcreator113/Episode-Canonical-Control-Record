@@ -557,6 +557,86 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
       expect(typeof held.attempt).toBe('number');
     });
 
+    const LEGACY = /^WITH gone AS \(SELECT id FROM scene_sets WHERE id = :setId FOR UPDATE NOWAIT\)/;
+    // MEASURED: lockTrace classifies the `WITH gone AS (…)` statement as kind
+    // 'other', because describe() only calls a statement a lock when it
+    // starts with SELECT. sceneSetDeleteLockOrder reads it the same way —
+    // r.sql across every record — so these cases do too.
+    const setStatements = () => trace.records
+      .map((r) => r.sql || '')
+      .filter((q) => /scene_sets/.test(q) && /FOR (?:NO KEY )?(?:KEY )?(?:UPDATE|SHARE)/.test(q));
+
+    test('the historical single-set call emits the ORIGINAL statement, verbatim', async () => {
+      // The delete-with-replacement path's merged suite pins this text
+      // (sceneSetDeleteLockOrder:245, :532, :533). The specialization exists
+      // for that contract, and this case fails if the generalized form ever
+      // takes that call over.
+      const gone = await set('sql legacy gone', { deleted: true });
+      const live = await set('sql legacy live');
+      await episodeUsing(gone);
+
+      trace = lockTrace.install(sequelize);
+      await uses.withSetLocks(sequelize, { setId: gone, replacementId: live }, async () => null);
+
+      const stmts = setStatements();
+      expect(stmts.some((q) => LEGACY.test(q))).toBe(true);
+      expect(stmts.filter((q) => LEGACY.test(q))).toHaveLength(1);
+      // and not the generalized form
+      expect(stmts.some((q) => /IN \(:ids\)/.test(q))).toBe(false);
+    });
+
+    test('a genuine batch uses the GENERALIZED statements, each mode over its own ids', async () => {
+      const goneA = await set('sql batch A', { deleted: true });
+      const goneB = await set('sql batch B', { deleted: true });
+      const live = await set('sql batch live');
+      await episodeUsing(goneA);
+
+      trace = lockTrace.install(sequelize);
+      await uses.withSetLocks(sequelize, { setIds: [goneA, goneB], replacementIds: [live] }, async () => null);
+
+      const stmts = setStatements();
+      expect(stmts.some((q) => LEGACY.test(q))).toBe(false);
+      expect(stmts.some((q) => /IN \(:ids\).*FOR UPDATE NOWAIT/.test(q))).toBe(true);
+      expect(stmts.every((q) => /NOWAIT/.test(q) && /ORDER BY id/.test(q))).toBe(true);
+    });
+
+    test('a ONE-MOVE repair takes the legacy statement, because its locking contract is identical', async () => {
+      // Not an array-length rule: one source with one ordinary replacement
+      // would acquire exactly the rows and modes the deduplication computes,
+      // so the faithful statement is the original one. Asserted rather than
+      // assumed, and the repair itself still works.
+      const gone = await set('sql one gone', { deleted: true });
+      const live = await set('sql one live');
+      const { ep } = await episodeUsing(gone);
+
+      trace = lockTrace.install(sequelize);
+      const res = await post(ep, tokens.admin, [{ from: gone, to: live }]);
+      expect(res.status).toBe(200);
+
+      const stmts = setStatements();
+      expect(stmts.some((q) => LEGACY.test(q))).toBe(true);
+      expect(await rows('SELECT scene_set_id FROM scene_plans WHERE episode_id = :ep AND deleted_at IS NULL', { ep }))
+        .toEqual([{ scene_set_id: live }, { scene_set_id: live }]);
+    });
+
+    test('one source whose replacement is also a version uses the GENERALIZED form — the branch is the contract, not the count', async () => {
+      // The legacy statement locks versions by version_of_set_id and does no
+      // deduplication, so it would take this replacement twice at two
+      // strengths — the upgrade hazard. One source, and still generalized.
+      const gone = await set('sql up gone', { deleted: true });
+      const live = await set('sql up live');
+      await run('UPDATE scene_sets SET version_of_set_id = :gone WHERE id = :live', { gone, live });
+      await episodeUsing(gone);
+
+      trace = lockTrace.install(sequelize);
+      await uses.withSetLocks(sequelize, { setId: gone, replacementId: live }, async () => null);
+
+      const stmts = setStatements();
+      expect(stmts.some((q) => LEGACY.test(q))).toBe(false);
+      expect(stmts.some((q) => /IN \(:ids\)/.test(q))).toBe(true);
+      await run('UPDATE scene_sets SET version_of_set_id = NULL WHERE id = :live', { live });
+    });
+
     test('a scene set in two roles is locked once, at its strongest mode', async () => {
       // `live` is both a replacement and a version of the source, so it would
       // otherwise be taken FOR KEY SHARE and FOR NO KEY UPDATE in one attempt

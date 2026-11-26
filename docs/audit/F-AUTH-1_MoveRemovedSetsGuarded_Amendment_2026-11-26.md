@@ -1,4 +1,4 @@
-| **PRIME STUDIOS** **F-AUTH-1 — P1: MOVING BEATS OFF A REMOVED SCENE SET, GUARDED (AMENDMENT)** *The temporary 503 is lifted. The move now runs in one transaction that takes the complete episode set `FOR UPDATE`, then the events, then the scene set rows deduplicated and each at its strongest mode, re-reads the removed-source membership under those locks, and refuses every accepted or filmed episode before the first write. Any failure rolls the whole batch back. `lockSetReferences` and `withSetLocks` are generalized in place; the guarded delete path is unchanged.* |
+| **PRIME STUDIOS** **F-AUTH-1 — P1: MOVING BEATS OFF A REMOVED SCENE SET, GUARDED (AMENDMENT)** *The temporary 503 is lifted. The move now runs in one transaction that takes the complete episode set `FOR UPDATE`, then the events, then the scene set rows deduplicated and each at its strongest mode, re-reads the removed-source membership under those locks, and refuses every accepted or filmed episode before the first write. Any failure rolls the whole batch back. `lockSetReferences` and `withSetLocks` are generalized in place, with the delete path's statement kept verbatim because its merged suite pins that statement's text; one locking service, one specialization, no second framework.* |
 | --- |
 
 **Document version**
@@ -68,6 +68,36 @@ So the waited locks are globally ordered and the unwaited ones cannot form a wai
 
 # §4. What the change does (MEASURED on the branch)
 
+## Why the delete path's statement is kept verbatim
+
+`tests/integration/sceneSetDeleteLockOrder.integration.test.js` pins the
+delete path's scene-set acquisition **by its SQL text**, not by its
+behaviour: `deleteHoldsAll` (`:245`, used 15 times) gates on
+`/^WITH gone AS/`; `:532` asserts the literal
+`WITH gone AS (SELECT id FROM scene_sets WHERE id = :setId FOR UPDATE NOWAIT)`;
+and `:533` asserts exactly one such statement per transaction. `WITH gone AS`
+appears 7 times in that file. `placeLockGenerationB3` does not reference it.
+
+An earlier revision of this change replaced that statement with three
+mode-grouped statements. The delete path's *behaviour* was unchanged — same
+classes, same modes, same `NOWAIT`, same order — but its SQL was not, so the
+gate never fired and that suite **hung** (measured: timeout, exit 124). On
+Evoni's ruling of 2026-11-26 the single-set call keeps its statement
+verbatim, and the suite is **not** modified: it passes 77/77 byte-unchanged.
+
+**The branch is the locking contract, not the number of moves.** The legacy
+statement locks its versions by `version_of_set_id = :setId` and performs no
+deduplication, so it is faithful only while the replacement is neither the
+source nor one of its live versions — a replacement that is also a version is
+exactly the row the deduplication moves from `FOR KEY SHARE` to
+`FOR NO KEY UPDATE`, the upgrade hazard. So faithfulness is decided by one
+targeted read (`:lone` is a live version of `:single`?), and a single-source
+request whose replacement is a version takes the **generalized** form. An
+incompatible request can never select the legacy path. A **one-move repair**
+does take the legacy statement, because its contract is identical — asserted,
+not assumed, and the degradation of that rule to a length check is one of the
+mutations in §5.
+
 ## The generalized locker
 
 `lockSetReferences(sequelize, { setId, setIds, replacementId, replacementIds, episodeId, transaction })` — `src/services/sceneSetUsesService.js:373`. `setId`/`replacementId` remain the one-element shorthands, so the guarded delete path's call site is **unchanged**. In order:
@@ -76,7 +106,7 @@ So the waited locks are globally ordered and the unwaited ones cannot form a wai
 2. `SET LOCAL lock_timeout = '10s'`.
 3. **The complete episode set** `FOR UPDATE`, one statement, ascending (`lockEpisodes`).
 4. **The complete event set**, `lockLiveEvent` per event, ascending.
-5. **The scene set rows**, deduplicated across the source, version and replacement roles and acquired **once** at the strongest required mode — precedence `FOR UPDATE` > `FOR NO KEY UPDATE` > `FOR KEY SHARE` — in three statements over **disjoint** id sets, strongest first, each `ORDER BY id … NOWAIT` (`:426-435`).
+5. **The scene set rows.** For the legacy-faithful case, the original `WITH gone AS (…)` statement, verbatim, with `:setId` and `:replacement`. Otherwise, deduplicated across the source, version and replacement roles and acquired **once** at the strongest required mode — precedence `FOR UPDATE` > `FOR NO KEY UPDATE` > `FOR KEY SHARE` — in three statements over **disjoint** id sets, strongest first, each `ORDER BY id … NOWAIT`. Neither form relies on the order of separate CTEs as proof of a global scene-set order: there is none, and none is obtainable with three modes.
 6. Re-read every source's references; `grown` when any episode, event or version named is not held.
 
 **Why the dedup is not cosmetic.** Across N moves an id can appear in two roles — a replacement that is also a version of some source, or a source that is a version of another source. Locking it twice at different strengths is a **lock upgrade after another row is already held**, which is the deadlock shape. Deduplication removes the possibility rather than ordering around it. §5 pins it with a case and a mutation.
@@ -107,14 +137,19 @@ One commit, or one rollback of everything (D1).
 
 | suite | result |
 |---|---|
-| `moveRemovedSetsGuarded` (**new**, replaces the 503 suite) | **23/23** |
+| `sceneSetDeleteLockOrder`, **byte-unchanged** | **77/77**, 11.2 s |
+| `moveRemovedSetsGuarded` (**new**, replaces the 503 suite) | **27/27** |
 | `sceneSetUses` | **13/13** |
-| `RemovedSetsBanner` (Vitest) | **7/7** |
-| with `referenceWritersSetLiveness`, `p2aSceneAdmin`, `p1PlanAdmin`, `episodes-cluster-tier-promotion` | **605/605**, 78.3 s |
+| `RemovedSetsBanner` (Vitest) | **7/7**; `vite build` 18.2 s |
+| the nine lock-ordering suites | **423/423**, 94.9 s |
+| `frozenEpisodePlanning`, `frozenEpisodeConcurrency`, `startPlanRowsSetLiveness`, `eventWritersEpisodeFirst`, `episodeLocations`, `eventPlaceSync`, `setupResume`, `beatPlanChosen`, `startTransaction`, `scenePlanGuard` | **181/181**, 85.6 s |
+| with `referenceWritersSetLiveness`, `p2aSceneAdmin`, `p1PlanAdmin`, `episodes-cluster-tier-promotion` | **609/609**, 78.9 s |
 
 Real-connection cases: a source row held by another transaction → `409 RETRY` in well under the 10 s lock timeout, nothing written (the `NOWAIT` claim of §3, measured); two **opposite-order overlapping batches** → no 500, no deadlock, one succeeds and no beat is left on a removed set; a **concurrent removal of the replacement** → 200, 400 or 409, and on 200 no beat names a removed set; an **acceptance racing the batch** → either refused with nothing written or committed onto a live set, never both; a **real failure on the last move** → every earlier move rolled back, angle labels included; the lock order read from the trace — episodes, then events, then scene sets, classes never going backwards, every set statement `NOWAIT` and `ORDER BY id`, no `40P01`.
 
-**Mutation-checked, four ways:** removing the freeze loop fails **4** cases; taking the scene set rows before the episodes and events fails the lock-order case; removing the dedup fails the two-roles case; and moving the freeze asserts **after** the writes fails the accepted case — which is the mutation that justifies the trace assertion, since the snapshot alone survives it.
+**Mutation-checked, five ways:** removing the freeze loop fails **4** cases; moving the freeze asserts **after** the writes fails the accepted case — the mutation that justifies the trace assertion, since the snapshot alone survives it; taking the scene set rows before the episodes and events fails the lock-order case; removing the dedup fails the two-roles case; and degrading the legacy branch to a bare length check — so a replacement that is also a version would wrongly take the unfaithful statement — fails **2** cases.
+
+**And the specialization itself is pinned:** one case asserts the historical single-set call emits the original statement and **not** the generalized one; one asserts a genuine batch emits the generalized statements and no `WITH gone AS`; one asserts a one-move repair takes the legacy statement and still repairs; and one asserts that a single source whose replacement is a version takes the generalized form.
 
 The guarded delete path is unchanged and proved so: `sceneSetUses`, `p2aSceneAdmin` and the nine lock-ordering suites pass, and a case drives the single-set shorthand through `withSetLocks` and asserts the delete path's own return shape (`refs`, `replacementHeld`, `attempt`).
 
@@ -138,6 +173,7 @@ The "reached only through an event" case was first written by repointing `world_
 - **The wider reference set can refuse a draft episode's move** because a different accepted episode shares its event — the two-part special of §6. The existing `episodes` response field names which episode.
 - **A beat left with a NULL scene set is still invisible** to the removed-sets listing, the locations gap check and Resume's missing-beat calculation, so this tool cannot offer it and a frozen episode still has no repair path. Recorded in the S1-B amendment §8 and the restriction's §4; Resume NULL-set recovery remains a separate held item.
 - **Mode precedence is now load-bearing.** A future lock class must be inserted at the correct strength, or the dedup would silently weaken a lock.
+- **Two SQL spellings live in one function**, chosen by the faithfulness check. That is the price of a merged suite that pins a statement's text rather than its behaviour. If that suite is ever rewritten to assert the lock records instead of the SQL, the specialization can go and the generalized form can serve both — recorded here so the chance is not missed.
 
 ---
 
