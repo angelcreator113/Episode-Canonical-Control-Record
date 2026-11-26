@@ -765,7 +765,14 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
 
     test('the event moved after Start\'s commit and before its locations are saved (a real event PUT): the step fails with its reason, the Start says its setup is not complete, and the older set is not put back', async () => {
       const ev = await startable();
-      const committed = gateOn((rec) => !rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans'); // after the commit
+      // S1-B (Evoni, 2026-11-25): Start's plan rows are written inside the
+      // plan+scenes unit's transaction now, and that unit still runs AFTER
+      // Start's main commit — that transaction opens at
+      // episodeGeneratorService:791 and closes at :1001, and the unit is called
+      // at :1098. So this gate marks the same concurrency boundary as before;
+      // only the plan INSERT's transaction id has changed. Every assertion,
+      // expected code and timeout in this file is unchanged.
+      const committed = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'insert' && rec.table === 'scene_plans'); // after the commit
       const pending = send(start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a }));
       await committed.reached;
       expect((await putEvent(ev, { scene_set_id: w.c })).status).toBe(200);
@@ -790,7 +797,7 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
 
     test('three at once: a Start past its commit, a Locations save on the new episode moving the event, and an event edit: each takes its turn, the last choice stands, the Start does not write over it; no deadlock', async () => {
       const ev = await startable();
-      const committed = gateOn((rec) => !rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans');
+      const committed = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'insert' && rec.table === 'scene_plans');
       const pending = send(start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a }));
       await committed.reached;
       const ep = await episodeOf(ev);
@@ -813,7 +820,7 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       const savingLocations = () => {
         let plansMade = false;
         return gateOn((rec) => {
-          if (!rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans') plansMade = true;
+          if (Boolean(rec.txId) && rec.kind === 'insert' && rec.table === 'scene_plans') plansMade = true;
           return plansMade && Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'world_events';
         });
       };
@@ -892,7 +899,7 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
      */
     async function staleStart({ locations = [loc('event', w.a), loc('home', w.home)], key = null } = {}) {
       const ev = await startable();
-      const committed = gateOn((rec) => !rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans');
+      const committed = gateOn((rec) => Boolean(rec.txId) && rec.kind === 'insert' && rec.table === 'scene_plans');
       const req = asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`));
       if (key) req.set('Idempotency-Key', key);
       const pending = send(req.send({ draft_script: false, locations, event_scene_set_id: w.a }));
@@ -1177,7 +1184,7 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
     const savingLocations = () => {
       let plansMade = false;
       return gateOn((rec) => {
-        if (!rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans') plansMade = true;
+        if (Boolean(rec.txId) && rec.kind === 'insert' && rec.table === 'scene_plans') plansMade = true;
         return plansMade && Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'world_events';
       });
     };
