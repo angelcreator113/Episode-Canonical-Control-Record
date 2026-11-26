@@ -1348,15 +1348,38 @@ const EpisodeDetail = () => {
             the steps, the checks, Open Editor and Mark Ready. */}
         {activeTab === 'production' && (
           <Suspense fallback={null}>
-            <EpisodeProductionHeader
-              episode={episode}
-              checks={productionChecks.checks}
-              sections={productionChecks.sections}
-              onOpenTab={openTab}
-              onMarkReady={() => changeStatus('in_review')}
-              statusSaving={statusSaving}
-              returnTab={locationTab}
-            />
+            {/* The strip's steps 1 and 3 are worked out from the production
+                checks, so while those are being read again — or after a
+                re-read failed — it is showing the episode as it was. It says
+                so in the same words and the same way the Production badge
+                does (checksUpdating / checksStale), rather than through a
+                second mechanism of its own, and it keeps its answers rather
+                than emptying: with no checks every step would read "not
+                done", which is a worse untruth than a strip one edit behind
+                (Evoni, PR #3949 review). Steps 2 and 4-7 are read from the
+                episode, its clips and its thumbnail and are unaffected. */}
+            <div
+              className={`ed-prodhead-wrap${checksStale ? ' is-stale' : checksUpdating ? ' is-updating' : ''}`}
+              data-testid="ed-prodhead-wrap"
+              data-currency={checksStale ? 'stale' : checksUpdating ? 'updating' : 'current'}
+            >
+              {(checksStale || checksUpdating) && (
+                <p className="ed-visually-hidden" data-testid="ed-prodhead-currency" role="status">
+                  {checksStale
+                    ? "These steps are out of date: the production checks couldn't be read again."
+                    : 'These steps are being checked again.'}
+                </p>
+              )}
+              <EpisodeProductionHeader
+                episode={episode}
+                checks={productionChecks.checks}
+                sections={productionChecks.sections}
+                onOpenTab={openTab}
+                onMarkReady={() => changeStatus('in_review')}
+                statusSaving={statusSaving}
+                returnTab={locationTab}
+              />
+            </div>
           </Suspense>
         )}
 

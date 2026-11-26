@@ -357,6 +357,36 @@ describe('Episode page: one production-checks record, reused only while current'
     if (badgeFromTab) expect(badge()?.textContent).toBe(badgeFromTab);
   });
 
+  // ── 10. The Production strip says the same thing the badge does ────────
+  test('the Production strip is marked out of date too, in the same words, when the re-read fails', async () => {
+    open(EP_FULL, ADMIN, undefined, 'scenes');
+    await waitFor(() => expect(screen.getByTestId('ed-prodhead-wrap')).toBeTruthy(), { timeout: 4000 });
+    await ledger.settle();
+    // While the checks are this generation's, the strip claims nothing.
+    await waitFor(() => expect(screen.getByTestId('ed-prodhead-wrap').getAttribute('data-currency')).toBe('current'), { timeout: 4000 });
+    expect(screen.queryByTestId('ed-prodhead-currency')).toBeNull();
+
+    // A save whose re-read of the checks fails outright.
+    vi.mocked(loadProductionChecks).mockImplementationOnce(() => Promise.reject(new Error('chunk failed')));
+    apiClient.put.mockResolvedValue({ data: { data: { narrative_purpose: 'new' } } });
+    await act(async () => { go(`/episodes/${EP_FULL}?tab=overview`); });
+    const field = await waitFor(() => screen.getByText('Narrative purpose').parentElement.querySelector('textarea'));
+    await act(async () => { fireEvent.change(field, { target: { value: 'A new purpose' } }); });
+    await act(async () => { fireEvent.blur(field); });
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalled());
+    await waitFor(() => expect(badge()?.getAttribute('data-currency')).toBe('stale'), { timeout: 4000 });
+
+    // Back on a Production tab: the strip keeps its steps AND says they are
+    // out of date — the same state the badge reports, not a second one.
+    await act(async () => { go(`/episodes/${EP_FULL}?tab=scenes`); });
+    await waitFor(() => expect(screen.getByTestId('ed-prodhead-wrap')).toBeTruthy(), { timeout: 4000 });
+    expect(screen.getByTestId('ed-prodhead-wrap').getAttribute('data-currency')).toBe('stale');
+    expect(screen.getByTestId('ed-prodhead-wrap').className).toMatch(/\bis-stale\b/);
+    expect(screen.getByTestId('ed-prodhead-currency').textContent).toMatch(/out of date/);
+    // The steps themselves are still there: emptying them would read "not done".
+    expect(screen.getByTestId('eph-now')).toBeTruthy();
+  });
+
   // ── 6. No loop: a quiet page settles and stops asking ─────────────────
   test('the record is read once and the page then goes quiet: no repeating re-reads', async () => {
     open(EP_FULL, ADMIN, undefined, 'checklist');
