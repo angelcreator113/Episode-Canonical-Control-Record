@@ -54,6 +54,7 @@ export default function RemovedSetsBanner({ episodeId, showId, onMoved }) {
   }, [removed.length, showId]);
 
   if (!removed.length) return null;
+  const ready = removed.every((s) => choice[s.scene_set_id]);
 
   const move = async () => {
     setMoving(true);
@@ -67,7 +68,17 @@ export default function RemovedSetsBanner({ episodeId, showId, onMoved }) {
       onMoved?.();
     } catch (err) {
       console.error('[RemovedSets] move failed:', err);
-      setError(sceneAdminOnlyMessage(err) || err.response?.data?.error || 'Could not move the beats');
+      // P1 guarded repair (Evoni, 2026-11-26): the move now refuses rather
+      // than rewriting an episode that has been accepted or filmed, and it
+      // asks to be tried again when it lost to a lock. Each answer carries
+      // its own sentence; it is shown as the server wrote it, and a retry
+      // says so plainly instead of leaving a dead end.
+      const code = err.response?.data?.code || null;
+      const said = err.response?.data?.error || null;
+      setError(sceneAdminOnlyMessage(err)
+        || (code === 'RETRY' ? `${said || 'Another change to these scene sets got in the way.'} Nothing was changed — choose Move my beats again.` : null)
+        || said
+        || 'Could not move the beats');
     }
     setMoving(false);
   };
@@ -91,22 +102,7 @@ export default function RemovedSetsBanner({ episodeId, showId, onMoved }) {
         ))}
       </ul>
       {error && <p className="removed-sets-error">{error}</p>}
-      {/*
-        P1 (Evoni, 2026-11-26): moving is switched off server-side, because it
-        could rewrite an episode that has been accepted or filmed (503
-        MOVE_REMOVED_SETS_DISABLED). The list above is unchanged — this still
-        says which sets were removed and which beats point at them — and the
-        button says plainly that the move is unavailable rather than failing
-        when it is pressed. Nothing here is hidden, and no second repair path
-        is offered: the beats are corrected in the episode's Locations and
-        Beat Plan, then Resume setup.
-      */}
-      <p className="removed-sets-unavailable">
-        Moving the beats automatically is unavailable while its safety checks are being finished:
-        it could change an episode that has been accepted or filmed. Set each beat&rsquo;s location
-        in the episode&rsquo;s Locations and Beat Plan, then choose Resume setup.
-      </p>
-      <button type="button" className="removed-sets-move" disabled onClick={move}>
+      <button type="button" className="removed-sets-move" disabled={!ready || moving} onClick={move}>
         {moving ? 'Moving…' : 'Move my beats'}
       </button>
     </section>

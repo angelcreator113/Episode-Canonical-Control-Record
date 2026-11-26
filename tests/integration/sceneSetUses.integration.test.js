@@ -232,23 +232,15 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(list.status).toBe(200);
     expect(list.body.data.map((s) => [s.name, s.beats])).toEqual([["Lala's Closet", [1, 2]], ["Lala's Room", [13]]]);
 
-    // P1 (Evoni, 2026-11-26): the one-click move is switched off server-side.
-    // Nothing is written and the repair service is never entered.
-    const beatsBefore = await rows('SELECT beat_number, scene_set_id FROM scene_plans WHERE episode_id = :ep ORDER BY beat_number', { ep });
-    const spy = jest.spyOn(uses, 'moveRemovedSetsForEpisode');
-    const off = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`)).send({ moves: [{ from: goneA, to: newA }, { from: goneB, to: newB }] });
-    expect(off.status).toBe(503);
-    expect(off.body).toMatchObject({ success: false, code: 'MOVE_REMOVED_SETS_DISABLED' });
-    expect(spy).not.toHaveBeenCalled();
-    expect(await rows('SELECT beat_number, scene_set_id FROM scene_plans WHERE episode_id = :ep ORDER BY beat_number', { ep })).toEqual(beatsBefore);
-    expect((await auth(request(app).get(`/api/v1/episodes/${ep}/removed-sets`))).body.data).toHaveLength(2);
-    spy.mockRestore();
+    // P1 guarded repair (Evoni, 2026-11-26): the route works again, under
+    // locks and a freeze check, so this case drives it end to end once more.
+    // A removed set as the replacement is still refused 400.
+    const refused = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`)).send({ moves: [{ from: goneA, to: goneB }] });
+    expect(refused.status).toBe(400);
+    expect(refused.body.code).toBe('BAD_REPLACEMENT');
 
-    // The MOVE SEMANTICS are the service's and are unchanged: a removed set
-    // is refused as a replacement, and two removed sets go to two live ones.
-    await expect(moveAsService(ep, [{ from: goneA, to: goneB }]))
-      .rejects.toMatchObject({ status: 400, code: 'BAD_REPLACEMENT' });
-    await moveAsService(ep, [{ from: goneA, to: newA }, { from: goneB, to: newB }]);
+    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`)).send({ moves: [{ from: goneA, to: newA }, { from: goneB, to: newB }] });
+    expect(res.status).toBe(200);
     expect((await rows('SELECT beat_number, scene_set_id FROM scene_plans WHERE episode_id = :ep ORDER BY beat_number', { ep })).map((r) => [r.beat_number, r.scene_set_id]))
       .toEqual([[1, newA], [2, newA], [13, newB]]);
     expect(await usesOf(newA)).toMatchObject({ locations: 1, events: 1, scenes: 2 });
