@@ -776,6 +776,14 @@ router.post('/:episodeId/setup/resume', requireAuth, authorize(['ADMIN']), async
       data: result,
     });
   } catch (err) {
+    // S1-B (Evoni, 2026-11-25): an accepted or filmed episode is not
+    // re-planned. resumeEpisodeSetup refuses before any setup write, and that
+    // refusal is its own 409 EPISODE_FROZEN — not a 500 carrying service
+    // text, and not a 200 pretending the resume ran.
+    if (require('../utils/frozenEpisode').isFrozenEpisodeError(err)) {
+      console.warn(`[EpisodeBrief] Resume refused for episode ${req.params.episodeId}: the episode is frozen; nothing was changed.`);
+      return res.status(err.status).json(err.toJSON());
+    }
     console.error('[EpisodeBrief] POST /:episodeId/setup/resume error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
