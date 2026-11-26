@@ -8,9 +8,21 @@
  * others stay.
  */
 
-const { createScenePlanRows, scenePlanStep, BEAT_TEMPLATES } = require('../../../src/services/episodeGeneratorService');
+const { createScenePlanRows, scenePlanStep, BEAT_TEMPLATES, REMOVED_SET_BEAT_REASON } = require('../../../src/services/episodeGeneratorService');
 
-function makeModels({ existingBeats = [], failBeats = [] } = {}) {
+// S1-B (Evoni, 2026-11-26): createScenePlanRows requires the CALLER's
+// transaction. This is a unit suite over a doubled sequelize, so the token is
+// a sentinel — but it is only an honest stand-in if the double proves the
+// token reaches every statement, so each test asserts that below. A double
+// that accepted anything could hide a missing propagation, which is the one
+// defect this contract exists to prevent.
+const TX = { sentinel: 'caller-owned-transaction' };
+
+// C2 / Writer 8: the set-liveness read is told apart from the home-set
+// lookup, so a removed set can be modelled instead of every set reading live.
+const LIVENESS = /FOR KEY SHARE/;
+
+function makeModels({ existingBeats = [], failBeats = [], goneSets = [] } = {}) {
   const queries = [];
   return {
     queries,
@@ -19,6 +31,10 @@ function makeModels({ existingBeats = [], failBeats = [] } = {}) {
       sequelize: {
         query: jest.fn(async (sql, opts) => {
           queries.push({ sql, opts });
+          if (LIVENESS.test(sql)) {
+            const id = String(opts?.replacements?.id || '');
+            return [goneSets.map(String).includes(id) ? [] : [{ id }]];
+          }
           if (/FROM scene_sets/.test(sql)) {
             return [[{ id: 'scene-set-home-1' }]];
           }
@@ -46,7 +62,7 @@ describe('createScenePlanRows', () => {
   it('inserts all 14 beats for a fresh episode with no existing rows', async () => {
     const { models, queries } = makeModels();
 
-    const { scenePlanRows, sceneSetIds, existingBeats, failedBeats } = await createScenePlanRows(episode, event, models);
+    const { scenePlanRows, sceneSetIds, existingBeats, failedBeats } = await createScenePlanRows(episode, event, models, null, { transaction: TX });
 
     expect(scenePlanRows).toHaveLength(BEAT_TEMPLATES.length);
     expect(scenePlanRows).toHaveLength(14);
@@ -56,12 +72,56 @@ describe('createScenePlanRows', () => {
 
     const inserts = queries.filter(q => /INSERT INTO scene_plans/.test(q.sql));
     expect(inserts).toHaveLength(14);
+    // The caller's transaction reached EVERY statement, the set-liveness
+    // reads included. Without this the sentinel above would prove nothing.
+    expect(queries).not.toHaveLength(0);
+    expect(queries.every((q) => q.opts?.transaction === TX)).toBe(true);
+    // And the sets the beats name were taken live-only, never waited for.
+    const liveness = queries.filter((q) => LIVENESS.test(q.sql));
+    expect(liveness).not.toHaveLength(0);
+    expect(liveness.every((q) => /NOWAIT/.test(q.sql) && /deleted_at IS NULL/.test(q.sql))).toBe(true);
+  });
+
+  it("refuses at once without a caller's transaction, and writes nothing", async () => {
+    const { models, queries } = makeModels();
+
+    await expect(createScenePlanRows(episode, event, models))
+      .rejects.toThrow(/requires the caller's transaction/);
+    await expect(createScenePlanRows(episode, event, models, null, {}))
+      .rejects.toThrow(/requires the caller's transaction/);
+
+    // Not one statement was sent: it refuses before any read or write.
+    expect(queries).toHaveLength(0);
+    expect(models.sequelize.query).not.toHaveBeenCalled();
+  });
+
+  it('a beat whose selected set was removed is not written, and the others still are', async () => {
+    // The home set is gone. The beats placed at it are named with the reason;
+    // no row names it; the event's beats are created in the same call.
+    const { models, queries } = makeModels({ goneSets: ['scene-set-home-1'] });
+
+    const result = await createScenePlanRows(episode, event, models, null, { transaction: TX });
+
+    expect(result.failedBeats).not.toHaveLength(0);
+    expect(result.failedBeats.every((f) => f.reason === REMOVED_SET_BEAT_REASON)).toBe(true);
+    expect(result.scenePlanRows).not.toHaveLength(0);
+    // Nothing naming the removed set was written, and nothing was quietly
+    // moved to another set or turned into a locationless beat.
+    const inserts = queries.filter((q) => /INSERT INTO scene_plans/.test(q.sql));
+    expect(inserts.some((q) => q.opts.replacements.scene_set_id === 'scene-set-home-1')).toBe(false);
+    expect(inserts).toHaveLength(result.scenePlanRows.length);
+    const failedNumbers = result.failedBeats.map((f) => f.beat);
+    expect(inserts.some((q) => failedNumbers.includes(q.opts.replacements.beat_number))).toBe(false);
+    // The step stays incomplete while those beats are unresolved.
+    const step = scenePlanStep(result);
+    expect(step.status).toBe('partial');
+    expect(step.missing).toEqual(failedNumbers);
   });
 
   it('inserts nothing on a repeat call for an episode that has every beat', async () => {
     const { models, queries } = makeModels({ existingBeats: BEAT_TEMPLATES.map((b) => b.beat) });
 
-    const { scenePlanRows, sceneSetIds, existingBeats } = await createScenePlanRows(episode, event, models);
+    const { scenePlanRows, sceneSetIds, existingBeats } = await createScenePlanRows(episode, event, models, null, { transaction: TX });
 
     expect(scenePlanRows).toHaveLength(0);
     expect(existingBeats).toHaveLength(14);
@@ -77,7 +137,7 @@ describe('createScenePlanRows', () => {
   it('a partly made plan gets exactly the beats it lacks, and the rows that exist are left alone', async () => {
     const { models, queries } = makeModels({ existingBeats: [1, 2, 3, 4, 5] });
 
-    const { scenePlanRows, existingBeats } = await createScenePlanRows(episode, event, models);
+    const { scenePlanRows, existingBeats } = await createScenePlanRows(episode, event, models, null, { transaction: TX });
 
     expect(existingBeats).toEqual([1, 2, 3, 4, 5]);
     expect(scenePlanRows.map((r) => r.beat_number)).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14]);
@@ -90,7 +150,7 @@ describe('createScenePlanRows', () => {
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const { models } = makeModels({ failBeats: [6] });
 
-    const result = await createScenePlanRows(episode, event, models);
+    const result = await createScenePlanRows(episode, event, models, null, { transaction: TX });
 
     expect(result.scenePlanRows).toHaveLength(13);
     expect(result.failedBeats).toEqual([{ beat: 6, reason: 'disk full on beat 6' }]);
@@ -104,7 +164,7 @@ describe('createScenePlanRows', () => {
     const { models } = makeModels({ existingCount: 0 });
     models.ScenePlan = undefined;
 
-    const { scenePlanRows, sceneSetIds } = await createScenePlanRows(episode, event, models);
+    const { scenePlanRows, sceneSetIds } = await createScenePlanRows(episode, event, models, null, { transaction: TX });
 
     expect(scenePlanRows).toEqual([]);
     expect(sceneSetIds).toEqual({ home: null, venue: null });
@@ -112,7 +172,8 @@ describe('createScenePlanRows', () => {
 
   it('proceeds with insert if the existence check itself fails', async () => {
     const { models } = makeModels({ existingCount: 0 });
-    models.sequelize.query = jest.fn(async (sql) => {
+    models.sequelize.query = jest.fn(async (sql, opts) => {
+      if (LIVENESS.test(sql)) return [[{ id: String(opts?.replacements?.id || '') }]];
       if (/FROM scene_sets/.test(sql)) return [[{ id: 'scene-set-home-1' }]];
       if (/SELECT COUNT\(\*\)/.test(sql)) throw new Error('connection reset');
       if (/INSERT INTO scene_plans/.test(sql)) return [[]];
@@ -120,7 +181,7 @@ describe('createScenePlanRows', () => {
     });
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const { scenePlanRows } = await createScenePlanRows(episode, event, models);
+    const { scenePlanRows } = await createScenePlanRows(episode, event, models, null, { transaction: TX });
 
     expect(scenePlanRows).toHaveLength(14);
     expect(warnSpy).toHaveBeenCalledWith(
