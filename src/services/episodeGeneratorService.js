@@ -17,6 +17,11 @@ const { v4: uuidv4 } = require('uuid');
 const { CANONICAL_BEATS } = require('../constants/canonicalBeats');
 const { findLiveLinkedEpisode, eventEpisodeConflictError, eventDeletedError, lockLiveEvent } = require('../utils/eventEpisodeLink');
 const { lockEpisodes, RetryableConflictError } = require('../utils/episodeLocks');
+
+// C2 / Writer 8 (Evoni, 2026-11-26): a beat whose SELECTED scene set was
+// removed while the episode was being set up. The beat is not made, and it is
+// NOT quietly turned into a locationless beat or moved to another set.
+const REMOVED_SET_BEAT_REASON = "This beat's scene set was removed while the episode was being set up. The beat was not made, and nothing naming the removed set was written: choose the beat's location in the episode's Locations, then resume the setup.";
 const { snapshotFrozen, peekFrozen, frozenError } = require('../utils/snapshotFreeze');
 
 /** A1.2a (W4): regenerating would replace a filmed episode and its Start snapshot. */
@@ -273,6 +278,16 @@ async function planAndSyncUnderEpisodeLock(models, { episode, event, locations }
 }
 
 async function createScenePlanRows(episode, event, models, locations = null, { transaction = null } = {}) {
+  // S1-B is the architectural authority (docs/audit/
+  // F-AUTH-1_S1B_FrozenEpisodeProductionWrites_Amendment_2026-11-26.md §9):
+  // the transaction is the CALLER's. Without one the set rows held below
+  // would be released the moment each statement ended, so the liveness
+  // guarantee would be decorative, and the plan rows could not roll back
+  // together with the scene rows. Required, not defaulted: a caller that
+  // forgets is a defect, and silence would hide it.
+  if (!transaction) {
+    throw new Error("createScenePlanRows requires the caller's transaction (S1-B): call it through planAndSyncUnderEpisodeLock, which holds the episode FOR UPDATE and decides the freeze under it.");
+  }
   const { ScenePlan } = models;
   const scenePlanRows = [];
   const sceneSetIds = { home: null, venue: null };
@@ -340,10 +355,59 @@ async function createScenePlanRows(episode, event, models, locations = null, { t
     console.warn('[EpisodeGenerator] Scene angles load failed; beats get no angle:', angleErr.message);
   }
 
+  // ── C2 / Writer 8 (Evoni, 2026-11-26): THE BEATS NAME LIVE SCENE SETS ──
+  //
+  // Before this, these inserts held no set row, so a Scene Set delete that
+  // committed in between left the beat naming the removed set: the foreign
+  // key on scene_plans.scene_set_id is satisfied by the soft-deleted row and
+  // nothing waited for it. S1-B put the inserts under the episode's
+  // FOR UPDATE in the caller's transaction; this adds the set rows to that
+  // same transaction, in the established order. The episode is already held,
+  // so every set the missing beats name is taken live-only and NOWAIT —
+  // ascending, which holdLiveSets does itself — and a set row is never
+  // waited for while an episode row is held (the delete path's order, C1).
+  //
+  // A lock conflict is NOT a removed set. holdLiveSet answers false only for
+  // a row that is absent or soft-deleted; a held row raises 55P03 (or 40P01),
+  // which leaves this transaction for the caller's bounded retry to run
+  // again (eventPlaceSync.inEpisodeFirstTransaction, at most
+  // PLACE_FINALIZE_MAX_ATTEMPTS). Each pass asks only for the ids it does not
+  // already know to be gone, so every live set ends held and every removed
+  // one is named.
+  //
+  // No per-beat SAVEPOINT (Evoni, 2026-11-26): a database statement failure
+  // rolls back the whole plan-and-scenes unit, and the beats that are still
+  // missing are made by the next Resume.
+  const { holdLiveSets } = require('./eventPlaceSync');
+  const goneSets = new Set();
+  const namedSets = [...new Set(missing
+    .map((b) => placeBeat(b.beat, roleSets, new Map()).scene_set_id)
+    .filter(Boolean)
+    .map(String))];
+  for (;;) {
+    const gone = await holdLiveSets(
+      models.sequelize,
+      namedSets.filter((id) => !goneSets.has(id)),
+      { transaction, nowait: true }
+    );
+    if (!gone) break;
+    goneSets.add(String(gone));
+  }
+
   for (const beat of missing) {
     const placed = placeBeat(beat.beat, roleSets, anglesBySet);
     const sceneSetId = placed.scene_set_id;
     const angleLabel = placed.angle?.angle_label || null;
+
+    // The set this beat was placed at has been removed. Nothing naming it is
+    // written, and the beat is not made without it: it is a failed beat with
+    // its reason, while every unrelated beat below is still created in this
+    // same successful transaction. A beat with no location at all is a
+    // different case and is written with no set, exactly as it always was.
+    if (sceneSetId && goneSets.has(String(sceneSetId))) {
+      failedBeats.push({ beat: beat.beat, reason: REMOVED_SET_BEAT_REASON });
+      continue;
+    }
 
     try {
       const beatId = uuidv4();
@@ -1458,6 +1522,7 @@ module.exports = {
   generateEpisodeFromEvent,
   stampEventUsed,
   createScenePlanRows,
+  REMOVED_SET_BEAT_REASON,
   scenePlanStep,
   recordSetupStatus,
   resumeEpisodeSetup,

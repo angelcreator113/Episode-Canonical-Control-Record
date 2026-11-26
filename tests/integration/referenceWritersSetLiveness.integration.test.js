@@ -47,7 +47,7 @@ const request = require('supertest');
 const app = require('../../src/app');
 const TokenService = require('../../src/services/tokenService');
 const models = require('../../src/models');
-const { isLockConflict, RetryableConflictError } = require('../../src/utils/episodeLocks');
+const { isLockConflict, RetryableConflictError, lockEpisodes } = require('../../src/utils/episodeLocks');
 const uses = require('../../src/services/sceneSetUsesService');
 const approvedBase = require('../../src/services/approvedBaseService');
 const lookVariants = require('../../src/services/locationLookVariantService');
@@ -769,34 +769,39 @@ const settle = (promise) => promise.then(
       }
     });
 
-    test('RECORDED GAP (W8, UNRESOLVED): Start\'s plan rows still make a beat on a removed set', async () => {
-      // Writer 8 was REMOVED from PR 3 on Evoni's decision of 2026-11-24,
-      // because correcting it broke six commit-signal gates in the merged
-      // placeLockGenerationB3 suite (they read the ABSENCE of a transaction
-      // id on a scene_plans insert as the signal that Start has committed).
-      // This case therefore pins the DEFECT, as it stands on main:
-      // createScenePlanRows runs after Start's transaction has committed,
-      // holds neither the event nor the episode, and never re-checks the
-      // sets, so a set removed beforehand is still written onto its beat.
-      // It is an UNRESOLVED reference-liveness dependency, not endorsed
-      // behaviour, and it needs its own follow-up PR.
+    test('W8 RESOLVED: Start\'s plan rows make no beat on a removed set, and say which beats are unresolved', async () => {
+      // The positive form of the case this suite carried as
+      // `RECORDED GAP (W8, UNRESOLVED)`, which asserted the defect:
+      // createScenePlanRows used to run after Start's transaction had
+      // committed, holding neither the episode nor the sets, so a set removed
+      // beforehand was still written onto its beat. Replacing that case with
+      // this one is required by
+      // F-AUTH-1_ReferenceWritersSetLiveness_Amendment_2026-11-24.md §5a
+      // ("When W8 is corrected, this case must be replaced by the positive
+      // one"). §5a said the set would be OMITTED from its beat; Evoni's
+      // ruling of 2026-11-26 replaced that: the beat is not written at all,
+      // nothing is substituted, and the beat is named with its reason.
       const going = await set('Start home', 'HOME_BASE');
       const ep = await mkEpisode(show);
       const ev = await mkEvent(show, { stamp: ep });
       await del(going, ANYWAY);
       expect(await removedAt(going)).not.toBeNull();
 
-      const result = await generator.createScenePlanRows(
-        { id: ep, show_id: show }, { id: ev, show_id: show, scene_set_id: null }, models,
+      const result = await planRowsAsCaller(
+        ep, { id: ev, show_id: show, scene_set_id: null },
         [{ role: 'home', scene_set_id: going, name: null }]);
-      // Start is not failed by this step, as before.
-      expect(result.failedBeats).toEqual([]);
-      expect(result.scenePlanRows.length).toBeGreaterThan(0);
-      // THE GAP: at least one beat was made naming the removed set, and the
-      // row is committed. When W8 is corrected, this case must be replaced
-      // by the positive one (no beat names it, the set omitted).
-      expect(result.scenePlanRows.some((r) => String(r.scene_set_id || '') === going)).toBe(true);
-      expect((await referencesTo(going)).beats).toBeGreaterThan(0);
+
+      // The beats placed at the removed set are unresolved, each with the
+      // reason — not silently written, not moved, not made locationless.
+      expect(result.failedBeats).not.toHaveLength(0);
+      expect(result.failedBeats.every((f) => f.reason === generator.REMOVED_SET_BEAT_REASON)).toBe(true);
+      expect(result.scenePlanRows.some((r) => String(r.scene_set_id || '') === going)).toBe(false);
+      // Nothing naming it is committed, so the reference is simply not there.
+      expect((await referencesTo(going)).beats).toBe(0);
+      // The setup stays incomplete while those beats are unresolved.
+      const step = generator.scenePlanStep(result);
+      expect(step.status).not.toBe('complete');
+      expect(step.missing).toEqual(result.failedBeats.map((f) => f.beat));
       // And no OTHER writer may add to it: PR 3's protections still hold.
       expect((await send(linkSetsToEpisode(ep, [going]))).status).toBe(404);
       expect((await send(createScene({ episodeId: ep, title: 'S', scene_set_id: going }))).status).toBe(404);
@@ -808,14 +813,27 @@ const settle = (promise) => promise.then(
       const live = await set('Start live home', 'HOME_BASE');
       const ep = await mkEpisode(show);
       const ev = await mkEvent(show, { stamp: ep });
-      const result = await generator.createScenePlanRows(
-        { id: ep, show_id: show }, { id: ev, show_id: show, scene_set_id: null }, models,
+      const result = await planRowsAsCaller(
+        ep, { id: ev, show_id: show, scene_set_id: null },
         [{ role: 'home', scene_set_id: live, name: null }]);
       expect(result.failedBeats).toEqual([]);
       expect(result.scenePlanRows.some((r) => r.scene_set_id === live)).toBe(true);
       expect((await referencesTo(live)).beats).toBeGreaterThan(0);
     });
   });
+
+  // W8 (Evoni, 2026-11-26): createScenePlanRows now requires the CALLER's
+  // transaction, and decides set liveness under it. These two cases drive it
+  // the way production does — the episode FOR UPDATE first, then the plan
+  // rows in that same transaction — with a real transaction, never a token.
+  async function planRowsAsCaller(ep, event, locations) {
+    const generator = require('../../src/services/episodeGeneratorService');
+    return sequelize.transaction(async (transaction) => {
+      await lockEpisodes(sequelize, [ep], { transaction, mode: 'update' });
+      return generator.createScenePlanRows(
+        { id: ep, show_id: show }, event, models, locations, { transaction });
+    });
+  }
 
   // ══════════════════════════════════════════════════════════════════════
   // 8. NO DATABASE TEXT, AND NO 40P01 ANYWHERE

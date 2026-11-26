@@ -1266,8 +1266,28 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       expect(await links(ep)).toEqual([]);
       expect(pause).not.toHaveBeenCalled();
       expect(lockErrors(trace.records)).toEqual([]);
-      const finalizations = [...trace.byTransaction().values()].filter((t) => t.some((r) => r.kind === 'lock' && r.table === 'scene_sets'));
+      // W8 (Evoni, 2026-11-26): the locations finalization is identified by
+      // what it HOLDS, not by how its SQL is written — the event row and the
+      // set rows together, which only the finalizer takes. Counting every
+      // transaction that locks a set row used to do, but since C2 / Writer 8
+      // the plan unit holds set rows too (the episode FOR UPDATE, then each
+      // named set live-only and NOWAIT, so no beat is written at a removed
+      // set). That unit never locks the event row, so the two are told apart
+      // by their locks alone. The count, and what it means — the finalization
+      // was tried ONCE, not retried — are unchanged.
+      const byTx = [...trace.byTransaction().values()];
+      const holds = (t, table) => t.some((r) => r.kind === 'lock' && r.table === table);
+      const finalizations = byTx.filter((t) => holds(t, 'scene_sets') && holds(t, 'world_events'));
       expect(finalizations).toHaveLength(1); // one try
+      // And the filter really does separate them: the planning transaction is
+      // here too, holding set rows and no event row. Without this, a filter
+      // that silently matched nothing — or matched the plan unit instead —
+      // would still satisfy the count above.
+      const planning = byTx.filter((t) => holds(t, 'scene_sets') && !holds(t, 'world_events'));
+      expect(planning).toHaveLength(1);
+      expect(planning[0].some((r) => r.kind === 'insert' && r.table === 'scene_plans')).toBe(true);
+      expect(finalizations[0]).not.toBe(planning[0]);
+      expect(finalizations[0].some((r) => r.kind === 'insert' && r.table === 'scene_plans')).toBe(false);
       trace.uninstall();
       trace = null;
 
