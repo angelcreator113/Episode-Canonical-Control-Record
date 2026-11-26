@@ -275,6 +275,24 @@ async function syncBeatScenes(sequelize, episodeId, { transaction: outer } = {})
     // The episode first, as every writer of an episode's rows locks
     // (utils/episodeLocks; the order deleteScene and reorderScenes take).
     await lockEpisodes(sequelize, [episodeId], { transaction });
+    // S1-B (Evoni, 2026-11-25): an accepted or filmed episode's scenes are
+    // kept as they are. The check is HERE, not only in the callers, so a
+    // direct call cannot get round it. It is read under the episode's lock,
+    // which this function has always taken FOR UPDATE (lockEpisodes' default
+    // mode), so an acceptance (FOR UPDATE) or a first clip (FOR SHARE, in
+    // rawClipsService.attachClip) cannot commit between the check and the end
+    // of this transaction.
+    //
+    // Frozen is HELD, never failed: nothing is wrong, there is simply nothing
+    // this sync may do. `held` is already one of OUTCOMES and is documented
+    // there as never a failure, and no reason code is added — S1-A's
+    // OUTCOMES and REASON_CODES are untouched. Callers that refuse on a
+    // failed sync (the export) therefore carry on and decide for themselves.
+    const { episodeFreeze } = require('../utils/frozenEpisode');
+    const freeze = await episodeFreeze(sequelize, episodeId, { transaction });
+    if (freeze.frozen) {
+      return { created: 0, updated: 0, removed: 0, held: 0, outcome: 'held', warnings: [], frozen: true };
+    }
     const collected = await collect(sequelize, episodeId, { transaction, lock: true });
     const plan = classify(collected);
 
@@ -341,9 +359,13 @@ async function syncBeatScenes(sequelize, episodeId, { transaction: outer } = {})
  * is the field a caller reads to answer with a retry (src/routes/export.js).
  * It is never a claim that a committed write was rolled back.
  */
-async function syncBeatScenesQuietly(sequelize, episodeId, where) {
+async function syncBeatScenesQuietly(sequelize, episodeId, where, { transaction } = {}) {
   try {
-    return await syncBeatScenes(sequelize, episodeId);
+    // S1-B: with a transaction it JOINS the caller's (utils/episodeLocks
+    // inTransaction never nests), so Start and Resume can put the plan rows
+    // and the scene rows in one unit that commits or rolls back together.
+    // Without one it opens its own, exactly as before.
+    return await syncBeatScenes(sequelize, episodeId, { transaction });
   } catch (err) {
     console.error(`[BeatScenes] sync for ${where} failed:`, err.message);
     const failed = failedSyncOutcome(err);

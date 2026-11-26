@@ -136,8 +136,15 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     const refused = await put(accepted, 3, { scene_set_id: sets.cafe, chosen: true });
     expect(refused.status).toBe(409);
     expect(refused.body.code).toBe('EPISODE_ACCEPTED');
-    // A set already linked can still be chosen.
-    expect((await put(accepted, 3, { scene_set_id: sets.glasshouse, chosen: true })).status).toBe(200);
+    // S1-B (Evoni, 2026-11-25): an already-linked set may no longer be chosen
+    // either. The whole plan of an accepted episode is kept as it was, so
+    // every beat save is refused, not only one naming a new set. This case
+    // asserted 200 until the freeze superseded it; the code is unchanged.
+    const before = await beatRow(accepted, 3);
+    const alreadyLinked = await put(accepted, 3, { scene_set_id: sets.glasshouse, chosen: true });
+    expect(alreadyLinked.status).toBe(409);
+    expect(alreadyLinked.body.code).toBe('EPISODE_ACCEPTED');
+    expect(await beatRow(accepted, 3)).toEqual(before);
   });
 
   it('only a set or angle chosen in the editor marks the beat; other edits do not; chosen: false hands it back', async () => {

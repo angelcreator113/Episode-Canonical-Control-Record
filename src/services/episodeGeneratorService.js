@@ -238,7 +238,41 @@ function calculateFinancials(event, wardrobeItems = null) {
  * @param {object} models — Sequelize models
  * @returns {Promise<{ scenePlanRows: object[], sceneSetIds: { home: string|null, venue: string|null } }>}
  */
-async function createScenePlanRows(episode, event, models, locations = null) {
+/**
+ * S1-B (Evoni, 2026-11-25): the beats and their scene rows as ONE unit, under
+ * the episode's own lock, for Start and Resume.
+ *
+ * FOR UPDATE at the transaction's entry — never FOR SHARE then upgraded,
+ * which two transactions doing at once is a deadlock. It is what excludes a
+ * first raw clip (whose attach takes FOR SHARE in rawClipsService.attachClip);
+ * an acceptance already took FOR UPDATE in episodeCompletionService.
+ *
+ * The freeze is decided under that lock, before anything is written, so an
+ * accepted or filmed episode is refused and nothing of the unit lands. The
+ * plan rows and the scene rows commit or roll back together: createScenePlanRows
+ * is given this transaction for every one of its statements, and the sync
+ * JOINS it (utils/episodeLocks inTransaction never nests).
+ *
+ * No model call happens inside it: neither createScenePlanRows nor
+ * beatScenesService makes one. Start's feed-moment generation, which does,
+ * stays outside and after it.
+ */
+async function planAndSyncUnderEpisodeLock(models, { episode, event, locations }) {
+  const { inEpisodeFirstTransaction } = require('./eventPlaceSync');
+  const { lockEpisodes } = require('../utils/episodeLocks');
+  const { episodeFreeze, frozenWriteRefusal } = require('../utils/frozenEpisode');
+  const beatScenes = require('./beatScenesService');
+  return inEpisodeFirstTransaction(models.sequelize, async (transaction) => {
+    await lockEpisodes(models.sequelize, [episode.id], { transaction, mode: 'update' });
+    const freeze = await episodeFreeze(models.sequelize, episode.id, { transaction });
+    if (freeze.frozen) throw frozenWriteRefusal(episode.id, freeze, 'beats and scenes');
+    const result = await createScenePlanRows(episode, event, models, locations, { transaction });
+    const sync = await beatScenes.syncBeatScenes(models.sequelize, episode.id, { transaction });
+    return { result, sync };
+  });
+}
+
+async function createScenePlanRows(episode, event, models, locations = null, { transaction = null } = {}) {
   const { ScenePlan } = models;
   const scenePlanRows = [];
   const sceneSetIds = { home: null, venue: null };
@@ -261,7 +295,7 @@ async function createScenePlanRows(episode, event, models, locations = null) {
         `SELECT id FROM scene_sets
           WHERE scene_type = 'HOME_BASE' AND show_id = :showId AND deleted_at IS NULL
           ORDER BY created_at ASC, id ASC LIMIT 1`,
-        { replacements: { showId: event.show_id || episode.show_id } }
+        { replacements: { showId: event.show_id || episode.show_id }, transaction }
       );
       sceneSetIds.home = homeSets?.[0]?.id || null;
       if (event.scene_set_id) {
@@ -278,7 +312,7 @@ async function createScenePlanRows(episode, event, models, locations = null) {
   try {
     const [existingRows] = await models.sequelize.query(
       `SELECT beat_number FROM scene_plans WHERE episode_id = :episode_id`,
-      { replacements: { episode_id: episode.id } }
+      { replacements: { episode_id: episode.id }, transaction }
     );
     for (const r of existingRows || []) existingBeats.add(Number(r.beat_number));
   } catch (existingErr) {
@@ -301,7 +335,7 @@ async function createScenePlanRows(episode, event, models, locations = null) {
     : { home: sceneSetIds.home, event: sceneSetIds.venue };
   let anglesBySet = new Map();
   try {
-    anglesBySet = await loadSetAngles(models.sequelize, Object.values(roleSets));
+    anglesBySet = await loadSetAngles(models.sequelize, Object.values(roleSets), transaction);
   } catch (angleErr) {
     console.warn('[EpisodeGenerator] Scene angles load failed; beats get no angle:', angleErr.message);
   }
@@ -320,7 +354,7 @@ async function createScenePlanRows(episode, event, models, locations = null) {
           id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label,
           emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId || null, angle_label: angleLabel,
           scene_context: beat.description, sort_order: beat.beat,
-        } }
+        }, transaction }
       );
       scenePlanRows.push({ id: beatId, episode_id: episode.id, beat_number: beat.beat, beat_name: beat.label, emotional_intent: beat.emotional_intent, scene_set_id: sceneSetId, angle_label: angleLabel });
     } catch (beatErr) {
@@ -406,14 +440,29 @@ async function resumeEpisodeSetup(models, episodeId) {
   } catch (locErr) {
     console.warn('[EpisodeGenerator] Episode locations read failed on resume:', locErr.message);
   }
-  const result = await createScenePlanRows(episode, event || { show_id: episode.show_id }, models, locations);
-  // L12a: the beats made here get their scene rows now (the plan's read no longer makes them).
-  // S1-A: its outcome is recorded inside the scene_plan step. Resume keeps
-  // its retry and partial-completion behaviour: a sync that could not finish
-  // leaves the step partial, so the next resume takes it on again.
-  const beatScenes = require('./beatScenesService');
-  const sync = await beatScenes.syncBeatScenesQuietly(models.sequelize, episodeId, 'resume setup')
-    || beatScenes.failedSyncOutcome();
+  // S1-B: the beats and their scenes as one locked unit. A frozen episode is
+  // refused HERE, before setup_status or any other setup mutation, so a
+  // resume changes nothing at all on an accepted or filmed episode.
+  let result; let sync;
+  try {
+    ({ result, sync } = await planAndSyncUnderEpisodeLock(models, {
+      episode, event: event || { show_id: episode.show_id }, locations,
+    }));
+  } catch (unitErr) {
+    const { isFrozenEpisodeError } = require('../utils/frozenEpisode');
+    if (isFrozenEpisodeError(unitErr)) {
+      console.warn(`[EpisodeGenerator] Resume refused for episode ${episodeId}: the episode is frozen; nothing was changed.`);
+      throw unitErr;
+    }
+    // Any other failure rolled the whole unit back. Resume keeps its retry
+    // and partial-completion behaviour: the step is left as it was, so the
+    // next resume takes it on again.
+    console.error('[EpisodeGenerator] Resume plan+scenes unit failed; nothing of it was written:', unitErr.message);
+    const beatScenes = require('./beatScenesService');
+    result = { scenePlanRows: [], sceneSetIds: { home: null, venue: null }, failedBeats: [] };
+    sync = beatScenes.failedSyncOutcome(unitErr);
+    sync = { ...sync, outcome: 'failed', retryable: sync.outcome === 'retryable' };
+  }
   const steps = { ...(episode.setup_status?.steps || {}), scene_plan: scenePlanStep({ ...result, sync }) };
   if (!steps.locations) steps.locations = { status: 'complete' };
   // A locations step that failed at Start (B3) is not saved again here: the
@@ -1037,15 +1086,24 @@ Return ONLY JSON.` }],
   // ── 3. Create Scene Plan (14 beats) ──
   // Use a container object instead of bare identifiers so downstream
   // access is resilient even if a scope mutation slips in later edits.
-  const scenePlanResult = await createScenePlanRows(episode, event, models, locations);
-  // L12a: each beat's scene row is made with the plan (the plan's read no
-  // longer makes them). A failure is logged and never stops Start Episode.
-  // S1-A: its outcome is recorded inside the scene_plan step, so a Start
-  // whose scene rows did not all land is not reported complete. The Start
-  // itself has committed and is never described as rolled back.
+  // S1-B: the same locked unit as Resume. Start creates its own episode just
+  // above, so it can never be accepted or filmed by now — the freeze check
+  // here is defence in depth, not a live path, and Start's behaviour for a
+  // new episode is unchanged. A failure is logged and never stops Start
+  // Episode, as before; what changes is that the plan rows and the scene
+  // rows now fail together instead of leaving half of each.
   const beatScenesSvc = require('./beatScenesService');
-  const beatSceneSync = await beatScenesSvc.syncBeatScenesQuietly(models.sequelize, episode.id, 'Start Episode')
-    || beatScenesSvc.failedSyncOutcome();
+  let scenePlanResult; let beatSceneSync;
+  try {
+    ({ result: scenePlanResult, sync: beatSceneSync } = await planAndSyncUnderEpisodeLock(models, {
+      episode, event, locations,
+    }));
+  } catch (unitErr) {
+    console.error('[EpisodeGenerator] Start plan+scenes unit failed; nothing of it was written:', unitErr.message);
+    scenePlanResult = { scenePlanRows: [], sceneSetIds: { home: null, venue: null }, failedBeats: [] };
+    const failed = beatScenesSvc.failedSyncOutcome(unitErr);
+    beatSceneSync = { ...failed, outcome: 'failed', retryable: failed.outcome === 'retryable' };
+  }
   const { scenePlanRows } = scenePlanResult;
   const setupSteps = { scene_plan: scenePlanStep({ ...scenePlanResult, sync: beatSceneSync }), season_slot: seasonSlotStep };
 

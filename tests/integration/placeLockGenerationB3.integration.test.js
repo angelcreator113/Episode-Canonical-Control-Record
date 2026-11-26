@@ -765,7 +765,18 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
 
     test('the event moved after Start\'s commit and before its locations are saved (a real event PUT): the step fails with its reason, the Start says its setup is not complete, and the older set is not put back', async () => {
       const ev = await startable();
-      const committed = gateOn((rec) => !rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans'); // after the commit
+      // S1-B (Evoni, 2026-11-25): Start's plan rows are written inside the
+      // plan+scenes unit's transaction now, and that unit still runs AFTER
+      // Start's main commit — that transaction opens at
+      // episodeGeneratorService:791 and closes at :1001, and the unit is called
+      // at :1098. So this gate marks the same concurrency boundary as before;
+      // only the plan INSERT's transaction id has changed. Every assertion,
+      // expected code and timeout in this file is unchanged.
+      let unitTx = null;
+      const committed = gateOn((rec) => {
+        if (rec.kind === 'insert' && rec.table === 'scene_plans' && rec.txId) unitTx = rec.txId;
+        return Boolean(unitTx) && rec.kind === 'commit' && rec.txId === unitTx;
+      }); // after the commit
       const pending = send(start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a }));
       await committed.reached;
       expect((await putEvent(ev, { scene_set_id: w.c })).status).toBe(200);
@@ -790,7 +801,11 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
 
     test('three at once: a Start past its commit, a Locations save on the new episode moving the event, and an event edit: each takes its turn, the last choice stands, the Start does not write over it; no deadlock', async () => {
       const ev = await startable();
-      const committed = gateOn((rec) => !rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans');
+      let unitTx = null;
+      const committed = gateOn((rec) => {
+        if (rec.kind === 'insert' && rec.table === 'scene_plans' && rec.txId) unitTx = rec.txId;
+        return Boolean(unitTx) && rec.kind === 'commit' && rec.txId === unitTx;
+      });
       const pending = send(start(ev, { locations: [loc('event', w.a), loc('home', w.home)], event_scene_set_id: w.a }));
       await committed.reached;
       const ep = await episodeOf(ev);
@@ -812,8 +827,10 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       // beats, made before that, name the same set and would wait for it).
       const savingLocations = () => {
         let plansMade = false;
+        let unitTx = null;
         return gateOn((rec) => {
-          if (!rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans') plansMade = true;
+          if (rec.kind === 'insert' && rec.table === 'scene_plans' && rec.txId) unitTx = rec.txId;
+          if (unitTx && rec.kind === 'commit' && rec.txId === unitTx) plansMade = true;
           return plansMade && Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'world_events';
         });
       };
@@ -892,7 +909,21 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
      */
     async function staleStart({ locations = [loc('event', w.a), loc('home', w.home)], key = null } = {}) {
       const ev = await startable();
-      const committed = gateOn((rec) => !rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans');
+      // S1-B (Evoni, 2026-11-26): this fixture's race needs the event to move
+      // BEFORE any beat exists — that is what leaves the event's beats at the
+      // older set, which the four cases below assert. So it gates on Start's
+      // OWN main transaction (the episode and its brief), not on the
+      // plan+scenes unit: at that commit the episode exists, nothing is
+      // locked, and no plan row has been written yet. MEASURED: gating on the
+      // unit's commit instead leaves all 14 beats already at A, so the event
+      // edit's own location sync migrates beats 10-12 to C and the race this
+      // fixture exists to create never happens. The other gates in this file
+      // keep their own boundaries; they need the beats to exist.
+      let mainTx = null;
+      const committed = gateOn((rec) => {
+        if (rec.kind === 'insert' && (rec.table === 'episodes' || rec.table === 'episode_briefs') && rec.txId) mainTx = rec.txId;
+        return Boolean(mainTx) && rec.kind === 'commit' && rec.txId === mainTx;
+      });
       const req = asAdmin(request(app).post(`/api/v1/world/${show}/events/${ev}/generate-episode`));
       if (key) req.set('Idempotency-Key', key);
       const pending = send(req.send({ draft_script: false, locations, event_scene_set_id: w.a }));
@@ -1080,7 +1111,7 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
       await stillFailed(recorded.ep, /Missing: "Car"\./);
     });
 
-    test('an accepted episode: Resume leaves its evaluation, locations, beats and saved scenes as they were; the step stays failed', async () => {
+    test('an accepted episode: Resume refuses with 409 EPISODE_FROZEN and leaves its evaluation, locations, beats, saved scenes and setup step as they were', async () => {
       const { ep } = await staleStart();
       await fx.setEvaluation(ep, 'accepted');
       const read = async () => ({
@@ -1091,10 +1122,24 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
         events: await rows('SELECT * FROM world_events WHERE show_id = :show ORDER BY id', { show }),
       });
       const before = await read();
+      const stepBefore = await stepOf(ep);
       expect(before.plans).toHaveLength(14);
       expect(before.scenes.length).toBeGreaterThan(0);
-      await stillFailed(ep, /Missing: Home\./);
+
+      // S1-B (Evoni, 2026-11-25/26): an accepted episode is not re-planned.
+      // Resume refuses with its own 409 instead of running and reporting a
+      // failed step, so this case asserts that contract directly rather than
+      // through stillFailed, which other cases still use for a Resume that
+      // legitimately runs.
+      const res = await resume(ep);
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ success: false, code: 'EPISODE_FROZEN' });
+      expect(res.body.error).toMatch(/accepted/i);
+
+      // and nothing moved: evaluation, locations, beats, scenes, the events,
+      // and the recorded setup step are all as they were.
       expect(await read()).toEqual(before);
+      expect(await stepOf(ep)).toEqual(stepBefore);
       expect(await evaluationOf(ep)).toBe('accepted');
     });
 
@@ -1176,8 +1221,10 @@ const flat = (sql) => String(sql).replace(/\s+/g, ' ').trim();
     /** Start's locations write holding the event row, its beats already made, before it locks its set rows. */
     const savingLocations = () => {
       let plansMade = false;
+      let unitTx = null;
       return gateOn((rec) => {
-        if (!rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans') plansMade = true;
+        if (rec.kind === 'insert' && rec.table === 'scene_plans' && rec.txId) unitTx = rec.txId;
+        if (unitTx && rec.kind === 'commit' && rec.txId === unitTx) plansMade = true;
         return plansMade && Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'world_events';
       });
     };
