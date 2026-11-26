@@ -642,9 +642,18 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   versionNow.current = checksVersion;
   // The episode and generation already shown, so the same pair is not read twice.
   const shownFor = useRef(null);
+  // Which read is the newest one started here. Two reads of this tab's own can
+  // overlap at the same episode and generation — ↻ pressed twice, or pressed
+  // while the first read is still out — and their generations match, so only
+  // this tells them apart. The newest wins; an older answer is dropped rather
+  // than shown after it (Evoni, PR #3949 review item 3).
+  const runSeq = useRef(0);
 
-  // Shown, not read: the page's record for this episode and generation.
+  // Shown, not read: the page's record for this episode and generation. It
+  // counts as a read of this tab's own for ordering, so a read already in
+  // flight cannot land on top of it afterwards.
   const showRecord = (record) => {
+    runSeq.current += 1;
     setLinkedEvent(record.linkedEvent || null);
     setCoverage(record.coverage ?? null);
     setSceneStep(record.sceneStep ?? null);
@@ -660,11 +669,16 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
     setLoading(true);
     const forEpisodeId = episode.id;
     const forVersion = versionNow.current;
+    runSeq.current += 1;
+    const mySeq = runSeq.current;
     const { checks: results, notes: checkNotes, coverage: planCoverage, sceneStep: step, linkedEvent: ev, read: readFrom } = await loadProductionChecks(episode, showId);
     // A read for an episode that has since been left, or from a generation
     // written over while it was in flight, is thrown away: it would be older
     // than what is on screen.
     if (episodeNow.current !== forEpisodeId || versionNow.current !== forVersion) return;
+    // A read started after this one is the newer answer, even at the same
+    // generation: this one is dropped.
+    if (runSeq.current !== mySeq) return;
     setLinkedEvent(ev || null);
     setVersion((v) => v + 1);
     setCoverage(planCoverage);

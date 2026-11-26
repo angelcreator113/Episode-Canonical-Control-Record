@@ -38,12 +38,21 @@ const { auth, mockToast } = vi.hoisted(() => ({
 }));
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ user: auth.user, isAuthenticated: true, loading: false }) }));
 vi.mock('../components/ToastContainer', () => ({ useToast: () => mockToast }));
+// The real loader, watched. Only the PAGE's call goes through this wrapper;
+// the Checklist component calls the loader inside its own module, which this
+// does not see — which is what lets a test fail the page's read while the
+// tab's own read still works.
+vi.mock('../components/Episodes/EpisodeProductionChecklist', async (importOriginal) => {
+  const real = await importOriginal();
+  return { ...real, loadProductionChecks: vi.fn((...args) => real.loadProductionChecks(...args)) };
+});
 
 import apiClient from '../services/api';
 import EpisodeDetail from './EpisodeDetail';
+import { loadProductionChecks } from '../components/Episodes/EpisodeProductionChecklist';
 import { resetVoiceStudioStatus } from '../lib/voiceStudioApi';
 import { createRequestLedger, normalizeUrl } from '../test/requestLedger';
-import { ADMIN, EP_FULL, EP_BARE, SHOW_ID, episodeAnswers } from './EpisodeDetail.requests.fixtures';
+import { ADMIN, EP_FULL, EP_BARE, EVENT_ID, SHOW_ID, episodeAnswers } from './EpisodeDetail.requests.fixtures';
 
 // Addresses only the checklist's loader asks for. Counting these counts the
 // loader's runs without spying on the loader: the page's run and the tab's
@@ -253,6 +262,99 @@ describe('Episode page: one production-checks record, reused only while current'
     await waitFor(() => expect(screen.getByTestId('checklist-summary')).toBeTruthy());
     await ledger.settle();
     expect(asked(BRAIN)).toBe(before);
+  });
+
+  // ── 7. A saved edit is read from the server, not from the page's old copy ──
+  test('a real designed_intent save: the new record carries the server\'s value, not the brief handed over before the save', async () => {
+    let edited = false;
+    const briefUrl = `/api/v1/episode-brief/${EP_FULL}`;
+    open(EP_FULL, ADMIN, (key) => {
+      if (key !== briefUrl || !edited) return undefined;
+      // What the server answers once the intent has been cleared: the same
+      // brief, with designed_intent gone. Every other field the checklist
+      // reads from the brief is kept as the fixture has it, so exactly one
+      // check changes.
+      return Promise.resolve({
+        data: {
+          data: {
+            id: 'brief-1', episode_id: EP_FULL, event_id: EVENT_ID,
+            episode_archetype: 'Trial', designed_intent: null,
+            arc_number: 1, position_in_arc: 1,
+            narrative_purpose: 'Lala proves she belongs.',
+            forward_hook: 'A brand wants her.',
+          },
+        },
+      });
+    });
+    await checksLanded();
+    await ledger.settle();
+    const leftBefore = Number(badge()?.textContent.replace(/\D/g, ''));
+    expect(Number.isFinite(leftBefore)).toBe(true);
+    const briefAsks = asked(briefUrl);
+
+    // Clear the designed intent: a REQUIRED checklist item, saved on the
+    // Overview, which reports nothing to the page of its own accord.
+    apiClient.put.mockResolvedValue({ data: { data: { designed_intent: null } } });
+    edited = true;
+    const intent = screen.getByRole('group', { name: 'Designed intent' }).querySelector('button[aria-pressed="true"]');
+    expect(intent).toBeTruthy();
+    await act(async () => { fireEvent.click(intent); });
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalled());
+
+    // The brief is asked for AGAIN — the copy the page held was read before
+    // the save — and the new record has one fewer check done.
+    await waitFor(() => expect(asked(briefUrl)).toBeGreaterThan(briefAsks), { timeout: 4000 });
+    await ledger.settle();
+    await waitFor(() => expect(Number(badge()?.textContent.replace(/\D/g, ''))).toBe(leftBefore + 1), { timeout: 4000 });
+    expect(badge().getAttribute('data-currency')).toBe('current');
+  });
+
+  // ── 8. A failed re-read keeps the count and says it is out of date ─────
+  test('an invalidation whose re-read fails keeps the last count, marked stale in sight and in words', async () => {
+    open(EP_FULL, ADMIN);
+    await checksLanded();
+    await ledger.settle();
+    const leftBefore = badge()?.textContent.replace(/\D/g, '');
+    expect(leftBefore).toBeTruthy();
+
+    // The page's next read of the checks fails outright.
+    vi.mocked(loadProductionChecks).mockImplementationOnce(() => Promise.reject(new Error('chunk failed')));
+    apiClient.put.mockResolvedValue({ data: { data: { narrative_purpose: 'new' } } });
+    const field = screen.getByText('Narrative purpose').parentElement.querySelector('textarea');
+    await act(async () => { fireEvent.change(field, { target: { value: 'A new purpose' } }); });
+    await act(async () => { fireEvent.blur(field); });
+    await waitFor(() => expect(apiClient.put).toHaveBeenCalled());
+
+    // The count is still there, and it says it cannot be trusted.
+    await waitFor(() => expect(badge()?.getAttribute('data-currency')).toBe('stale'), { timeout: 4000 });
+    expect(badge().textContent.replace(/\D/g, '')).toBe(leftBefore);
+    expect(badge().className).toMatch(/\bis-stale\b/);
+    expect(badge().getAttribute('aria-label')).toMatch(/out of date/);
+    expect(badge().getAttribute('title')).toMatch(/out of date/);
+  });
+
+  // ── 9. Two reads of the same generation: the newer one wins ────────────
+  test('the page\'s read held open, the tab\'s ↻ answered first: the older answer never lands on top', async () => {
+    const held = deferred();
+    // The page's own read of the checks never comes back until this test says
+    // so; the tab's read is its own and is unaffected.
+    vi.mocked(loadProductionChecks).mockImplementationOnce(() => held.promise);
+    open(EP_FULL, ADMIN, undefined, 'checklist');
+    // The tab reads for itself (the page has no record yet) and reports.
+    await waitFor(() => expect(screen.getByTestId('checklist-summary')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('checklist-count').textContent).toMatch(/of \d+/), { timeout: 4000 });
+    await ledger.settle();
+    const fromTab = screen.getByTestId('checklist-count').textContent;
+    const badgeFromTab = badge()?.textContent;
+
+    // Now the page's older read answers — same episode, same generation, but
+    // it started first. Its answer says nothing is done at all.
+    const allFalse = { checks: {}, notes: {}, coverage: null, sceneStep: null, linkedEvent: null, read: { supplied: [] } };
+    await act(async () => { held.resolve(allFalse); });
+    await ledger.settle();
+    // Unchanged: the tab's answer stands.
+    expect(screen.getByTestId('checklist-count').textContent).toBe(fromTab);
+    if (badgeFromTab) expect(badge()?.textContent).toBe(badgeFromTab);
   });
 
   // ── 6. No loop: a quiet page settles and stops asking ─────────────────
