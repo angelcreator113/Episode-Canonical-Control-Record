@@ -247,11 +247,28 @@ const observed = [];
   const holdsEpisodeForUpdate = (rec) => Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'episodes' && rec.mode === 'update';
   /** A transaction that has just locked or written an event row. */
   const holdsEventRow = (rec) => Boolean(rec.txId) && rec.table === 'world_events' && (rec.kind === 'lock' || rec.kind === 'write');
-  /** Start past its commit and its beats, holding the event row in its locations write. */
+  /**
+   * Start past its commit and its beats, holding the event row in its
+   * locations write.
+   *
+   * S1-B (Evoni, 2026-11-26): the beats are now written in one
+   * plan-and-scenes transaction, so their INSERT carries a transaction id
+   * and "the beats are made" is that transaction's COMMIT — not an
+   * autocommit INSERT, which this latch used to look for and which no
+   * longer occurs, leaving the gate dead and the race never run. The
+   * boundary is unchanged and is still the one this helper's name
+   * describes: Start's own commit, then its beats present with the unit's
+   * locks released, then the locations write holding the event row — which
+   * is where the gate still fires, so the delete must block behind it.
+   * Start's order makes that sequence explicit: the unit is awaited in step
+   * 3 and `applyStartLocations` runs after it.
+   */
   const startSavingLocations = () => {
     let plansMade = false;
+    let unitTx = null;
     return (rec) => {
-      if (!rec.txId && rec.kind === 'insert' && rec.table === 'scene_plans') plansMade = true;
+      if (rec.kind === 'insert' && rec.table === 'scene_plans' && rec.txId) unitTx = rec.txId;
+      if (unitTx && rec.kind === 'commit' && rec.txId === unitTx) plansMade = true;
       return plansMade && Boolean(rec.txId) && rec.kind === 'lock' && rec.table === 'world_events';
     };
   };
