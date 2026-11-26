@@ -32,41 +32,48 @@ describe('RemovedSetsBanner (D2)', () => {
     vi.mocked(api.post).mockResolvedValue({ data: { success: true } });
   });
 
-  // P1 (Evoni, 2026-11-26): moving is switched off server-side (503
-  // MOVE_REMOVED_SETS_DISABLED), because it could rewrite an episode that has
-  // been accepted or filmed. Everything this banner REPORTS is unchanged —
-  // which sets were removed, which beats point at them, and which
-  // replacements would be offered — and the button now says so instead of
-  // failing when it is pressed. This replaces the one-click move this case
-  // asserted while the action was live.
-  test('names each removed set and its beats, and still offers the replacements, with moving unavailable', async () => {
+  // P1 guarded repair (Evoni, 2026-11-26): the move is available again, under
+  // locks and a freeze check, so the one-click behaviour is asserted once more
+  // — this case was the 503 hold's while the action was switched off.
+  test('names each removed set and its beats; one click moves them all to the chosen sets', async () => {
     const onMoved = vi.fn();
     render(<RemovedSetsBanner episodeId="ep-1" showId="show-1" onMoved={onMoved} />);
     const banner = await screen.findByTestId('removed-sets-banner');
     expect(within(banner).getByText("Lala's Closet (beats 4, 5, 6, 7)")).toBeTruthy();
     expect(within(banner).getByText("Lala's Room (beats 1, 2, 3, 13, 14)")).toBeTruthy();
 
-    // The explanation is shown, and says what to do instead.
-    const why = within(banner).getByText(/Moving the beats automatically is unavailable/);
-    expect(why.textContent).toMatch(/accepted or filmed/);
-    expect(why.textContent).toMatch(/Locations and Beat Plan/);
-    expect(why.textContent).toMatch(/Resume setup/);
-
-    // The replacement lists still load and still filter by show.
-    const closet = within(banner).getByLabelText("Replacement for Lala's Closet");
-    await waitFor(() => expect(within(closet).getAllByRole('option')).toHaveLength(4));
-
-    // The button is disabled before and after a replacement is chosen, and
-    // pressing it sends nothing.
     const move = within(banner).getByRole('button', { name: 'Move my beats' });
     expect(move.disabled).toBe(true);
+    const closet = within(banner).getByLabelText("Replacement for Lala's Closet");
+    await waitFor(() => expect(within(closet).getAllByRole('option')).toHaveLength(4));
     fireEvent.change(closet, { target: { value: 'new-closet' } });
     fireEvent.change(within(banner).getByLabelText("Replacement for Lala's Room"), { target: { value: 'new-bed' } });
-    expect(move.disabled).toBe(true);
+    expect(move.disabled).toBe(false);
     fireEvent.click(move);
-    await waitFor(() => expect(api.get).toHaveBeenCalled());
-    expect(api.post).not.toHaveBeenCalled();
-    expect(onMoved).not.toHaveBeenCalled();
+    await waitFor(() => expect(onMoved).toHaveBeenCalled());
+    expect(api.post).toHaveBeenCalledWith('/api/v1/episodes/ep-1/move-removed-sets', {
+      moves: [{ from: 'gone-closet', to: 'new-closet' }, { from: 'gone-room', to: 'new-bed' }],
+    });
+  });
+
+  // P1 guarded repair: the three refusals the server can now answer are shown
+  // in the operator's words, and a lock conflict says to try again rather than
+  // leaving a dead end.
+  test.each([
+    ['EPISODE_ACCEPTED', 'Episode 4 "Gala" is accepted and uses this scene set: it stays. Nothing was changed.', /is accepted and uses/],
+    ['EPISODE_SNAPSHOT_FROZEN', 'Episode 4 "Gala" has been filmed (since 2026-11-20) and uses this scene set: it stays. Nothing was changed.', /has been filmed/],
+    ['RETRY', 'Another change to these scene sets got in the way.', /choose Move my beats again/],
+  ])('a %s refusal is shown to her', async (code, error, shown) => {
+    vi.mocked(api.post).mockRejectedValue({ response: { status: 409, data: { success: false, code, error } } });
+    render(<RemovedSetsBanner episodeId="ep-1" showId="show-1" onMoved={vi.fn()} />);
+    const banner = await screen.findByTestId('removed-sets-banner');
+    const closet = within(banner).getByLabelText("Replacement for Lala's Closet");
+    await waitFor(() => expect(within(closet).getAllByRole('option')).toHaveLength(4));
+    fireEvent.change(closet, { target: { value: 'new-closet' } });
+    fireEvent.change(within(banner).getByLabelText("Replacement for Lala's Room"), { target: { value: 'new-bed' } });
+    fireEvent.click(within(banner).getByRole('button', { name: 'Move my beats' }));
+
+    expect((await within(banner).findByText(shown)).textContent).toMatch(shown);
   });
 
   test('shows nothing when no beat points at a removed set', async () => {

@@ -212,7 +212,7 @@ async function resolveSetShowId(sequelize, { show_id: showId, episode_ids: episo
 }
 
 /** D2: the removed sets an episode's beats, locations, scenes or event still use, with the beats at each. */
-async function removedSetsForEpisode(sequelize, episodeId) {
+async function removedSetsForEpisode(sequelize, episodeId, { transaction } = {}) {
   const [rows] = await sequelize.query(
     `SELECT s.id, s.name, s.deleted_at,
             COALESCE((SELECT json_agg(p.beat_number ORDER BY p.beat_number) FROM scene_plans p
@@ -224,7 +224,7 @@ async function removedSetsForEpisode(sequelize, episodeId) {
                      UNION SELECT scene_set_id FROM scenes WHERE episode_id = :episodeId AND deleted_at IS NULL AND scene_set_id IS NOT NULL
                      UNION SELECT scene_set_id FROM world_events WHERE used_in_episode_id = :episodeId AND deleted_at IS NULL AND scene_set_id IS NOT NULL)
       ORDER BY s.name`,
-    { replacements: { episodeId } });
+    { replacements: { episodeId }, transaction });
   return rows.map((r) => ({ scene_set_id: r.id, name: r.name, deleted_at: r.deleted_at, beats: (typeof r.beats === 'string' ? JSON.parse(r.beats) : r.beats) || [] }));
 }
 
@@ -370,28 +370,89 @@ async function setReferences(sequelize, setId, { episodeId = null, transaction }
  * replacementId is used only when it is a scene set id other than setId:
  * anything else locks no replacement, and is the caller's to refuse.
  */
-async function lockSetReferences(sequelize, { setId, replacementId = null, episodeId = null, transaction }) {
+async function lockSetReferences(sequelize, { setId = null, setIds = null, replacementId = null, replacementIds = null, episodeId = null, transaction }) {
   const { lockEpisodes, holdsEpisode, requireTransaction, LOCK_TIMEOUT } = require('../utils/episodeLocks');
   const { lockLiveEvent } = require('../utils/eventEpisodeLink');
   requireTransaction(transaction, 'lockSetReferences');
-  const before = await setReferences(sequelize, setId, { episodeId, transaction });
+  // One source or many. `setId`/`replacementId` stay as the one-element
+  // shorthands the delete-with-replacement path uses, so that caller is
+  // unchanged (Evoni, 2026-11-26, safeguard A).
+  const sources = [...new Set([].concat(setIds || (setId ? [setId] : [])).filter(Boolean).map(String))].sort();
+  if (!sources.length) throw new Error('lockSetReferences: no scene set given');
+  const asked = [].concat(replacementIds || (replacementId ? [replacementId] : [])).filter(Boolean).map(String);
+
+  // ── 1. the complete reference set of every source, read before any lock ──
+  const refsBySource = {};
+  for (const id of sources) refsBySource[id] = await setReferences(sequelize, id, { episodeId, transaction });
+  const union = (key) => [...new Set(sources.flatMap((id) => refsBySource[id][key]))].sort();
+  const beforeEpisodes = union('episodes');
+  const beforeEvents = union('events');
+
   await sequelize.query(`SET LOCAL lock_timeout = '${LOCK_TIMEOUT}'`, { transaction });
-  await lockEpisodes(sequelize, before.episodes, { transaction });
-  for (const id of before.events) await lockLiveEvent(sequelize, id, { transaction });
-  const replacement = replacementId && UUID_RE.test(String(replacementId)) && String(replacementId) !== String(setId) ? String(replacementId) : null;
-  const [locked] = await sequelize.query(
-    `WITH gone AS (SELECT id FROM scene_sets WHERE id = :setId FOR UPDATE NOWAIT),
-          repl AS (SELECT id FROM scene_sets WHERE id = CAST(:replacement AS uuid) AND deleted_at IS NULL FOR KEY SHARE NOWAIT),
-          vers AS (SELECT id FROM scene_sets WHERE version_of_set_id = :setId AND deleted_at IS NULL ORDER BY id FOR NO KEY UPDATE NOWAIT)
-     SELECT 'gone' AS k, id FROM gone UNION ALL SELECT 'repl', id FROM repl UNION ALL SELECT 'vers', id FROM vers`,
-    { replacements: { setId, replacement }, transaction });
-  const refs = await setReferences(sequelize, setId, { episodeId, transaction });
-  const heldEvents = new Set(before.events);
-  const heldVersions = new Set(locked.filter((x) => x.k === 'vers').map((x) => String(x.id)));
-  const grown = refs.episodes.some((id) => !holdsEpisode(transaction, id))
-    || refs.events.some((id) => !heldEvents.has(id))
-    || refs.versions.some((id) => !heldVersions.has(id));
-  return { refs, grown, replacementHeld: locked.some((x) => x.k === 'repl') };
+
+  // ── 2. the complete EPISODE set first, one statement, ascending ──────────
+  await lockEpisodes(sequelize, beforeEpisodes, { transaction });
+  // ── 3. then the complete EVENT set, ascending ───────────────────────────
+  for (const id of beforeEvents) await lockLiveEvent(sequelize, id, { transaction });
+
+  // ── 4. then the SCENE SET rows ─────────────────────────────────────────
+  // Every id this attempt must hold, DEDUPLICATED across the source,
+  // version and replacement roles and acquired ONCE at its strongest
+  // required mode (Evoni, 2026-11-26). Without the dedup an id in two roles
+  // would be locked twice at different strengths — a lock upgrade after
+  // another row is already held, which is the deadlock shape. Precedence:
+  // FOR UPDATE > FOR NO KEY UPDATE > FOR KEY SHARE.
+  //
+  // Three statements, strongest first, each over a DISJOINT id set and each
+  // `ORDER BY id`: MEASURED, `LockRows` sits above `Sort`, so one statement
+  // locks in ascending order. There is deliberately no global order across
+  // the three — a locking clause applies per table reference, not per row,
+  // so three modes cannot share one ordered scan. What makes that safe is
+  // that all three are NOWAIT: MEASURED, a held row raises 55P03 at once
+  // (`isLockConflict`), so a scene_sets lock never waits and so can never be
+  // an edge in a deadlock cycle. The waited locks — episodes and events —
+  // are the ones taken in a globally ascending order above.
+  const [versionRows] = sources.length
+    ? await sequelize.query(
+      'SELECT id FROM scene_sets WHERE version_of_set_id IN (:sources) AND deleted_at IS NULL ORDER BY id',
+      { replacements: { sources }, transaction })
+    : [[]];
+  const forUpdate = sources;
+  const noKeyUpdate = [...new Set(versionRows.map((r) => String(r.id)))].filter((id) => !forUpdate.includes(id)).sort();
+  const keyShare = [...new Set(asked.filter((id) => UUID_RE.test(id)))]
+    .filter((id) => !forUpdate.includes(id) && !noKeyUpdate.includes(id)).sort();
+
+  const held = new Set();
+  const take = async (ids, clause, liveOnly) => {
+    if (!ids.length) return;
+    const [rows] = await sequelize.query(
+      `SELECT id FROM scene_sets WHERE id IN (:ids)${liveOnly ? ' AND deleted_at IS NULL' : ''} ORDER BY id ${clause}`,
+      { replacements: { ids }, transaction });
+    for (const r of rows) held.add(String(r.id));
+  };
+  await take(forUpdate, 'FOR UPDATE NOWAIT', false);
+  await take(noKeyUpdate, 'FOR NO KEY UPDATE NOWAIT', true);
+  await take(keyShare, 'FOR KEY SHARE NOWAIT', true);
+
+  // ── 5. re-read under the locks; an incomplete held set is a retry ───────
+  const after = {};
+  for (const id of sources) after[id] = await setReferences(sequelize, id, { episodeId, transaction });
+  const heldEvents = new Set(beforeEvents);
+  const grown = sources.some((id) => after[id].episodes.some((e) => !holdsEpisode(transaction, e))
+    || after[id].events.some((e) => !heldEvents.has(e))
+    || after[id].versions.some((v) => !held.has(v)));
+
+  const single = sources.length === 1 ? sources[0] : null;
+  return {
+    // the delete path's shape, unchanged
+    refs: single ? after[single] : null,
+    replacementHeld: asked.length === 1 ? held.has(asked[0]) && String(asked[0]) !== single : false,
+    // the batch's shape
+    refsBySource: after,
+    replacementsHeld: Object.fromEntries(asked.map((id) => [id, held.has(id)])),
+    heldSetIds: [...held].sort(),
+    grown,
+  };
 }
 
 /**
@@ -404,7 +465,7 @@ async function lockSetReferences(sequelize, { setId, replacementId = null, episo
  * RetryableConflictError (the existing retryable 409). Any other error is
  * thrown as it is, after the rollback.
  */
-async function withSetLocks(sequelize, { setId, replacementId = null, episodeId = null }, work) {
+async function withSetLocks(sequelize, { setId = null, setIds = null, replacementId = null, replacementIds = null, episodeId = null }, work) {
   const { isLockConflict, RetryableConflictError } = require('../utils/episodeLocks');
   const { EVENT_DELETED_CODE } = require('../utils/eventEpisodeLink');
   const { finalizePlaceWrite, PLACE_FINALIZE_MAX_ATTEMPTS } = require('../utils/placeLock');
@@ -412,9 +473,13 @@ async function withSetLocks(sequelize, { setId, replacementId = null, episodeId 
   for (let attempt = 1; ; attempt += 1) {
     const transaction = await sequelize.transaction();
     try {
-      const held = await lockSetReferences(sequelize, { setId, replacementId, episodeId, transaction });
+      const held = await lockSetReferences(sequelize, { setId, setIds, replacementId, replacementIds, episodeId, transaction });
       if (!held.grown) {
-        const value = await work({ transaction, refs: held.refs, attempt, replacementHeld: held.replacementHeld });
+        const value = await work({
+          transaction, attempt,
+          refs: held.refs, replacementHeld: held.replacementHeld,
+          refsBySource: held.refsBySource, replacementsHeld: held.replacementsHeld, heldSetIds: held.heldSetIds,
+        });
         await transaction.commit();
         return value;
       }
@@ -463,16 +528,69 @@ async function assertNoAcceptedOrFilmedUses(sequelize, setId, { refs, transactio
   }
 }
 
-/** D2: move an episode's uses of removed sets, each to its chosen live replacement, in one transaction. */
+/**
+ * D2: move an episode's uses of removed sets, each to its chosen live
+ * replacement — GUARDED (Evoni, 2026-11-26, P1).
+ *
+ * One caller-owned transaction for the whole request: every move commits
+ * together or none does. Inside it, in this order:
+ *   1. the complete episode set FOR UPDATE, then the complete event set,
+ *      then the scene set rows, deduplicated and each at its strongest mode
+ *      (lockSetReferences);
+ *   2. the removed-source membership RE-READ under those locks, so an
+ *      unlocked read is never the authorization to write (D4);
+ *   3. every affected episode checked for accepted and filmed — ALL of them,
+ *      before ANY write, over the complete reference set including episodes
+ *      reached only through a held event (D2);
+ *   4. then the moves, ascending by source.
+ * A reference set that grew, a lock conflict or a deleted event rolls the
+ * whole attempt back and tries again through the existing bounded retry;
+ * after the last attempt, the existing 409 RETRY.
+ *
+ * This replaces the version that opened a transaction of its own and called
+ * moveUses with no freeze check and no episode or set lock, which is why the
+ * route answered 503 MOVE_REMOVED_SETS_DISABLED in the meantime.
+ */
 async function moveRemovedSetsForEpisode(sequelize, episodeId, moves) {
+  // ── validated before anything is read or locked; nothing is written ────
   if (!Array.isArray(moves) || !moves.length) throw new SceneSetUsesError('moves must be a non-empty list of { from, to }');
-  const removed = new Set((await removedSetsForEpisode(sequelize, episodeId)).map((s) => s.scene_set_id));
-  for (const m of moves) {
-    if (!m || !removed.has(m.from)) throw new SceneSetUsesError('Each "from" must be a removed scene set this episode uses');
+  const froms = moves.map((m) => String(m?.from ?? ''));
+  const tos = moves.map((m) => String(m?.to ?? ''));
+  for (const id of froms) {
+    if (!UUID_RE.test(id)) throw new SceneSetUsesError('Each "from" must be a scene set id', 400, 'BAD_REPLACEMENT');
   }
-  return sequelize.transaction(async (transaction) => {
+  for (const id of tos) {
+    if (!UUID_RE.test(id)) throw new SceneSetUsesError('The replacement must be a scene set id', 400, 'BAD_REPLACEMENT');
+  }
+  if (new Set(froms).size !== froms.length) {
+    throw new SceneSetUsesError('Each removed scene set may be moved once in a request', 400, 'BAD_REPLACEMENT');
+  }
+  // A chained move — a replacement that is another move's removed set — has
+  // no single right answer: the outcome would depend on the order the moves
+  // are applied in. Refused rather than ordered around.
+  const sourceSet = new Set(froms);
+  if (tos.some((to) => sourceSet.has(to))) {
+    throw new SceneSetUsesError('A replacement may not be another move\'s removed scene set in the same request', 400, 'BAD_REPLACEMENT');
+  }
+
+  const ordered = [...moves].sort((a, b) => String(a.from).localeCompare(String(b.from)));
+
+  return withSetLocks(sequelize, { setIds: froms, replacementIds: tos, episodeId }, async ({ transaction, refsBySource }) => {
+    // D4: the membership that authorizes the write is read HERE, under the
+    // locks, not before them. The episode and its events are held FOR UPDATE,
+    // so no other transaction can move this episode's references meanwhile.
+    const removed = new Set((await removedSetsForEpisode(sequelize, episodeId, { transaction })).map((x) => x.scene_set_id));
+    for (const m of ordered) {
+      if (!removed.has(String(m.from))) throw new SceneSetUsesError('Each "from" must be a removed scene set this episode uses');
+    }
+    // D2: every affected episode of every move, before the first write.
+    for (const m of ordered) {
+      await assertNoAcceptedOrFilmedUses(sequelize, String(m.from), { refs: refsBySource[String(m.from)], transaction });
+    }
     const out = [];
-    for (const m of moves) out.push({ from: m.from, to: m.to, moved: await moveUses(sequelize, m.from, m.to, { episodeId, transaction }) });
+    for (const m of ordered) {
+      out.push({ from: m.from, to: m.to, moved: await moveUses(sequelize, m.from, m.to, { episodeId, transaction }) });
+    }
     return out;
   });
 }
