@@ -27,6 +27,7 @@ const rolesMigration = require('../../src/migrations/20261002100000-add-scene-se
 const scenePlanIdMigration = require('../../src/migrations/20261002160000-add-scenes-scene-plan-id');
 const dropLinksMigration = require('../../src/migrations/20261007150000-drop-links-to-removed-scene-sets');
 const { resolveSetShowId } = require('../../src/services/sceneSetUsesService');
+const uses = require('../../src/services/sceneSetUsesService');
 
 const { sequelize } = models;
 
@@ -226,14 +227,28 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     await run(`INSERT INTO scene_plans (id, episode_id, beat_number, beat_name, scene_set_id, locked, chosen_by_user, sort_order, ai_suggested, created_at, updated_at)
                VALUES (:id, :ep, 13, 'Beat 13', :setId, false, true, 13, false, NOW(), NOW())`, { id: uuid(), ep, setId: goneB });
 
+    // Detection and reporting are untouched by the P1 shutdown.
     const list = await auth(request(app).get(`/api/v1/episodes/${ep}/removed-sets`));
     expect(list.status).toBe(200);
     expect(list.body.data.map((s) => [s.name, s.beats])).toEqual([["Lala's Closet", [1, 2]], ["Lala's Room", [13]]]);
 
-    const refused = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`)).send({ moves: [{ from: goneA, to: goneB }] });
-    expect(refused.status).toBe(400);
-    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`)).send({ moves: [{ from: goneA, to: newA }, { from: goneB, to: newB }] });
-    expect(res.status).toBe(200);
+    // P1 (Evoni, 2026-11-26): the one-click move is switched off server-side.
+    // Nothing is written and the repair service is never entered.
+    const beatsBefore = await rows('SELECT beat_number, scene_set_id FROM scene_plans WHERE episode_id = :ep ORDER BY beat_number', { ep });
+    const spy = jest.spyOn(uses, 'moveRemovedSetsForEpisode');
+    const off = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`)).send({ moves: [{ from: goneA, to: newA }, { from: goneB, to: newB }] });
+    expect(off.status).toBe(503);
+    expect(off.body).toMatchObject({ success: false, code: 'MOVE_REMOVED_SETS_DISABLED' });
+    expect(spy).not.toHaveBeenCalled();
+    expect(await rows('SELECT beat_number, scene_set_id FROM scene_plans WHERE episode_id = :ep ORDER BY beat_number', { ep })).toEqual(beatsBefore);
+    expect((await auth(request(app).get(`/api/v1/episodes/${ep}/removed-sets`))).body.data).toHaveLength(2);
+    spy.mockRestore();
+
+    // The MOVE SEMANTICS are the service's and are unchanged: a removed set
+    // is refused as a replacement, and two removed sets go to two live ones.
+    await expect(moveAsService(ep, [{ from: goneA, to: goneB }]))
+      .rejects.toMatchObject({ status: 400, code: 'BAD_REPLACEMENT' });
+    await moveAsService(ep, [{ from: goneA, to: newA }, { from: goneB, to: newB }]);
     expect((await rows('SELECT beat_number, scene_set_id FROM scene_plans WHERE episode_id = :ep ORDER BY beat_number', { ep })).map((r) => [r.beat_number, r.scene_set_id]))
       .toEqual([[1, newA], [2, newA], [13, newB]]);
     expect(await usesOf(newA)).toMatchObject({ locations: 1, events: 1, scenes: 2 });
@@ -246,6 +261,23 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
   // the replacement in the same role.
   const locationsOf = async (ep) => (await rows(
     'SELECT scene_set_id, role FROM scene_set_episodes WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY role NULLS LAST', { ep }));
+
+  /**
+   * P1 (Evoni, 2026-11-26): the POST route is switched off (503
+   * MOVE_REMOVED_SETS_DISABLED) because it reached `moveUses` with no freeze
+   * check and no episode or set lock, so it could rewrite an accepted or
+   * filmed episode. The MERGE AND MOVE SEMANTICS below are `moveUses`' own
+   * and are still correct, so they are driven directly, against the real
+   * database in a real transaction — the behaviour under test is the
+   * service's, not the route's. This is NOT a sanctioned repair path: it
+   * holds no lock and checks no freeze, which is exactly why the route is
+   * closed until the guarded repair is built.
+   */
+  const moveAsService = (ep, moves) => sequelize.transaction(async (transaction) => {
+    const out = [];
+    for (const m of moves) out.push(await uses.moveUses(sequelize, m.from, m.to, { episodeId: ep, transaction }));
+    return out;
+  });
   const location = (setId, ep, role) => run(`INSERT INTO scene_set_episodes (id, scene_set_id, episode_id, role, sort_order, created_at, updated_at)
                VALUES (:id, :setId, :ep, :role, 1, NOW(), NOW())`, { id: uuid(), setId, ep, role });
 
@@ -256,9 +288,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     await useEverywhere(gone, ep); // a 'home' location, beats 1-2, their scenes, the event
     await location(replacement, ep, null);
 
-    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`)).send({ moves: [{ from: gone, to: replacement }] });
+    await moveAsService(ep, [{ from: gone, to: replacement }]);
 
-    expect(res.status).toBe(200);
     expect(await locationsOf(ep)).toEqual([{ scene_set_id: replacement, role: 'home' }]);
     expect(await usesOf(replacement)).toMatchObject({ beats: 2, scenes: 2, events: 1 });
   });
@@ -271,10 +302,8 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     await useEverywhere(goneA, ep);
     await location(goneB, ep, 'closet');
 
-    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`))
-      .send({ moves: [{ from: goneA, to: replacement }, { from: goneB, to: replacement }] });
+    await moveAsService(ep, [{ from: goneA, to: replacement }, { from: goneB, to: replacement }]);
 
-    expect(res.status).toBe(200);
     expect(await locationsOf(ep)).toEqual([{ scene_set_id: replacement, role: 'home' }]);
     expect((await auth(request(app).get(`/api/v1/episodes/${ep}/removed-sets`))).body.data).toEqual([]);
   });
@@ -304,11 +333,29 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
                       (:c, :keepHome, :ep, 'home', NULL, 3, NOW(), NOW()), (:d, :keepNone, :ep, NULL, NULL, 4, NOW(), NOW())`,
     { a: uuid(), b: uuid(), c: uuid(), d: uuid(), goneA, goneB, keepHome, keepNone, ep });
 
-    const res = await auth(request(app).post(`/api/v1/episodes/${ep}/move-removed-sets`))
-      .send({ moves: [{ from: goneA, to: keepHome }, { from: goneB, to: keepNone }] });
+    await moveAsService(ep, [{ from: goneA, to: keepHome }, { from: goneB, to: keepNone }]);
 
-    expect(res.status).toBe(200);
     expect(await rows(`SELECT scene_set_id, role, role_name FROM scene_set_episodes WHERE episode_id = :ep AND deleted_at IS NULL ORDER BY sort_order`, { ep }))
       .toEqual([{ scene_set_id: keepHome, role: 'home', role_name: null }, { scene_set_id: keepNone, role: 'extra', role_name: 'Café' }]);
+  });
+
+  // P1 (Evoni, 2026-11-26): `moveRemovedSetsForEpisode`'s own batch check —
+  // every `from` must be a removed set this episode uses — kept because the
+  // guarded repair will need it. STRICTLY ISOLATED and called directly: this
+  // function's FREEZE AND LOCKING PROTECTIONS REMAIN UNRESOLVED (it opens a
+  // transaction of its own, holds no episode or set row, and checks no
+  // freeze), which is why its route answers 503. Exercising it here is NOT a
+  // statement that it is safe to expose.
+  it('the batch wrapper refuses a "from" that is not a removed set this episode uses (its guards are still unresolved)', async () => {
+    const gone = await sceneSet('d2-batch gone', { deleted: true });
+    const live = await sceneSet('d2-batch live');
+    const ep = await episode();
+    await location(gone, ep, 'home');
+
+    await expect(uses.moveRemovedSetsForEpisode(sequelize, ep, [{ from: live, to: gone }]))
+      .rejects.toThrow(/removed scene set this episode uses/);
+    await expect(uses.moveRemovedSetsForEpisode(sequelize, ep, [])).rejects.toThrow(/non-empty list/);
+    // Nothing was written by either refusal.
+    expect(await locationsOf(ep)).toEqual([{ scene_set_id: gone, role: 'home' }]);
   });
 });
