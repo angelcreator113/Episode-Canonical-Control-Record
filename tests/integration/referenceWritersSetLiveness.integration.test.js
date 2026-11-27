@@ -55,6 +55,7 @@ const episodeLocations = require('../../src/services/episodeLocationsService');
 const lockTrace = require('../helpers/lockTrace');
 const networkGuard = require('../networkGuard/core');
 const { placeLockFixtures, waitForLockWait } = require('../helpers/placeLockFixtures');
+const { databaseTextMatcher, BASE_WORDS } = require('../helpers/databaseText');
 
 const { sequelize } = models;
 
@@ -63,70 +64,17 @@ const shouldSkip =
   process.env.DATABASE_URL?.includes('amazonaws.com') ||
   !process.env.DATABASE_URL?.includes('episode_metadata_test');
 
-// No database or ORM words may reach a response body.
+// No database or ORM words may reach a response body. One matcher serves
+// this suite and its three siblings (tests/helpers/databaseText); the corpus
+// that measures it, and the record of why the three bare SQL keywords were
+// replaced by shape recognition, live with it in
+// tests/unit/helpers/databaseText.test.js.
 //
-// This carried three bare keywords — `SELECT `, `UPDATE `, `INSERT `,
-// matched case-insensitively — and they flagged the routes' own English:
-// "Failed to update event" contains "update " and so failed this
-// assertion on 2026-11-26 (run 45902313934) with no database text in the body
-// at all. They also let real statements through: the DELETE verb was never
-// listed, and a statement broken over lines or tabs has no single space after
-// its verb.
-//
-// SQL is recognised by its SHAPE instead, so case and whitespace never matter
-// and prose cannot satisfy it (Evoni, 2026-11-27):
-//   - the two-word verbs only with their clause adjacent, and never onto an
-//     English article ("... from the library is not allowed here" is ours)
-//   - the write verb with a column assignment: prose says "set", never "set x ="
-//   - a read verb with its source: never a source that is an English article
-//     ("... an outfit from your closet")
-//   - a read verb with no source at all: a star, a literal or a function call
-//   - clauses prose does not carry: a condition with "=", a values list,
-//     RETURNING, ON CONFLICT, ORDER/GROUP BY, LIMIT n
-//
-// Measured against 34 leakage strings and 20 of this repo's own messages:
-// 34/34 caught with 0 false positives, where the keywords caught 27/34 with 13
-// false positives. The corpus is held by the test at the end of section 8.
-//
-// Every other token is unchanged, `relation` included. `relation` still flags
-// one phrasing of ours ("Could not update the relation between these
-// records"); that is pre-existing, is left exactly as it was, and is recorded
-// in the corpus test as known rather than changed here.
-const VERB_S = 'select';
-const VERB_U = 'update';
-const VERB_I = 'insert';
-const VERB_D = 'delete';
-const ARTICLE = 'the|a|an|your|my|our|its|their|this|that|these|those|here|there|his|her|every|any|all|one|two';
-// Whitespace and word boundaries as they reach the assertion. Every call site
-// matches against JSON.stringify(body), which writes a newline as the two
-// characters \ and n — so a statement broken over lines carries no whitespace
-// character at all once encoded, and the escape's trailing letter runs into
-// the next keyword, leaving \b with no boundary to find. WS accepts real
-// whitespace or such an escape; LB is the left-hand boundary, which accepts
-// one as well. Together they are why a multiline statement is caught now and
-// was not before.
-const WS = '(?:\\s|\\\\[nrt])';
-const LB = '(?:^|\\s|\\\\[nrt]|[^a-z0-9_\\\\])';
-const DATABASE_TEXT = new RegExp([
-  // the words, unchanged
-  'deadlock', 'violates', 'constraint', 'relation', 'syntax', 'sequelize',
-  'canceling statement', 'lock timeout', 'could not serialize',
-  'FOR KEY SHARE', 'NOWAIT', 'scene_sets', 'scene_plans', 'scene_set_episodes',
-  // the shapes: a verb with the clause that must follow it, and clauses prose
-  // does not carry. Never onto an English article, so "... from your closet"
-  // and "... from the season roadmap" are ours, not the database's.
-  `${VERB_I}${WS}+into${WS}`,
-  `${VERB_D}${WS}+from${WS}+(?!(?:${ARTICLE})\\b)["a-z_(]`,
-  `${VERB_U}\\b[\\s\\S]{0,160}?${LB}set\\b[\\s\\S]{0,40}?("?[a-z_][a-z0-9_]*"?|[a-z_]+\\.[a-z_"]+)${WS}*=`,
-  `${VERB_S}\\b[\\s\\S]{0,240}?${LB}from${WS}+(?!(?:${ARTICLE})\\b)["a-z_(]`,
-  `${VERB_S}${WS}+(\\*|\\d|[a-z_]+${WS}*\\()`,
-  `${LB}where\\b[\\s\\S]{0,80}?(=${WS}*\\$\\d|=${WS}*'|=${WS}*"|${LB}is${WS}+null\\b|${LB}in${WS}*\\()`,
-  `${LB}values${WS}*\\(`,
-  `${LB}returning\\b`,
-  `${LB}on${WS}+conflict\\b`,
-  `${LB}(order|group)${WS}+by\\b`,
-  `${LB}limit${WS}+\\d`,
-].join('|'), 'i');
+// This suite's own words on top of the shared ones: the lock modes and the
+// three table names its subject is about.
+const DATABASE_TEXT = databaseTextMatcher([...BASE_WORDS,
+  'could not serialize', 'FOR KEY SHARE', 'NOWAIT',
+  'scene_sets', 'scene_plans', 'scene_set_episodes']);
 
 // A supertest request only leaves for the server once something calls
 // .then on it, so a race must start it with this, never hold it as a value.
@@ -940,94 +888,12 @@ const settle = (promise) => promise.then(
       expect(err.message).not.toMatch(DATABASE_TEXT);
     });
 
-    // What DATABASE_TEXT must and must not catch. No database: it is the
-    // assertion itself under test, after the keywords it carried were found to
-    // flag the routes' own English and to miss real statements (Evoni,
-    // 2026-11-27). Every string below is either a shape a leak really takes or
-    // a message this repo really answers with.
-    describe('DATABASE_TEXT itself: every leak caught, no message of ours flagged', () => {
-      const V = { s: 'SELECT', u: 'UPDATE', i: 'INSERT', d: 'DELETE' };
-      const LEAKAGE = [
-        // upper, lower and mixed case
-        `${V.s} id FROM scene_sets WHERE id = $1 FOR ${V.u} NOWAIT`,
-        'select id from world_events where show_id = $1',
-        'Select Id From Episodes Where Id = $1',
-        `${V.u} world_events SET scene_set_id = $1 WHERE id = $2`,
-        'update world_events set scene_set_id = $1 where id = $2',
-        'Update World_Events Set Scene_Set_Id = $1 Where Id = $2',
-        // all four verbs
-        `${V.i} INTO episode_briefs (id) VALUES ($1)`,
-        'insert into shows (id, name) values ($1, $2)',
-        `${V.d} FROM episode_todo_lists WHERE episode_id = $1`,
-        'delete from scene_set_episodes where id = $1',
-        // a read with no source
-        `${V.s} 1`,
-        'select now()',
-        `${V.s} pg_advisory_lock(42)`,
-        'select count(*)',
-        // multiline and odd whitespace
-        `${V.s}\n  id,\n  name\nFROM   episodes\nWHERE  id = $1`,
-        `${V.u}\n  season_slots\nSET\n  release_position = $1\nWHERE arc_id = $2`,
-        `${V.s}\t id \t FROM \t shows`,
-        // quoted and schema-qualified identifiers
-        `${V.s} "id" FROM "scene_sets" WHERE "id" = '...'`,
-        `${V.s} id FROM a2_constraints_25370.season_slots WHERE arc_id = $1 FOR ${V.u}`,
-        `${V.s} id FROM public."world_events"`,
-        // no parameters at all
-        `${V.u} scene_plans SET scene_set_id = NULL`,
-        `${V.s} * FROM episodes WHERE status = 'draft'`,
-        `${V.d} FROM scenes WHERE id = 'abc'`,
-        // inside Sequelize or PostgreSQL error text
-        'SequelizeDatabaseError: canceling statement due to lock timeout',
-        'error: relation "scene_sets" does not exist',
-        `Executing (default): ${V.s} "id" FROM "scene_sets" AS "SceneSet" WHERE "SceneSet"."id" = $1;`,
-        `deadlock detected DETAIL: Process 962: ${V.s} id FROM season_slots WHERE arc_id = $1 FOR ${V.u}`,
-        'ERROR:  syntax error at or near ")"',
-        'duplicate key value violates unique constraint "season_slots_release_position_live"',
-        'could not serialize access due to concurrent update',
-        'could not obtain lock on row in relation "scene_sets"',
-        // clause-only fragments
-        'ON CONFLICT (episode_id) DO NOTHING',
-        'ORDER BY beat_number LIMIT 14',
-      ];
-      const OURS = [
-        'Select an outfit from your closet.',
-        'Select an event from the season roadmap.',
-        'Update your scene set.',
-        "Update the character's wardrobe set.",
-        'Insert a scene into the episode.',
-        'Failed to update event',
-        'Invalid update field',
-        'Could not save the locations',
-        'This episode is accepted and uses this scene set: it stays. Nothing was changed.',
-        'Please select an event first',
-        'Insert a title before publishing',
-        'Select an outfit to continue',
-        'Update the brief before generating the script',
-        'Setup is still incomplete',
-        'Episode 10 "Gala Night" is accepted and uses this scene set: it stays.',
-        'Select a venue from the event package',
-        'Update the season slot and try again',
-        'Delete from the library is not allowed here',
-        'The locations could not be saved; nothing was changed.',
-        'This episode has been filmed (since 2026-11-01) and uses this scene set: it stays. Nothing was changed.',
-      ];
-
-      test.each(LEAKAGE)('caught: %s', (text) => {
-        expect(JSON.stringify({ success: false, error: text })).toMatch(DATABASE_TEXT);
-      });
-
-      test.each(OURS)('not flagged: %s', (text) => {
-        expect(JSON.stringify({ success: false, error: text })).not.toMatch(DATABASE_TEXT);
-      });
-
-      // Pre-existing, from the `relation` word, which is deliberately left as
-      // it was: one phrasing of ours is flagged. Recorded, not fixed here, so
-      // a later change cannot mistake it for a new regression.
-      test('KNOWN, unchanged: the `relation` word still flags one phrasing of ours', () => {
-        expect('Could not update the relation between these records').toMatch(DATABASE_TEXT);
-      });
-    });
+    // The corpus that measures DATABASE_TEXT — every leakage shape it must
+    // catch and every message of ours it must not, in both the JSON-encoded
+    // and raw-string forms these call sites use, plus the known `relation`
+    // false positive kept as known — is the authoritative one at
+    // tests/unit/helpers/databaseText.test.js, beside the shared matcher.
+    // It is not repeated here: one corpus, one place (Evoni, 2026-11-27).
 
     test('the database itself counted no deadlock since this file began', async () => {
       // Every race above also asserts `lock` is null, which covers 40P01 on

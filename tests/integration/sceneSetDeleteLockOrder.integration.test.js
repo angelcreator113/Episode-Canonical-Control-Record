@@ -57,6 +57,7 @@ const sceneGen = require('../../src/services/sceneGenerationService');
 const lockTrace = require('../helpers/lockTrace');
 const networkGuard = require('../networkGuard/core');
 const { placeLockFixtures } = require('../helpers/placeLockFixtures');
+const { databaseTextMatcher } = require('../helpers/databaseText');
 
 const { sequelize } = models;
 const { PLACE_LOCKED_CODE } = placeLock;
@@ -69,7 +70,7 @@ const shouldSkip =
 
 const RETRY = { success: false, code: 'RETRY', error: 'Someone else changed this at the same moment. Nothing was saved: try again.' };
 const DELETE_FAILED = { success: false, error: 'The scene set could not be deleted. Nothing was changed.' };
-const NOT_DATABASE_TEXT = /deadlock|violates|constraint|SELECT |UPDATE |INSERT |relation|syntax|sequelize|canceling statement|lock timeout/i;
+const NOT_DATABASE_TEXT = databaseTextMatcher();
 const databaseError = () => Object.assign(new Error('violates foreign key constraint "x_fkey"'), { name: 'SequelizeForeignKeyConstraintError', original: { code: '23503' } });
 
 const open = [];
