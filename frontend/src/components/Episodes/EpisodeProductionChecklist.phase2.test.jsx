@@ -78,6 +78,24 @@ beforeEach(() => {
   vi.mocked(api.get).mockImplementation(answers());
 });
 
+/**
+ * The fold defaults are worked out in an effect, so they land one tick
+ * AFTER the answers do: until then every card is folded. ready() only says
+ * the answers arrived, so a case that asserts fold state straight after it
+ * can read the pre-defaults DOM — which is how CI failed on 77d2ff584,
+ * d12597a09 and 7f2ead8ad (aria-expanded 'false' on every card) while every
+ * local run passed on being quicker.
+ *
+ * Wardrobe is the signal: it is the one section here whose settled state
+ * DIFFERS from the pre-defaults state, because its required slot coverage
+ * is not done, so it must end up open. Nothing is weakened by waiting for
+ * it — the assertions that follow are unchanged.
+ */
+const foldsSettled = async () => {
+  await ready();
+  await waitFor(() => expect(screen.getByTestId('ckh-fold-wardrobe').getAttribute('aria-expanded')).toBe('true'));
+};
+
 describe('the four stages', () => {
   test('group all nine sections, each exactly once, and name all seven steps', async () => {
     show();
@@ -228,7 +246,7 @@ describe('an accepted episode', () => {
 describe('folding', () => {
   test('a section with requirements outstanding starts open; one with them all done starts folded', async () => {
     show();
-    await ready();
+    await foldsSettled();
     // Episode Brief: its three required items are done from BRIEF, so its
     // two optional rows fold.
     expect(screen.getByTestId('ckh-fold-brief').getAttribute('aria-expanded')).toBe('false');
@@ -248,7 +266,7 @@ describe('folding', () => {
 
   test('required rows are never inside the fold', async () => {
     show();
-    await ready();
+    await foldsSettled();
     const brief = screen.getByTestId('checklist-section-brief');
     const folded = screen.getByTestId('ckh-optional-brief');
     // the three required rows are in the card but not in the folded region
@@ -264,18 +282,18 @@ describe('folding', () => {
 
   test('a hand-made choice survives a re-check', async () => {
     show();
-    await ready();
+    await foldsSettled();
     fireEvent.click(screen.getByTestId('ckh-fold-brief'));
     expect(screen.getByTestId('ckh-fold-brief').getAttribute('aria-expanded')).toBe('true');
     // Check again: the default is not recomputed over her choice.
     await act(async () => { fireEvent.click(screen.getByLabelText('Check again')); });
-    await ready();
+    await foldsSettled();
     expect(screen.getByTestId('ckh-fold-brief').getAttribute('aria-expanded')).toBe('true');
   });
 
   test('the counts stay visible whether a section is folded or open', async () => {
     show();
-    await ready();
+    await foldsSettled();
     const counts = screen.getByTestId('ckh-card-counts-brief').textContent;
     expect(counts).toMatch(/3 of 3 required/);
     expect(counts).toMatch(/optional/);
@@ -285,7 +303,7 @@ describe('folding', () => {
 
   test('the summary link reveals the Scene Plan detail even when it was folded', async () => {
     show();
-    await ready();
+    await foldsSettled();
     // Scene Plan's optional row may be folded; the link must open it.
     fireEvent.click(screen.getByTestId('ckh-fold-scene'));
     const beforeState = screen.getByTestId('ckh-fold-scene').getAttribute('aria-expanded');
