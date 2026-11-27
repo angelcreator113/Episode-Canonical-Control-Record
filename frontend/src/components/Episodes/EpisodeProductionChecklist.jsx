@@ -870,11 +870,15 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   // Requirements and preparation apart: the eight required items are advisory
   // and nothing is gated on them (Evoni, 2026-11-27).
   const kinds = useMemo(() => {
-    const all = CHECKLIST_SECTIONS.flatMap((x) => x.items);
-    const req = all.filter((i) => i.required);
-    const opt = all.filter((i) => !i.required);
-    const done = (list) => list.filter((i) => checks[i.id]).length;
-    return { requirements: [done(req), req.length], preparation: [done(opt), opt.length] };
+    // The split each card already makes (sectionCounts), summed over the
+    // nine of them — not a second rule about what counts as a requirement,
+    // so the summary and the cards cannot disagree.
+    const total = [0, 0, 0, 0];
+    for (const section of CHECKLIST_SECTIONS) {
+      const counts = sectionCounts(section, checks);
+      for (let i = 0; i < 4; i += 1) total[i] += counts[i];
+    }
+    return { requirements: [total[0], total[1]], preparation: [total[2], total[3]] };
   }, [checks]);
 
   // The seven production steps, for their DESTINATIONS only. Status is the
