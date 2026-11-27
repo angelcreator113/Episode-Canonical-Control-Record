@@ -3492,6 +3492,29 @@
   line-height: 1.4;
 }
 .ed-page.ed-studio .ed-tab.ed-tab-active .ed-tab-badge { background: var(--studio-card); color: var(--studio-magenta); }
+/* Whether the count can be trusted (Evoni, 2026-11-26). `is-updating`: it is
+   being read again, so it is dimmed. `is-stale`: that read failed and the
+   number is known to be behind, so it is dimmed and underlined. Both keep the
+   badge's shape, its colours and the phone layout (.ed-tab-badge-word is
+   hidden on a narrow screen either way); the hover and the spoken label say
+   the same thing in words. */
+.ed-tab-badge.is-updating { opacity: 0.6; }
+.ed-tab-badge.is-stale {
+  opacity: 0.6;
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+/* The Production strip, whose first and third steps come from the same
+   checks as the badge: dimmed while they are being read again, and marked
+   with a dotted rule along the top where that read failed, so an out-of-date
+   strip is never shown as if it had just been verified. Same two states, same
+   flags, no second mechanism. */
+.ed-prodhead-wrap.is-updating { opacity: 0.75; }
+.ed-prodhead-wrap.is-stale {
+  opacity: 0.75;
+  border-top: 1px dotted var(--studio-line, var(--border));
+}
 
 /* The Production pills: magenta when chosen; one line each, scrolling sideways. */
 .ed-subpills {

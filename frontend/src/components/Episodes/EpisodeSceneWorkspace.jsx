@@ -45,7 +45,7 @@ export function sceneSeconds(clips, beatNumber) {
 const angleImage = (a) => a?.still_image_url || a?.thumbnail_url || null;
 const angleName = (a) => a?.angle_name || a?.angle_label || 'Angle';
 
-export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
+export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast, onChanged = null }) {
   const episodeId = episode?.id;
   const showId = episode?.show_id || episode?.showId || null;
   const [plan, setPlan] = useState([]);
@@ -134,6 +134,8 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
       await saveBeatApi(episodeId, beat.beat_number, body);
       toast(done, 'success');
       await load();
+      // A scene's set and its images are checklist items; only on success.
+      try { onChanged?.(); } catch (err) { console.error('[Scenes] onChanged failed:', err); }
     } catch (err) {
       console.error('[Scenes] save failed:', err);
       toast(err?.response?.data?.error || 'Could not save the scene.', 'error');
@@ -149,6 +151,7 @@ export default function EpisodeSceneWorkspace({ episode, onOpenTab, onToast }) {
       await toggleLockApi(episodeId, beat.beat_number);
       toast(beat.locked ? `Scene ${beat.beat_number} unlocked` : `Scene ${beat.beat_number} locked`, 'success');
       await load();
+      try { onChanged?.(); } catch (err) { console.error('[Scenes] onChanged failed:', err); }
     } catch (err) {
       console.error('[Scenes] lock failed:', err);
       toast(err?.response?.data?.error || 'Could not change the lock.', 'error');
