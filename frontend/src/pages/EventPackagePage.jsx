@@ -97,7 +97,8 @@
  * as they were.
  */
 import { useState, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { readReturn } from '../utils/returnPath';
 import { AlertCircle, ArrowLeft, CheckCircle2, ChevronUp, Pencil, Undo2 } from 'lucide-react';
 import { seasonPageHref } from '../lib/seasonPage';
 import { resolveEventVenueAndDate } from '../utils/eventReadiness';
@@ -205,6 +206,7 @@ function EventPackageView() {
 function EventPackageBody({ pkg }) {
   const { showId, eventId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     data, refreshError, reloadTick, seeds, seasonContext, moneyPreview, moneyStatus,
     load, putEvent, undoChange, loadedEventRef, toastState, setToast,
@@ -244,6 +246,39 @@ function EventPackageBody({ pkg }) {
     : (moneyPreview?.warnings || []);
   const moneyPending = !used && moneyStatus === 'loading';
   const lockEpisode = termsLockedBy || usedInEpisode || null;
+  // The way back to the episode this event belongs to, when that is where we
+  // came from (Evoni, 2026-11-27). It uses the hand-off the rest of the app
+  // already uses (utils/returnPath) and adds nothing of its own: no new
+  // utility, no lookup, no request.
+  //
+  // Three conditions, all required, and the shared validation is not altered
+  // to meet them:
+  //   · the event's own association is known — used_in_episode_id, loaded
+  //     with the page. While it is null the affordance is simply absent.
+  //   · readReturn accepts the address, which means `from` is a path in this
+  //     app naming THIS episode. Passing a null episode makes it reject an
+  //     episode-named `from`, so the loading window is safe by construction.
+  //   · the `from` really names that episode. readReturn also accepts a
+  //     `from` that names no episode at all; this page does not want that
+  //     case, so it is refused here rather than by changing the shared rule.
+  //
+  // An event reused by another episode through its brief (a two-part special,
+  // where used_in_episode_id names a different episode) does not match, and
+  // the page behaves as it always did. Finding that episode would need
+  // another association lookup, which is deliberately not done.
+  const originEpisodeId = usedInEpisode?.id ?? null;
+  const back = readReturn(searchParams, {
+    episodeId: originEpisodeId,
+    fallback: { href: null, text: null },
+  });
+  const fromParam = searchParams.get('from') || '';
+  const namesOriginEpisode = (() => {
+    if (!originEpisodeId) return false;
+    const m = /^\/episodes\/([^/?#]+)/.exec(fromParam);
+    if (!m) return false;
+    try { return decodeURIComponent(m[1]) === String(originEpisodeId); } catch { return false; }
+  })();
+  const episodeReturn = back.origin && namesOriginEpisode ? back : null;
   // Featured attendees (Evoni, 2026-10-09: "im not able to choose a
   // featured guest" after Start Episode, while the episode asked for them):
   // they only steer the script, so like the scene set (L13) they stay
@@ -464,6 +499,11 @@ function EventPackageBody({ pkg }) {
 
   return (
     <div className="epp-page" ref={pageRef}>
+      {episodeReturn && (
+        <Link className="epp-btn epp-btn-small epp-episode-back" to={episodeReturn.href} data-testid="epp-episode-return">
+          <ArrowLeft size={14} aria-hidden="true" /> {episodeReturn.text}
+        </Link>
+      )}
       <div className="epp-toast-live" role="status" aria-live="polite">
         {toast && (
           <div className={`epp-toast${toastState.undo ? ' has-undo' : ''}`} key={toastState.n} data-testid="page-toast">

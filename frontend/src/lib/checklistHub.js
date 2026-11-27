@@ -63,8 +63,8 @@ export const SECTION_GUIDE = {
   wardrobe: { text: "Lala's closet and her look for the event.", open: { label: 'Open Wardrobe', tab: 'wardrobe' } },
   lookbook: { text: "The episode's style sheet, ready x of 12, and its status (Draft or Approved).", open: { label: 'Open Style Page', tab: 'lookbook' } },
   overlays: { text: 'Screens Lala looks at during the episode.', open: { label: 'Open Phone', tab: 'phone' } },
-  onscreen: { text: 'What sits on top of the video: the title overlay and the overlays placed on the timeline.', open: { label: 'Open Overlays', tab: 'overlays' } },
-  social: { text: 'The social checklist and the episode title.', open: { label: 'Open Overlays', tab: 'overlays' } },
+  onscreen: { text: 'What sits on top of the video: the title overlay and the overlays placed on the timeline.', open: { label: 'Manage On-Screen Overlays', tab: 'overlays' } },
+  social: { text: 'The social checklist and the episode title.', open: { label: 'Manage Social Deliverables', tab: 'overlays' } },
   intelligence: { text: "Lala's state and the Show Brain the script reads.", open: null },
 };
 
@@ -79,4 +79,104 @@ export function sectionGuideText(id, { closetBeat = null } = {}) {
 export function sectionCount(section, checks) {
   const done = section.items.filter((i) => checks?.[i.id]).length;
   return [done, section.items.length];
+}
+
+// ── Phase 2: the checklist as a command center (Evoni, 2026-11-27) ──
+//
+// Presentation only. Every fact below comes from an authority that already
+// existed: productionSteps for the stages and the current step,
+// episodeOverview.nextStep for the recommended action, planReadiness for the
+// beat-level problems, computeSectionState for a section, checklistProgress
+// for the counts and checklistReadability for what could not be read. Nothing
+// here computes readiness, completion or production state of its own.
+
+/**
+ * The four stages, as a grouping over the SEVEN existing production steps and
+ * the NINE existing checklist sections. Each step key is productionSteps'
+ * own; each section id is CHECKLIST_SECTIONS'. No stage has a completion of
+ * its own: a stage shows its steps' marks and its sections' counts, and
+ * nothing is derived from the grouping itself.
+ *
+ * Intelligence sits in Plan as a prerequisite, not a stage of its own.
+ * Produce and Publish carry one section each because Files, Edit, Thumbnail
+ * and Review are steps with no checklist section — which is the point: the
+ * band shows them rather than hiding the gap.
+ */
+export const STAGES = [
+  { key: 'plan', label: 'Plan', steps: ['brief'], sections: ['brief', 'world', 'intelligence'] },
+  { key: 'prepare', label: 'Prepare', steps: ['script', 'scenes'], sections: ['scene', 'wardrobe', 'lookbook', 'overlays'] },
+  { key: 'produce', label: 'Produce', steps: ['files', 'edit'], sections: ['onscreen'] },
+  { key: 'publish', label: 'Publish', steps: ['thumbnail', 'publish'], sections: ['social'] },
+];
+
+/** [requiredDone, requiredTotal, optionalDone, optionalTotal] for one section. */
+export function sectionCounts(section, checks) {
+  const required = section.items.filter((i) => i.required);
+  const optional = section.items.filter((i) => !i.required);
+  const done = (list) => list.filter((i) => checks?.[i.id]).length;
+  return [done(required), required.length, done(optional), optional.length];
+}
+
+/**
+ * Whether a section's optional rows start folded, from the FIRST usable
+ * readiness information — never from an empty loading state, which the
+ * caller must not ask about. Evoni's rules, 2026-11-27:
+ *   required items outstanding        → expanded
+ *   every required item done          → collapsed
+ *   none required, optional outstanding → expanded
+ *   everything done                   → collapsed
+ * A section holding an unreadable row is always expanded: an answer that
+ * could not be read must stay in sight.
+ */
+export function optionalStartsFolded(section, checks, unreadableIds = []) {
+  const unreadable = new Set(unreadableIds);
+  if (section.items.some((i) => unreadable.has(i.id))) return false;
+  const [rDone, rTotal, oDone, oTotal] = sectionCounts(section, checks);
+  // The four rules are a complete table on (has requirements, all done):
+  //   requirements, not all done  → expanded      requirements, all done → collapsed
+  //   none, optional outstanding  → expanded      none, all done         → collapsed
+  // Outstanding OPTIONAL work keeps a section open only where it has no
+  // requirements of its own (rule 3). Letting it hold a section open in
+  // every case would make rule 2 unreachable, since it would then say
+  // exactly what rule 4 says.
+  if (rTotal > 0) return rDone === rTotal;
+  return oTotal === 0 || oDone === oTotal;
+}
+
+/**
+ * The beat-level problems planReadiness already reported, split by what they
+ * mean, for the summary and for the Scene Plan rows to read the SAME way.
+ *
+ *   blocking  the beat has no usable location: `locations` (no set at all,
+ *             which is what #3948 also reports as an unplaced beat) and
+ *             `removed_set` (its set was removed). Wording stays "needs a
+ *             usable location": nothing here restricts filming.
+ *   advisory  the set is there but its picture is not: `scene_set`. Flagged,
+ *             never blocking (L5 Q21, Evoni 2026-10-02).
+ *
+ * planReadiness pushes at most ONE entry per beat (a single if/else-if chain
+ * per row, planLocationsService), so a beat appears once and the counts are
+ * beats as well as problems. If that ever reports a beat twice, count unique
+ * beat_number instead.
+ */
+export function beatProblems(readiness) {
+  const rows = Array.isArray(readiness?.not_ready) ? readiness.not_ready : [];
+  const pick = (kinds) => rows
+    .filter((r) => kinds.includes(r.fix?.kind))
+    .map((r) => ({ beat: Number(r.beat_number), name: r.beat_name || null, text: r.text, fix: r.fix }))
+    .sort((a, b) => a.beat - b.beat);
+  const blocking = pick(['locations', 'removed_set']);
+  const advisory = pick(['scene_set']);
+  return {
+    blocking,
+    advisory,
+    beats: (list) => [...new Set(list.map((p) => p.beat))],
+  };
+}
+
+/** "beats 4, 6" / "beat 4" — for a sentence about a list of beats. */
+export function beatList(beats) {
+  const n = beats.length;
+  if (!n) return '';
+  return `beat${n === 1 ? '' : 's'} ${beats.join(', ')}`;
 }

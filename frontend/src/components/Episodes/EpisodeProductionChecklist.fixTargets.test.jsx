@@ -28,6 +28,49 @@ describe('checklistFixTarget', () => {
     expect(checklistFixTarget('scene_images', { episode: EPISODE, showId: 'show-1' })).toEqual({ label: 'Open the Scenes plan', href: '/episodes/ep-1?tab=beatplan' });
   });
 
+  /**
+   * Phase 2 (Evoni, 2026-11-27). The venue image and the invitation are
+   * sections of the EVENT PACKAGE, so that is where their Fix goes — the
+   * page itself, not the Events list it used to open. Running the real app
+   * is what caught that: both still opened the list, and no test said
+   * otherwise. With no event read yet there is nothing to open, so the
+   * destination stays the list, exactly as before.
+   */
+  /**
+   * The other five Phase 2 destinations. Each was clicked in the running app
+   * too, but only on an episode where that item was actually outstanding, so
+   * these pin all five whatever the fixtures happen to hold.
+   */
+  test('the brief fields, the overlays and the social list each open their own page', () => {
+    const at = { episode: EPISODE, showId: 'show-1' };
+    expect(checklistFixTarget('narrative_purpose', at)).toEqual({ label: 'Write it', href: '/episodes/ep-1?tab=overview' });
+    expect(checklistFixTarget('forward_hook', at)).toEqual({ label: 'Write it', href: '/episodes/ep-1?tab=overview' });
+    expect(checklistFixTarget('title_overlay', at)).toEqual({ label: 'Open Overlays', href: '/episodes/ep-1?tab=overlays' });
+    expect(checklistFixTarget('overlays_placed', at)).toEqual({ label: 'Open Overlays', href: '/episodes/ep-1?tab=overlays' });
+    expect(checklistFixTarget('social_checklist', at)).toEqual({ label: 'Open the to-do lists', href: '/episodes/ep-1?tab=overlays' });
+    // None of the five needs the show, so they stand without one.
+    expect(checklistFixTarget('forward_hook', { episode: EPISODE, showId: null }).href).toBe('/episodes/ep-1?tab=overview');
+  });
+
+  test('the venue image and the invitation open the event package', () => {
+    const withEvent = { episode: EPISODE, showId: 'show-1', eventId: 'ev-9' };
+    expect(checklistFixTarget('venue_image', withEvent)).toEqual({ label: 'Add the image', href: '/shows/show-1/events/ev-9' });
+    expect(checklistFixTarget('invitation_exists', withEvent)).toEqual({ label: 'Make the invitation', href: '/shows/show-1/events/ev-9' });
+    // The bare path matters: the hand-off that wraps it writes the way back
+    // in the form the package page reads, and an href already carrying
+    // `from=` would not be wrapped at all.
+    expect(checklistFixTarget('venue_image', withEvent).href).not.toContain('from=');
+  });
+
+  test('with no event read, they open the Events list as they did before', () => {
+    const noEvent = { episode: EPISODE, showId: 'show-1' };
+    const list = checklistFixTarget('event_linked', noEvent).href;
+    expect(checklistFixTarget('venue_image', noEvent)).toEqual({ label: 'Add the image', href: list });
+    expect(checklistFixTarget('invitation_exists', noEvent)).toEqual({ label: 'Make the invitation', href: list });
+    // An event with no show is still not a destination.
+    expect(checklistFixTarget('venue_image', { episode: EPISODE, showId: null, eventId: 'ev-9' })).toBeNull();
+  });
+
   test('both Style Page items open the Style Page (Tasks #2815, #2876)', () => {
     expect(checklistFixTarget('lookbook_ready', { episode: EPISODE, showId: null })).toEqual({ label: 'Fill the Style Page', href: '/episodes/ep-1?tab=lookbook' });
     expect(checklistFixTarget('style_sheet_approved', { episode: EPISODE, showId: null })).toEqual({ label: 'Approve on the Style Page', href: '/episodes/ep-1?tab=lookbook' });
@@ -46,7 +89,14 @@ describe('checklistFixTarget', () => {
   test('no target without the show for show work, nor for an item with no page', () => {
     expect(checklistFixTarget('scene_sets', { episode: EPISODE, showId: null })).toBeNull();
     expect(checklistFixTarget('arc_position', { episode: EPISODE, showId: null })).toEqual({ label: 'Set up', href: '/episodes/ep-1/plan' });
-    expect(checklistFixTarget('social_checklist', { episode: EPISODE, showId: 'show-1' })).toBeNull();
+    // Phase 2 gave the social list a destination of its own: Production →
+    // Overlays, where EpisodeTodoList reads the very list this check counts.
+    expect(checklistFixTarget('social_checklist', { episode: EPISODE, showId: 'show-1' }))
+      .toEqual({ href: '/episodes/ep-1?tab=overlays', label: 'Open the to-do lists' });
+    // Still no destination for these two: the Show Brain is not this
+    // episode's to mend, and the AI title has no editor anywhere.
+    expect(checklistFixTarget('show_brain', { episode: EPISODE, showId: 'show-1' })).toBeNull();
+    expect(checklistFixTarget('title_generated', { episode: EPISODE, showId: 'show-1' })).toBeNull();
     expect(checklistFixTarget('scene_sets', { episode: null, showId: 'show-1' })).toBeNull();
   });
 });

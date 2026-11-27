@@ -120,3 +120,81 @@
   .ckh-timeline-open { margin-left: 0; }
   .ckh-summary-count { margin-left: 0; }
 }
+
+/* ── Phase 2: the checklist as a command center (Evoni, 2026-11-27) ──
+   Tokens only; no new colour is invented here. */
+
+/* The summary says which of the three kinds a number is, and whether it can
+   be trusted: dimmed while being read again, dimmed and underlined where
+   that read failed — the same two states as the page's Production badge. */
+.ckh-summary.is-updating { opacity: 0.75; }
+.ckh-summary.is-stale { opacity: 0.75; text-decoration: underline dotted var(--border); text-underline-offset: 3px; }
+
+.ckh-kinds { display: flex; flex-wrap: wrap; gap: 14px; margin: 12px 0 0; padding: 0; }
+.ckh-kind { flex: 1 1 180px; min-width: 0; padding: 10px 12px; border-radius: 10px; background: var(--lala-parchment-2); border: 1px solid var(--border); }
+.ckh-kind dt { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin: 0; }
+.ckh-kind dd { margin: 2px 0 0; font-size: 18px; color: var(--text-primary); }
+.ckh-kind dd strong { font-size: 22px; }
+.ckh-kind-note { margin: 4px 0 0; font-size: 11px; line-height: 1.35; color: var(--text-secondary); }
+.ckh-kind.is-required { border-color: var(--accent); background: var(--accent-subtle); }
+.ckh-kind.is-unreadable { border-style: dashed; }
+
+/* Two lines, two authorities: the production step and the suggested action. */
+.ckh-next-pair { margin: 12px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.ckh-next-line { margin: 0; font-size: 12px; color: var(--text-primary); }
+.ckh-next-label { display: inline-block; min-width: 110px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+.ckh-next-detail { color: var(--text-secondary); }
+.ckh-linklike { background: none; border: none; padding: 0; font: inherit; color: var(--lala-lavender-text); text-decoration: underline; cursor: pointer; }
+
+/* The beats that need attention: blocking and advisory apart, in the summary
+   and in Scene Plan, from the one planReadiness list. */
+.ckh-problems { margin: 10px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.ckh-problem-line { margin: 0; font-size: 12px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.ckh-problem-line.is-blocking { color: var(--accent-dark); }
+.ckh-problem-line.is-advisory { color: var(--text-secondary); }
+.ckh-problem-beats { color: var(--text-secondary); }
+
+.ckh-beats { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ckh-beat { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 12px; padding: 6px 8px; border-radius: 8px; background: var(--lala-parchment-2); }
+.ckh-beat.is-blocking { background: var(--accent-subtle); border: 1px solid var(--accent); }
+.ckh-beat-what { flex: 1 1 200px; min-width: 0; }
+.ckh-beat-kind { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+
+/* An accepted episode. */
+.ckh-frozen { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; padding: 9px 12px; border-radius: 10px; background: var(--surface-bg); border: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); }
+
+/* A stage: its heading, a way in to each of its steps, then its cards. */
+.ckh-stage { margin: 0 0 18px; }
+.ckh-stage-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin: 0 0 8px; }
+.ckh-stage-title { margin: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+.ckh-stage-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }
+.ckh-stage-step a, .ckh-stage-step button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-bg); font-size: 11px; color: var(--text-primary); text-decoration: none; cursor: pointer; }
+.ckh-stage-step a:hover, .ckh-stage-step button:hover { border-color: var(--lala-lavender); }
+.ckh-stage-step-n { font-weight: 700; color: var(--text-secondary); }
+.ckh-stage-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+
+/* The fold. Required rows are never inside it. */
+.ckh-fold { display: inline-flex; align-items: center; gap: 5px; margin: 6px 0 0; padding: 3px 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; font-size: 11px; color: var(--text-secondary); cursor: pointer; }
+.ckh-fold svg { transition: transform 120ms ease; }
+.ckh-fold svg.is-folded { transform: rotate(-90deg); }
+.ckh-count-required { font-weight: 600; }
+.ckh-count-optional { color: var(--text-secondary); }
+
+/* A check whose source could not be read: said in words, not colour alone. */
+.ckh-box.is-unknown { display: inline-flex; align-items: center; justify-content: center; border: 1px dashed var(--text-secondary); color: var(--text-secondary); font-size: 10px; font-weight: 700; }
+.ckh-item.is-unreadable { opacity: 0.85; }
+
+@media (max-width: 480px) {
+  .ckh-kinds { gap: 8px; }
+  .ckh-kind { flex: 1 1 100%; }
+  .ckh-stage-cards { grid-template-columns: 1fr; }
+  .ckh-next-label { min-width: 0; display: block; }
+  .ckh-beat { gap: 4px; }
+}
+
+/* A count with no answer behind it: the dash sits where the number would,
+   dimmed, so the row keeps its shape without claiming a score. */
+.ckh-score-blank {
+  font-weight: 700;
+  color: color-mix(in srgb, var(--lala-ink) 45%, transparent);
+}

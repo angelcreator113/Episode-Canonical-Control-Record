@@ -107,8 +107,14 @@ describe('primaryAction: the next action for an episode', () => {
   });
 
   test('an open item with no page of its own, or a show page with no show: the episode\'s Checklist', () => {
-    // "Title overlay made" has no fix page.
-    expect(act({ summary: checklistSummary(doneExcept('title_overlay', 'overlays_placed')) })).toMatchObject({ section: 'onscreen', href: '/episodes/ep-1?tab=checklist' });
+    // "Title overlay made" gained a destination in Phase 2 (Evoni,
+    // 2026-11-27): Production → Overlays, where it is actually made. So the
+    // card's action is that page, not the fallback.
+    expect(act({ summary: checklistSummary(doneExcept('title_overlay', 'overlays_placed')) })).toMatchObject({ section: 'onscreen', href: '/episodes/ep-1?tab=overlays' });
+    // Note: after Phase 2 no REQUIRED item is without a destination, and a
+    // section whose required items are all done reads complete and names no
+    // section at all — so the "no page of its own" fallback is now reached
+    // only through the show-less path asserted next.
     // The wardrobe page belongs to a show; without one the action stays in the episode.
     expect(act({ showId: null, summary: checklistSummary(doneExcept('wardrobe_ready')) })).toMatchObject({ section: 'wardrobe', href: '/episodes/ep-1?tab=checklist' });
   });

@@ -77,10 +77,21 @@ describe('Checklist hub', () => {
     await within(card).findByText('In progress');
     expect(within(card).getByText('Title overlay made')).toBeTruthy();
     expect(within(card).getByText('Overlays placed on the video')).toBeTruthy();
-    fireEvent.click(within(card).getByRole('button', { name: 'Open Overlays' }));
+    // Both cards open Production → Overlays, which is where both kinds of
+    // work live, but they no longer say the same words: the labels name their
+    // own content (Evoni, 2026-11-27), so two cards can't offer one sentence
+    // for two different jobs.
+    fireEvent.click(within(card).getByRole('button', { name: 'Manage On-Screen Overlays' }));
     expect(onOpenTab).toHaveBeenCalledWith('overlays');
-    // Social & Content opens Assets → Files, where its social tasks are.
-    expect(within(screen.getByTestId('checklist-section-social')).getByRole('button', { name: 'Open Overlays' })).toBeTruthy();
+    const social = within(screen.getByTestId('checklist-section-social'));
+    expect(social.getByRole('button', { name: 'Manage Social Deliverables' })).toBeTruthy();
+    // The two CARD links differ from each other, which is what the rename was
+    // for. (A row's own Fix may still say "Open Overlays"; that is the row
+    // naming its destination, not two cards sharing one sentence.)
+    const cardLink = (el) => el.querySelector('.ckh-open')?.textContent;
+    expect(cardLink(card)).toBe('Manage On-Screen Overlays');
+    expect(cardLink(screen.getByTestId('checklist-section-social'))).toBe('Manage Social Deliverables');
+    expect(cardLink(card)).not.toBe(cardLink(screen.getByTestId('checklist-section-social')));
   });
 
   test('a complete card says so and opens where it is worked on', async () => {
