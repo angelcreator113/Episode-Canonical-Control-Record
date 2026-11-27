@@ -287,8 +287,10 @@ const boxOf = (layout) => ({ x: layout.x, y: layout.y, w: layout.w, h: layout.h 
  * the scene; Lala's and guests' performer clips (by their layer, then the
  * order they were placed), over the scene and under Prime; Prime's PIP; then
  * captions and titles. Each layer has its kind, its source, its box in pixels
- * at 1920x1080 and its opacity (D5). Phone, overlays, toasts, cursor and stats
- * come with their state model (Gate 2b). layoutAt is unchanged.
+ * at FRAME_W x FRAME_H and its opacity (D5). A still picture (kind 'overlay',
+ * PR 1) is last of all, by its own layer then placement order. Phone screens,
+ * toasts, the cursor and stats still wait for their state model (Gate 2b).
+ * layoutAt is unchanged.
  */
 function layersAt(edit, t, timeline = beatTimeline(edit), placed = placedSegments(edit, timeline)) {
   const at = layoutAt(edit, t, timeline, placed);
@@ -308,6 +310,19 @@ function layersAt(edit, t, timeline = beatTimeline(edit), placed = placedSegment
   for (const s of captions) {
     const v = s.item.values;
     layers.push({ kind: 'caption', item_id: s.item.id, text: v.text, style_key: v.style_key, layout: boxOf(v.layout), opacity: opacityOf(v.layout) });
+  }
+  // Still pictures last, so a title sits over everything (R8.3.1's "captions
+  // and titles"). Ordered by their own layer, then by the order they were
+  // placed — the rule performer clips already follow, so two overlays never
+  // swap places between reads.
+  const overlays = itemSpans(edit, timeline, 'overlay').filter((s) => t >= s.start && t < s.end)
+    .sort((a, b) => ((a.item.values.layer || 0) - (b.item.values.layer || 0)) || (a.order - b.order));
+  for (const s of overlays) {
+    const v = s.item.values;
+    layers.push({
+      kind: 'overlay', item_id: s.item.id, asset_id: v.asset_id,
+      layout: boxOf(v.layout), opacity: opacityOf(v.layout), fit: v.fit || 'contain', layer: v.layer || 0,
+    });
   }
   return { t, beat: at.beat, mode: modeAt(edit, t, timeline), layers, prime_missing: at.prime_missing, scene_gap: at.scene_gap };
 }
