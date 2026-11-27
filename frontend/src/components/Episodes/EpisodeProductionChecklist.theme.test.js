@@ -95,4 +95,30 @@ describe('Episode Production Checklist theme', () => {
     expect(contrast(readToken(sources, '--accent'), readToken(sources, '--surface-card'))).toBeLessThan(4.5);
     expect(contrast(readToken(sources, '--text-inverse'), readToken(sources, '--lala-gold'))).toBeLessThan(4.5);
   });
+
+  /**
+   * A card brought into view by the summary's link must land below the
+   * sticky stack, not behind it (measured before this: 373px of the Scene
+   * Plan card sat above the header's bottom edge). The offset is built from
+   * the heights the header and the episode head already publish — the same
+   * expression EpisodeResultsSummary.css uses — so nothing measures the
+   * header twice. At phone width Production's pill row sticks as well and
+   * its height is not published, so that rule carries the measured 51px.
+   */
+  test('a checklist card keeps clear of the sticky header when scrolled to', () => {
+    // Checked on the rule that applies at full width, not on whichever
+    // .ckh-card block happens to match first: an earlier version of this
+    // case passed with the full-width offset set to 0, because the phone
+    // rule below still carried a calc().
+    const wide = hubCss.slice(0, hubCss.indexOf('@media (max-width: 768px)'));
+    const rule = wide.slice(wide.lastIndexOf('.ckh-card {'));
+    expect(rule).toMatch(/scroll-margin-top:\s*calc\(/);
+    expect(rule).toMatch(/var\(--app-header-h/);
+    expect(rule).toMatch(/var\(--ed-head-h/);
+    expect(rule).not.toMatch(/scroll-margin-top:\s*0/);
+    // and the phone rule adds the pill row the full-width one does not need
+    const phone = hubCss.slice(hubCss.indexOf('@media (max-width: 768px)'));
+    expect(phone).toMatch(/\.ckh-card \{[\s\S]*?scroll-margin-top:[\s\S]*?--ed-head-compact-h[\s\S]*?51px/);
+    expect(phone).not.toMatch(/\.ckh-card \{[\s\S]*?scroll-margin-top:\s*0/);
+  });
 });

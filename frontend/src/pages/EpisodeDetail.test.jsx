@@ -115,6 +115,7 @@ import episodeService from '../services/episodeService';
 import { productionEpisode, resumeEpisode, rememberedEpisodeId, episodeLocation, rememberEpisode, rememberEpisodeLocation } from '../utils/activeEpisode';
 import { activeShowId } from '../utils/activeShow';
 import { readReturn } from '../utils/returnPath';
+import { EP_TABS } from '../utils/episodeTabs';
 
 const renderEpisodeDetail = (entry = '/episodes/ep-1') => render(
   <MemoryRouter initialEntries={[entry]}>
@@ -915,6 +916,67 @@ describe('EpisodeDetail — Edit details carries the tab it is opened from (PR-0
   });
 });
 
+/**
+ * The production strip is not on the Checklist (Evoni, 2026-11-27): there it
+ * repeated what the Hub already says — the seven steps are its stage bands,
+ * and the count is its summary. The strip itself is unchanged and still
+ * shows on every other Production view, so nothing about it is lost; only
+ * where it is drawn has changed.
+ */
+describe('EpisodeDetail — the production strip is off the Checklist, and only the Checklist', () => {
+  const EP = '11111111-2222-4333-8444-555555555555';
+  const EPISODE = { id: EP, title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' }, status: 'in_build', episode_number: 1, season_number: 1 };
+  const mount = (entry) => render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes><Route path="/episodes/:episodeId" element={<EpisodeDetail />} /></Routes>
+    </MemoryRouter>,
+  );
+
+  beforeEach(() => {
+    Object.values(api).forEach((fn) => fn?.mockReset?.());
+    vi.mocked(api.get).mockResolvedValue({ data: {} });
+    window.localStorage.clear();
+    vi.mocked(episodeService.getEpisode).mockReset();
+    vi.mocked(episodeService.getEpisode).mockResolvedValue(EPISODE);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.mocked(episodeService.getEpisode).mockReset();
+    vi.mocked(episodeService.getEpisode).mockResolvedValue({ id: 'ep-1', title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' } });
+  });
+
+  test('every other Production view still shows it', async () => {
+    for (const tab of ['scenes', 'wardrobe', 'lookbook', 'phone', 'overlays', 'money', 'files', 'beatplan', 'edit']) {
+      const view = mount(`/episodes/${EP}?tab=${tab}`);
+      expect(await screen.findByTestId('ed-prodhead-wrap')).toBeTruthy();
+      view.unmount();
+    }
+  });
+
+  test('the Checklist does not, and waiting does not bring it back', async () => {
+    mount(`/episodes/${EP}?tab=checklist`);
+    // Wait for the page itself, so this is not merely "nothing has rendered".
+    expect(await screen.findByTestId('ed-tabs')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByTestId('ed-prodhead-wrap')).toBeNull());
+    expect(screen.queryByTestId('eph-now')).toBeNull();
+    expect(screen.queryByTestId('eph-count')).toBeNull();
+    expect(screen.queryByTestId('eph-mark-ready')).toBeNull();
+  });
+
+  test('what the strip offered is still reachable from the Checklist', async () => {
+    mount(`/episodes/${EP}?tab=checklist`);
+    // Mark Ready set the status to In review; the header's own control still
+    // offers it, on this view as on any other.
+    const status = await screen.findByTestId('ed-status');
+    expect([...status.options].map((o) => o.value)).toContain('in_review');
+    expect(status.disabled).toBe(false);
+    // Open Editor is step 5's view, which the Hub's stage bands link to.
+    expect(EP_TABS.find((t) => t.key === 'production').subs.some((x) => x.key === 'edit')).toBe(true);
+  });
+});
+
 describe('EpisodeDetail — the Production header\'s Thumbnail step carries the open tab (PR-06)', () => {
   const EP = '11111111-2222-4333-8444-555555555555';
   const EPISODE = { id: EP, title: 'Episode One', show_id: 'show-1', show: { id: 'show-1' }, status: 'in_build', episode_number: 1, season_number: 1 };
@@ -942,7 +1004,11 @@ describe('EpisodeDetail — the Production header\'s Thumbnail step carries the 
   });
 
   test('on each Production view, the step\'s address names that view', async () => {
-    for (const [tab, label] of [['wardrobe', 'Wardrobe'], ['checklist', 'Checklist'], ['money', 'Money'], ['files', 'Files'], ['beatplan', 'Plan']]) {
+    // The Checklist is not in this list any more: the strip is not shown
+    // there (Evoni, 2026-11-27). The behaviour this case checks — the step's
+    // address names the view it was opened from — is the same on the four
+    // views that keep the strip.
+    for (const [tab, label] of [['wardrobe', 'Wardrobe'], ['money', 'Money'], ['files', 'Files'], ['beatplan', 'Plan']]) {
       const view = mount(`/episodes/${EP}?tab=${tab}`);
       const href = await thumbnailHref();
       expect(href).toBe(`/template-studio/youtube?episode=${EP}&from=${encodeURIComponent(`/episodes/${EP}?tab=${tab}`)}&fromLabel=${label}`);
