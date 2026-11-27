@@ -27,7 +27,18 @@ import './EpisodeTodoList.css';
  *     onAllRequiredComplete={() => { ... }}
  *   />
  */
-export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComplete }) {
+/**
+ * onChanged (optional): called after a write that changes what the
+ * Production Checklist reads — the two generate actions, which write
+ * episode_todo_lists.social_tasks, the column GET /todo/social answers from
+ * and the checklist's "Social media checklist" is worked out from
+ * (todoListService.generateCareerList saves its goals into that same list).
+ * Including or excluding a task, locking and unlocking do not change whether
+ * the list exists, so they do not call it. Never called on a load, on a
+ * failed generation or on a cancelled one. onAllRequiredComplete keeps its
+ * own meaning: the list was read and every required task is done.
+ */
+export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComplete, onChanged = null }) {
   const [todoList, setTodoList] = useState(null);
   const [careerList, setCareerList] = useState(null);
   const [activeList, setActiveList] = useState('wardrobe');
@@ -87,6 +98,7 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
     try {
       await api.post(`/api/v1/episodes/${episodeId}/todo/generate`, { showId });
       await fetchTodoList();
+      try { onChanged?.(); } catch (err) { console.error('[TodoList] onChanged failed:', err); }
     } catch (err) {
       setError(err.response?.data?.error || 'Generation failed');
     } finally {
@@ -100,6 +112,7 @@ export default function EpisodeTodoList({ episodeId, showId, onAllRequiredComple
     try {
       const res = await api.post(`/api/v1/episodes/${episodeId}/todo/generate-career`, { showId });
       setCareerList(res.data.data);
+      try { onChanged?.(); } catch (err) { console.error('[TodoList] onChanged failed:', err); }
     } catch (err) {
       setError(err.response?.data?.error || 'Career list generation failed');
     } finally {

@@ -80,7 +80,7 @@ const STEPS = [{ key: 'fill', label: 'Fill' }, { key: 'approve', label: 'Approve
 /** The panel spots one design shows. */
 const designPanelSpots = (design) => [...new Set(design.elements.filter((e) => e.kind === 'photo').map((e) => DESIGN_SPOT[e.spot]).filter(Boolean))];
 
-export default function EpisodeStylePage({ episode, onOpenTab }) {
+export default function EpisodeStylePage({ episode, onOpenTab, onChanged = null }) {
   const episodeId = episode?.id;
   const [lb, setLb] = useState(null);
   const [sheet, setSheet] = useState(null);
@@ -152,6 +152,10 @@ export default function EpisodeStylePage({ episode, onOpenTab }) {
       if (next && next.images) setLb(next);
       await loadSheet();
       setError(null);
+      // Saved: "Style sheet ready (12 of 12)" and its Draft/Approved status
+      // are both counted checklist items. The catch below is the failure
+      // path, so this is reached only when the save went through.
+      try { onChanged?.(); } catch (err) { console.error('[StylePage] onChanged failed:', err); }
     } catch (err) {
       console.error('[StylePage] save failed:', err);
       setError(errorText(err));
