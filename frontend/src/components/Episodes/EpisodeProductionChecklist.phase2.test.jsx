@@ -228,10 +228,17 @@ describe('folding', () => {
     // two optional rows fold.
     expect(screen.getByTestId('ckh-fold-brief').getAttribute('aria-expanded')).toBe('false');
     expect(screen.getByTestId('ckh-optional-brief').hasAttribute('hidden')).toBe(true);
-    // Event & Venue: its required item is NOT done (no event link read here),
-    // so its optional rows stay in sight.
-    expect(screen.getByTestId('ckh-fold-world').getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByTestId('ckh-optional-world').hasAttribute('hidden')).toBe(false);
+    // Event & Venue: its one requirement is done too — the anchor event is
+    // read here — so it folds as well, although two of its three optional
+    // rows are still outstanding. Rule 2 does not wait for optional work.
+    // (This case previously asserted the opposite on a premise that was not
+    // true of the fixture, and passed only because outstanding optional work
+    // was wrongly holding every section open.)
+    expect(screen.getByTestId('ckh-fold-world').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByTestId('ckh-optional-world').hasAttribute('hidden')).toBe(true);
+    // Wardrobe: its required slot coverage is NOT done, so it stays in sight.
+    expect(screen.getByTestId('ckh-fold-wardrobe').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('ckh-optional-wardrobe').hasAttribute('hidden')).toBe(false);
   });
 
   test('required rows are never inside the fold', async () => {

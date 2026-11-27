@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { timelineGrid, sectionCount, sectionGuideText } from './checklistHub';
+import { timelineGrid, sectionCount, sectionGuideText, optionalStartsFolded } from './checklistHub';
 
 const ind = (requirement, met, text = null) => ({ requirement, met, text });
 const COVERAGE = {
@@ -38,5 +38,50 @@ describe('checklistHub', () => {
 
   test('a section counts its done items', () => {
     expect(sectionCount({ items: [{ id: 'a' }, { id: 'b' }] }, { a: true })).toEqual([1, 2]);
+  });
+});
+
+/**
+ * Evoni's four collapse rules, 2026-11-27, as a complete table. Running the
+ * app is what caught the earlier reading: outstanding OPTIONAL work was
+ * holding every section open, which made rule 2 unreachable — it then said
+ * exactly what rule 4 says. Optional work keeps a section open only where
+ * the section has no requirements of its own.
+ */
+describe('which sections start folded', () => {
+  const S = {
+    id: 's',
+    items: [
+      { id: 'r1', required: true }, { id: 'r2', required: true },
+      { id: 'o1', required: false }, { id: 'o2', required: false },
+    ],
+  };
+  const NONE_REQUIRED = { id: 'n', items: [{ id: 'o1', required: false }, { id: 'o2', required: false }] };
+  const NOTHING_OPTIONAL = { id: 'x', items: [{ id: 'r1', required: true }] };
+
+  test('rule 1 · a requirement outstanding keeps it open', () => {
+    expect(optionalStartsFolded(S, { r1: true })).toBe(false);
+    expect(optionalStartsFolded(S, { r1: true, o1: true, o2: true })).toBe(false);
+  });
+
+  test('rule 2 · every requirement done folds it, even with optional work left', () => {
+    expect(optionalStartsFolded(S, { r1: true, r2: true })).toBe(true);
+    expect(optionalStartsFolded(S, { r1: true, r2: true, o1: true })).toBe(true);
+    expect(optionalStartsFolded(NOTHING_OPTIONAL, { r1: true })).toBe(true);
+  });
+
+  test('rule 3 · with nothing required, outstanding optional work keeps it open', () => {
+    expect(optionalStartsFolded(NONE_REQUIRED, {})).toBe(false);
+    expect(optionalStartsFolded(NONE_REQUIRED, { o1: true })).toBe(false);
+  });
+
+  test('rule 4 · everything done folds it', () => {
+    expect(optionalStartsFolded(NONE_REQUIRED, { o1: true, o2: true })).toBe(true);
+    expect(optionalStartsFolded(S, { r1: true, r2: true, o1: true, o2: true })).toBe(true);
+  });
+
+  test('a row that could not be read keeps its section open, whatever the rules say', () => {
+    expect(optionalStartsFolded(S, { r1: true, r2: true, o1: true, o2: true }, ['o2'])).toBe(false);
+    expect(optionalStartsFolded(NOTHING_OPTIONAL, { r1: true }, ['r1'])).toBe(false);
   });
 });

@@ -132,7 +132,14 @@ export function optionalStartsFolded(section, checks, unreadableIds = []) {
   const unreadable = new Set(unreadableIds);
   if (section.items.some((i) => unreadable.has(i.id))) return false;
   const [rDone, rTotal, oDone, oTotal] = sectionCounts(section, checks);
-  if (rTotal > 0) return rDone === rTotal && oDone === oTotal;
+  // The four rules are a complete table on (has requirements, all done):
+  //   requirements, not all done  → expanded      requirements, all done → collapsed
+  //   none, optional outstanding  → expanded      none, all done         → collapsed
+  // Outstanding OPTIONAL work keeps a section open only where it has no
+  // requirements of its own (rule 3). Letting it hold a section open in
+  // every case would make rule 2 unreachable, since it would then say
+  // exactly what rule 4 says.
+  if (rTotal > 0) return rDone === rTotal;
   return oTotal === 0 || oDone === oTotal;
 }
 
