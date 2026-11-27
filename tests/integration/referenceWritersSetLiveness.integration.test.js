@@ -888,94 +888,12 @@ const settle = (promise) => promise.then(
       expect(err.message).not.toMatch(DATABASE_TEXT);
     });
 
-    // What DATABASE_TEXT must and must not catch. No database: it is the
-    // assertion itself under test, after the keywords it carried were found to
-    // flag the routes' own English and to miss real statements (Evoni,
-    // 2026-11-27). Every string below is either a shape a leak really takes or
-    // a message this repo really answers with.
-    describe('DATABASE_TEXT itself: every leak caught, no message of ours flagged', () => {
-      const V = { s: 'SELECT', u: 'UPDATE', i: 'INSERT', d: 'DELETE' };
-      const LEAKAGE = [
-        // upper, lower and mixed case
-        `${V.s} id FROM scene_sets WHERE id = $1 FOR ${V.u} NOWAIT`,
-        'select id from world_events where show_id = $1',
-        'Select Id From Episodes Where Id = $1',
-        `${V.u} world_events SET scene_set_id = $1 WHERE id = $2`,
-        'update world_events set scene_set_id = $1 where id = $2',
-        'Update World_Events Set Scene_Set_Id = $1 Where Id = $2',
-        // all four verbs
-        `${V.i} INTO episode_briefs (id) VALUES ($1)`,
-        'insert into shows (id, name) values ($1, $2)',
-        `${V.d} FROM episode_todo_lists WHERE episode_id = $1`,
-        'delete from scene_set_episodes where id = $1',
-        // a read with no source
-        `${V.s} 1`,
-        'select now()',
-        `${V.s} pg_advisory_lock(42)`,
-        'select count(*)',
-        // multiline and odd whitespace
-        `${V.s}\n  id,\n  name\nFROM   episodes\nWHERE  id = $1`,
-        `${V.u}\n  season_slots\nSET\n  release_position = $1\nWHERE arc_id = $2`,
-        `${V.s}\t id \t FROM \t shows`,
-        // quoted and schema-qualified identifiers
-        `${V.s} "id" FROM "scene_sets" WHERE "id" = '...'`,
-        `${V.s} id FROM a2_constraints_25370.season_slots WHERE arc_id = $1 FOR ${V.u}`,
-        `${V.s} id FROM public."world_events"`,
-        // no parameters at all
-        `${V.u} scene_plans SET scene_set_id = NULL`,
-        `${V.s} * FROM episodes WHERE status = 'draft'`,
-        `${V.d} FROM scenes WHERE id = 'abc'`,
-        // inside Sequelize or PostgreSQL error text
-        'SequelizeDatabaseError: canceling statement due to lock timeout',
-        'error: relation "scene_sets" does not exist',
-        `Executing (default): ${V.s} "id" FROM "scene_sets" AS "SceneSet" WHERE "SceneSet"."id" = $1;`,
-        `deadlock detected DETAIL: Process 962: ${V.s} id FROM season_slots WHERE arc_id = $1 FOR ${V.u}`,
-        'ERROR:  syntax error at or near ")"',
-        'duplicate key value violates unique constraint "season_slots_release_position_live"',
-        'could not serialize access due to concurrent update',
-        'could not obtain lock on row in relation "scene_sets"',
-        // clause-only fragments
-        'ON CONFLICT (episode_id) DO NOTHING',
-        'ORDER BY beat_number LIMIT 14',
-      ];
-      const OURS = [
-        'Select an outfit from your closet.',
-        'Select an event from the season roadmap.',
-        'Update your scene set.',
-        "Update the character's wardrobe set.",
-        'Insert a scene into the episode.',
-        'Failed to update event',
-        'Invalid update field',
-        'Could not save the locations',
-        'This episode is accepted and uses this scene set: it stays. Nothing was changed.',
-        'Please select an event first',
-        'Insert a title before publishing',
-        'Select an outfit to continue',
-        'Update the brief before generating the script',
-        'Setup is still incomplete',
-        'Episode 10 "Gala Night" is accepted and uses this scene set: it stays.',
-        'Select a venue from the event package',
-        'Update the season slot and try again',
-        'Delete from the library is not allowed here',
-        'The locations could not be saved; nothing was changed.',
-        'This episode has been filmed (since 2026-11-01) and uses this scene set: it stays. Nothing was changed.',
-      ];
-
-      test.each(LEAKAGE)('caught: %s', (text) => {
-        expect(JSON.stringify({ success: false, error: text })).toMatch(DATABASE_TEXT);
-      });
-
-      test.each(OURS)('not flagged: %s', (text) => {
-        expect(JSON.stringify({ success: false, error: text })).not.toMatch(DATABASE_TEXT);
-      });
-
-      // Pre-existing, from the `relation` word, which is deliberately left as
-      // it was: one phrasing of ours is flagged. Recorded, not fixed here, so
-      // a later change cannot mistake it for a new regression.
-      test('KNOWN, unchanged: the `relation` word still flags one phrasing of ours', () => {
-        expect('Could not update the relation between these records').toMatch(DATABASE_TEXT);
-      });
-    });
+    // The corpus that measures DATABASE_TEXT — every leakage shape it must
+    // catch and every message of ours it must not, in both the JSON-encoded
+    // and raw-string forms these call sites use, plus the known `relation`
+    // false positive kept as known — is the authoritative one at
+    // tests/unit/helpers/databaseText.test.js, beside the shared matcher.
+    // It is not repeated here: one corpus, one place (Evoni, 2026-11-27).
 
     test('the database itself counted no deadlock since this file began', async () => {
       // Every race above also asserts `lock` is null, which covers 40P01 on
