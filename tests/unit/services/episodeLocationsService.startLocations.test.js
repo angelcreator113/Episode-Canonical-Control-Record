@@ -124,7 +124,7 @@ describe('locationsStepGaps (Resume setup\'s check of a failed locations step)',
   const at = (role, id, name = null) => ({ role, scene_set_id: id, name });
   const beat = (n, id, extra = {}) => ({ beat_number: n, scene_set_id: id, locked: false, chosen_by_user: false, ...extra });
   const WHOLE = [at('event', 'venue'), at('home', 'home'), at('closet', 'closet')];
-  const CLEAN = { missing: [], eventElsewhere: false, staleBeats: [] };
+  const CLEAN = { missing: [], eventElsewhere: false, staleBeats: [], unplacedBeats: [] };
 
   test('every role there, the Event location at the event\'s set, every beat at its role\'s set: nothing', () => {
     const beats = [beat(1, 'home'), beat(8, 'closet'), beat(10, 'venue'), beat(11, 'venue'), beat(12, 'venue'), beat(14, 'home')];
@@ -146,9 +146,9 @@ describe('locationsStepGaps (Resume setup\'s check of a failed locations step)',
 
   test('B: the event has a set and the Event location is another; with no Event location it is a missing one, even when Start saved none', () => {
     expect(locationsStepGaps({ roles: [{ role: 'home' }], locations: [at('event', 'older'), at('home', 'home')], eventSetId: 'venue' }))
-      .toEqual({ missing: [], eventElsewhere: true, staleBeats: [] });
+      .toEqual({ missing: [], eventElsewhere: true, staleBeats: [], unplacedBeats: [] });
     expect(locationsStepGaps({ roles: [{ role: 'home' }], locations: [at('home', 'home')], eventSetId: 'venue' }))
-      .toEqual({ missing: [{ role: 'event', name: null }], eventElsewhere: false, staleBeats: [] });
+      .toEqual({ missing: [{ role: 'event', name: null }], eventElsewhere: false, staleBeats: [], unplacedBeats: [] });
     // An event with no set asks nothing of the Event location.
     expect(locationsStepGaps({ roles: [{ role: 'home' }], locations: [at('home', 'home')], eventSetId: null })).toEqual(CLEAN);
   });

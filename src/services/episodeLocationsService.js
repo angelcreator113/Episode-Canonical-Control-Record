@@ -468,14 +468,33 @@ function locationsStepGaps({ roles, locations, eventSetId = null, beats = [] }) 
       : String(placeBeat(Number(b.beat_number), roleSets, noAngles).scene_set_id || '') !== String(b.scene_set_id)))
     .map((b) => Number(b.beat_number))
     .sort((x, y) => x - y);
-  return { missing, eventElsewhere, staleBeats };
+  // Beats with NO scene set at all (Evoni, 2026-11-26). Every one of the 14
+  // canonical beats has an expected role — constants/beatLocations derives it
+  // from CANONICAL_BEATS' typical_location and defaults to home, so none is
+  // typed as locationless. A beat with no set therefore means its role had no
+  // location when the beat was made (or its location has since been removed,
+  // which listLocations drops), and the beat is UNPLACED, not finished.
+  //
+  // Kept apart from staleBeats, whose question is a different one: "this beat
+  // names a set that is not its location's". That predicate still reads only
+  // beats that have a set, so its behaviour is unchanged. Reporting only:
+  // nothing here assigns or replaces a set.
+  const unplacedBeats = beats
+    .filter((b) => !b.scene_set_id)
+    .map((b) => Number(b.beat_number))
+    .sort((x, y) => x - y);
+  return { missing, eventElsewhere, staleBeats, unplacedBeats };
 }
 
 /** The fixed sentence for what locationsStepGaps found; an extra is named as the user named it. */
-function locationsGapsReason({ missing, eventElsewhere, staleBeats }) {
+function locationsGapsReason({ missing, eventElsewhere, staleBeats, unplacedBeats = [] }) {
   const parts = [];
   if (missing.length) parts.push(`Missing: ${missing.map((r) => ROLE_LABELS[r.role] || `"${r.name || 'extra location'}"`).join(', ')}.`);
   if (eventElsewhere) parts.push("The Event location is not the event's current scene set.");
+  if (unplacedBeats.length) {
+    const one = unplacedBeats.length === 1;
+    parts.push(`${unplacedBeats.length} beat${one ? ' has' : 's have'} no scene set (beat${one ? '' : 's'} ${unplacedBeats.join(', ')}).`);
+  }
   if (staleBeats.length) {
     const one = staleBeats.length === 1;
     parts.push(`${staleBeats.length} beat${one ? ' names' : 's name'} a scene set that is not ${one ? 'its' : 'their'} location (beat${one ? '' : 's'} ${staleBeats.join(', ')}).`);
@@ -495,12 +514,18 @@ function locationsGapsReason({ missing, eventElsewhere, staleBeats }) {
 async function checkLocationsStep(sequelize, { episodeId, step }) {
   const locations = await listLocations(sequelize, episodeId);
   const event = await episodeEventSnapshot(sequelize, episodeId);
+  // Every live beat, INCLUDING those with no scene set: an unplaced beat is
+  // what this check used to miss (it filtered `scene_set_id IS NOT NULL`), so
+  // an episode whose beats were made before their location existed read as
+  // complete.
   const [beats] = await sequelize.query(
     `SELECT beat_number, scene_set_id, locked, chosen_by_user FROM scene_plans
-      WHERE episode_id = :episodeId AND deleted_at IS NULL AND scene_set_id IS NOT NULL`,
+      WHERE episode_id = :episodeId AND deleted_at IS NULL`,
     { replacements: { episodeId } });
   const gaps = locationsStepGaps({ roles: step?.roles, locations, eventSetId: event?.scene_set_id ?? null, beats });
-  if (!gaps.missing.length && !gaps.eventElsewhere && !gaps.staleBeats.length) return { status: 'complete', count: locations.length };
+  if (!gaps.missing.length && !gaps.eventElsewhere && !gaps.staleBeats.length && !gaps.unplacedBeats.length) {
+    return { status: 'complete', count: locations.length };
+  }
   return {
     status: 'failed',
     code: LOCATIONS_INCOMPLETE_CODE,
