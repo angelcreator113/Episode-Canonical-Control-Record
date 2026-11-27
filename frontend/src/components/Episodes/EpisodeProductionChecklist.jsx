@@ -1,13 +1,23 @@
 import { adminOnlyMessage } from '../../utils/authGroups';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { getEpisodeAnchorEvent } from '../../services/episodeEventsApi';
 import { nextStep } from '../../utils/sceneSteps';
 import { sceneSetsPath } from '../../utils/sceneSets';
 import { withReturn, tabOrigin } from '../../utils/returnPath';
-import { ProductionSummary, EpisodeTimeline, SectionCard, CheckBox } from './ChecklistHub';
-import { SECTION_GUIDE, sectionCount, sectionGuideText } from '../../lib/checklistHub';
+import {
+  ProductionSummary, EpisodeTimeline, SectionCard, CheckBox,
+  StageBand, BeatProblemSummary, FrozenNotice,
+} from './ChecklistHub';
+import {
+  SECTION_GUIDE, sectionGuideText,
+  STAGES, sectionCounts, optionalStartsFolded, beatProblems,
+} from '../../lib/checklistHub';
+import { checklistReadability, checklistProgress } from '../../lib/episodeShell';
+import { productionSteps } from '../../lib/productionSteps';
+import { nextStep as overviewNextStep } from '../../lib/episodeOverview';
+import { hasScript } from '../../lib/episodeScriptFacts';
 import { closetBeat } from '../../lib/scriptMoments';
 import { styleReadiness } from '../../lib/styleReadiness';
 import { seasonPageHref } from '../../lib/seasonPage';
@@ -192,10 +202,19 @@ const STATE_STYLES = {
  * phone's screens open Lala's Phone. Null when the item has no page, or the
  * show is unknown and the page is the show's.
  */
-export function checklistFixTarget(itemId, { episode, showId } = {}) {
+export function checklistFixTarget(itemId, { episode, showId, eventId = null } = {}) {
   const episodeId = episode?.id;
   const plan = { href: `/episodes/${episodeId}/plan`, label: 'Set up' };
   const events = { href: seasonPageHref(showId, 'events') };
+  // The event's own package page, where the venue image and the invitation
+  // actually live. Only where the episode's anchor event has been read; with
+  // no event the destination stays the Events list, as it was. The path is
+  // bare on purpose: the hand-off below adds the way back in the form the
+  // package page reads (utils/returnPath), not the event-flow `from` token
+  // that lib/eventFlow's packageHref would write.
+  const eventPackage = eventId && showId
+    ? { href: `/shows/${encodeURIComponent(showId)}/events/${encodeURIComponent(eventId)}` }
+    : null;
   const wardrobe = { href: `/shows/${showId}/world?tab=wardrobe-items`, label: 'Upload' };
   const targets = {
     arc_position: plan,
@@ -219,6 +238,24 @@ export function checklistFixTarget(itemId, { episode, showId } = {}) {
     // & Continuity (Evoni, 2026-11-15). It opened Producer Mode's Overview,
     // which is where Producer Mode's own checklist card sends from.
     character_state: { href: `/shows/${showId}/world?tab=characters-list`, label: 'Set up in Producer Mode' },
+    // Phase 2 (Evoni, 2026-11-27): seven more, each a destination that was
+    // verified to exist and to be where that work is actually done. The brief
+    // fields are editable on the Overview (EpisodeOverviewSummary); the venue
+    // image and the invitation are sections of the event package; the title
+    // overlay, the overlays on the video and the social list are all worked on
+    // in Production → Overlays. `show_brain` is a franchise-wide read, not
+    // this episode's to fix, and `title_generated` has no editor anywhere, so
+    // neither gets a button.
+    narrative_purpose: { href: `/episodes/${episodeId}?tab=overview`, label: 'Write it' },
+    forward_hook: { href: `/episodes/${episodeId}?tab=overview`, label: 'Write it' },
+    // Their own words, not the card's: the card's link is offered once and
+    // only where no open item already goes there, so a Fix sharing its label
+    // would silently take the card's link away.
+    venue_image: { ...(eventPackage || events), label: 'Add the image' },
+    invitation_exists: { ...(eventPackage || events), label: 'Make the invitation' },
+    title_overlay: { href: `/episodes/${episodeId}?tab=overlays`, label: 'Open Overlays' },
+    overlays_placed: { href: `/episodes/${episodeId}?tab=overlays`, label: 'Open Overlays' },
+    social_checklist: { href: `/episodes/${episodeId}?tab=overlays`, label: 'Open the to-do lists' },
   };
   const target = targets[itemId];
   if (!target || !episodeId) return null;
@@ -226,10 +263,10 @@ export function checklistFixTarget(itemId, { episode, showId } = {}) {
   return target;
 }
 
-function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable, note }) {
+function CheckItem({ item, checked, loading, onAction, actionLabel, note, unreadable = false }) {
   return (
-    <div className="ckh-item" style={{ opacity: loading ? 0.5 : 1 }}>
-      <CheckBox checked={checked} required={item.required} />
+    <div className={`ckh-item${unreadable ? ' is-unreadable' : ''}`} style={{ opacity: loading ? 0.5 : 1 }} data-testid={`ckh-item-${item.id}`}>
+      <CheckBox checked={checked} required={item.required} unreadable={unreadable} />
       <span style={{
         fontSize: 14, flex: 1, minWidth: 0,
         color: checked ? 'var(--text-primary)' : item.required ? PINK_TEXT : 'var(--text-secondary)',
@@ -243,12 +280,19 @@ function CheckItem({ item, checked, loading, onAction, actionLabel, unavailable,
             required
           </span>
         )}
+        {unreadable && (
+          <span data-testid={`check-unreadable-${item.id}`} style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', textDecoration: 'none', fontWeight: 600 }}>
+            couldn&apos;t be checked
+          </span>
+        )}
         {note && (
           <span data-testid={`check-note-${item.id}`} style={{ display: 'block', fontSize: 12, color: item.required ? PINK_TEXT : 'var(--warning-text)', textDecoration: 'none' }}>{note}</span>
         )}
       </span>
-      {!checked && onAction && (
-        <button type="button" className="ckh-fix" onClick={onAction} disabled={unavailable}>{actionLabel || 'Fix'}</button>
+      {/* No Fix where the source could not be read: sending her to mend what
+          was never read is the mis-signal this replaces. */}
+      {!checked && !unreadable && onAction && (
+        <button type="button" className="ckh-fix" onClick={onAction}>{actionLabel || 'Fix'}</button>
       )}
     </div>
   );
@@ -615,7 +659,7 @@ export async function loadProductionChecks(episode, showId, options) {
  * tagged with it and dropped if it has moved on, so a slow answer cannot
  * replace a newer one for the same episode.
  */
-export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate, onChecks, onOpenTab, initial = null, checksVersion = 0 }) {
+export default function EpisodeProductionChecklist({ episode, showId, onScriptGenerate, onChecks, onOpenTab, initial = null, checksVersion = 0, refreshing = false, stale = false }) {
   const [checks, setChecks] = useState({});
   const [notes, setNotes] = useState({});
   // Audit STATE-01: the server's beat coverage, and the setup repair.
@@ -642,6 +686,13 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   versionNow.current = checksVersion;
   // The episode and generation already shown, so the same pair is not read twice.
   const shownFor = useRef(null);
+  // Which sections the operator has opened or closed by hand, and the episode
+  // those choices belong to. A choice survives every re-check: the default is
+  // worked out once, from the first readiness that is usable, and after that
+  // only she changes it. Changing episode starts again, so one episode's folds
+  // can never be shown for another's (Evoni, 2026-11-27). Nothing is stored.
+  const [folds, setFolds] = useState({ episodeId: null, by: {} });
+  const defaultedFor = useRef(null);
   // Which read is the newest one started here. Two reads of this tab's own can
   // overlap at the same episode and generation — ↻ pressed twice, or pressed
   // while the first read is still out — and their generations match, so only
@@ -753,8 +804,14 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   // (checklistFixTarget), in this app, so Back returns to this checklist.
   const navigate = useNavigate();
   const actions = Object.fromEntries(CHECKLIST_SECTIONS.flatMap((s) => s.items).flatMap((item) => {
-    const target = checklistFixTarget(item.id, { episode, showId });
-    return target ? [[item.id, { action: () => navigate(target.href), label: target.label }]] : [];
+    const target = checklistFixTarget(item.id, { episode, showId, eventId: read?.linkedEvent?.id || null });
+    if (!target) return [];
+    // Scene Sets already carries its own hand-off (sceneSetsPath), so it is
+    // not wrapped twice; everything else is given this tab as the way back.
+    const href = target.href.includes('from=')
+      ? target.href
+      : withReturn(target.href, tabOrigin(episode.id, 'checklist') || {});
+    return [[item.id, { action: () => navigate(href), label: target.label }]];
   }));
 
   // S9 (c): lock every beat, then re-check.
@@ -791,11 +848,95 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
   // The script's closet beat (Task #2880): where the look sits on the
   // timeline and the beat the Wardrobe card names; none without one.
   const lookBeat = closetBeat(episode?.script_content);
-  const completedCount = Object.values(checks).filter(Boolean).length;
   // Items dim only until the first check lands; a re-check keeps the last
   // answers in place rather than flashing every row.
   const hasChecked = Object.keys(checks).length > 0;
-  const totalCount = CHECKLIST_SECTIONS.flatMap(s => s.items).length;
+
+  // ── What is known, each from the authority that already owned it ──
+  // The counts come from checklistProgress (lib/episodeShell), the same one
+  // the page's badge and the Overview read, so there is no second arithmetic
+  // here. The inline count this replaced summed every truthy value in
+  // `checks`; checklistProgress sums the items of CHECKLIST_SECTIONS, which
+  // is the same set — the loader writes one key per item and no others.
+  const progress = useMemo(() => checklistProgress(checks, CHECKLIST_SECTIONS), [checks]);
+  const totalCount = progress?.total ?? CHECKLIST_SECTIONS.flatMap((x) => x.items).length;
+  // Done, incomplete and unreadable, when the loader said what it read. Null
+  // until then, and an unticked box is never guessed to be missing work.
+  const readability = useMemo(
+    () => checklistReadability(checks, CHECKLIST_SECTIONS, read, { hasShow: !!showId }),
+    [checks, read, showId],
+  );
+  const unreadableIds = useMemo(() => new Set(readability?.unreadableIds || []), [readability]);
+  // Requirements and preparation apart: the eight required items are advisory
+  // and nothing is gated on them (Evoni, 2026-11-27).
+  const kinds = useMemo(() => {
+    const all = CHECKLIST_SECTIONS.flatMap((x) => x.items);
+    const req = all.filter((i) => i.required);
+    const opt = all.filter((i) => !i.required);
+    const done = (list) => list.filter((i) => checks[i.id]).length;
+    return { requirements: [done(req), req.length], preparation: [done(opt), opt.length] };
+  }, [checks]);
+
+  // The seven production steps, for their DESTINATIONS only. Status is the
+  // production strip's (it reads the clips and the thumbnail this tab does
+  // not), so nothing here claims a step is done or current.
+  const stepsByKey = useMemo(() => {
+    const map = new Map();
+    for (const st of productionSteps({ episode })) map.set(st.key, st);
+    return map;
+  }, [episode]);
+
+  // The beat problems planReadiness already reported, split the same way for
+  // the summary and for the Scene Plan rows.
+  const problems = useMemo(() => beatProblems(read?.plan?.readiness), [read]);
+
+  // The recommended action, from the Overview's own pure authority rather
+  // than a third opinion formed here. `plan` is the Overview's planning
+  // tiles, which this tab does not read: without it the key, the title and
+  // the destination are identical and only the "Lala's look can wait"
+  // clause is absent from `why` (lib/episodeOverview, the `look` item).
+  const recommended = useMemo(() => {
+    if (!hasChecked) return null;
+    const briefRead = read && Object.prototype.hasOwnProperty.call(read, 'brief');
+    return overviewNextStep({
+      hasScript: hasScript(episode) || Boolean(String(episode?.script_content || '').trim()),
+      brief: briefRead ? read.brief : null,
+      briefStatus: briefRead ? null : 'failed',
+      checks: progress ? { done: progress.done, total: progress.total } : null,
+      checksStatus: null,
+    });
+  }, [episode, read, progress, hasChecked]);
+
+  // An accepted episode refuses the setup writes this page can start: the
+  // server answers 409 EPISODE_FROZEN before anything is written (S1-B).
+  // Filmed is NOT inferred here — the live clip list is not the set the
+  // server counts — so a filmed episode keeps today's behaviour and the
+  // server's own refusal.
+  const accepted = episode?.evaluation_status === 'accepted';
+
+  // Folding: the default is settled once, from the first readiness that is
+  // usable, and a hand-made choice is never overridden afterwards.
+  useEffect(() => {
+    if (!episode?.id || !hasChecked) return;
+    if (defaultedFor.current === episode.id) return;
+    defaultedFor.current = episode.id;
+    const by = {};
+    for (const section of CHECKLIST_SECTIONS) {
+      by[section.id] = optionalStartsFolded(section, checks, readability?.unreadableIds || []);
+    }
+    setFolds({ episodeId: episode.id, by });
+  }, [episode?.id, hasChecked, checks, readability]);
+  const foldsMine = folds.episodeId === episode?.id ? folds.by : {};
+  const toggleFold = (id) => setFolds((prev) => (prev.episodeId === episode?.id
+    ? { ...prev, by: { ...prev.by, [id]: !prev.by[id] } }
+    : prev));
+  // Opening Scene Plan's details from the summary must REVEAL them, so the
+  // fold is opened before the scroll.
+  const revealScenePlan = () => {
+    setFolds((prev) => (prev.episodeId === episode?.id ? { ...prev, by: { ...prev.by, scene: false } } : prev));
+    const card = document.querySelector('[data-testid="checklist-section-scene"]');
+    if (card?.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div style={{ marginTop: 20 }}>
@@ -812,11 +953,33 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
         </div>
       )}
 
-      <ProductionSummary done={completedCount} total={totalCount} loading={loading} onRefresh={checkReadiness} />
+      {accepted && (
+        <FrozenNotice reason="This episode is accepted: its setup is fixed. You can still open and read everything here." />
+      )}
+
+      <ProductionSummary
+        requirements={kinds.requirements}
+        preparation={kinds.preparation}
+        unreadable={readability?.unreadable || 0}
+        currentStep={null}
+        recommended={recommended ? { title: recommended.title, why: recommended.why, onOpen: recommended.tab ? () => onOpenTab?.(recommended.tab) : null } : null}
+        loading={loading}
+        refreshing={refreshing}
+        stale={stale}
+        answered={hasChecked}
+        onRefresh={checkReadiness}
+      />
+
+      <BeatProblemSummary blocking={problems.blocking} advisory={problems.advisory} onOpenScenePlan={revealScenePlan} />
+
       <EpisodeTimeline episodeId={episode.id} lookReady={!!checks.outfit_picked} lookBeat={lookBeat} version={version} />
 
       <div className="ckh-cards">
-      {CHECKLIST_SECTIONS.map(section => (
+      {STAGES.map((stage) => (
+        <StageBand key={stage.key} stage={stage}
+          steps={stage.steps.map((k) => stepsByKey.get(k)).filter(Boolean)}
+          onOpenStep={(st) => st.open?.tab && onOpenTab?.(st.open.tab)}>
+      {stage.sections.map((sectionId) => CHECKLIST_SECTIONS.find((x) => x.id === sectionId)).filter(Boolean).map(section => (
         (() => {
           const sectionStatus = computeSectionState(section, checks);
           const stateStyle = STATE_STYLES[sectionStatus.state];
@@ -829,8 +992,27 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
               : <button type="button" className="ckh-open" onClick={() => onOpenTab?.(guide.open.tab)}>{guide.open.label}</button>)
             : null;
 
+          const row = (item) => (
+            <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading && !hasChecked} note={notes[item.id]}
+              onAction={unreadableIds.has(item.id) ? undefined : actions[item.id]?.action}
+              actionLabel={actions[item.id]?.label}
+              unreadable={unreadableIds.has(item.id)} />
+          );
+          // Required rows and any row whose answer could not be read stay in
+          // sight; the rest fold.
+          const requiredRows = section.items.filter((i) => i.required || unreadableIds.has(i.id)).map(row);
+          const optionalRows = section.items.filter((i) => !i.required && !unreadableIds.has(i.id)).map(row);
+          const counts = sectionCounts(section, checks);
+
           return (
-        <SectionCard key={section.id} section={section} state={sectionStatus} chip={stateStyle.label} count={sectionCount(section, checks)} guide={guide} open={open}>
+        <SectionCard key={section.id} section={section} state={sectionStatus} chip={stateStyle.label}
+          // The REQUIRED split, so the card's line says what it means.
+          // sectionCount (all items) still serves its other callers.
+          count={[counts[0], counts[1]]} guide={guide} open={open}
+          optional={optionalRows.length ? <>{optionalRows}</> : null}
+          optionalCount={[counts[2], optionalRows.length]}
+          folded={foldsMine[section.id] !== false}
+          onToggle={() => toggleFold(section.id)}>
           {section.id === 'scene' && sceneStep && (
             <div data-testid="checklist-scene-next" className="ckh-next">
               <span style={{ flex: '1 1 180px', minWidth: 0 }}><strong>Next:</strong> {sceneStep.text}</span>
@@ -851,14 +1033,39 @@ export default function EpisodeProductionChecklist({ episode, showId, onScriptGe
               </button>
             </div>
           )}
-          {section.items.map(item => (
-            <CheckItem key={item.id} item={item} checked={!!checks[item.id]} loading={loading && !hasChecked} note={notes[item.id]}
-              onAction={actions[item.id]?.action} actionLabel={actions[item.id]?.label}
-              unavailable={sectionStatus.state === 'unavailable'} />
-          ))}
+          {/* The beats planReadiness reported, from the same list the summary
+              above reads. Blocking first, advisory after and plainly marked;
+              nothing here restricts an action. */}
+          {section.id === 'scene' && (problems.blocking.length > 0 || problems.advisory.length > 0) && (
+            <ul className="ckh-beats" data-testid="ckh-scene-beats" aria-label="Beats that need attention">
+              {[...problems.blocking, ...problems.advisory].map((pr) => {
+                const blocking = pr.fix?.kind === 'locations' || pr.fix?.kind === 'removed_set';
+                return (
+                  <li key={`${pr.beat}-${pr.fix?.kind}`} className={`ckh-beat${blocking ? ' is-blocking' : ' is-advisory'}`} data-testid={`ckh-beat-${pr.beat}`}>
+                    <span className="ckh-beat-what">
+                      <strong>Beat {pr.beat}</strong>{pr.name ? ` · ${pr.name}` : ''} — {pr.text}
+                    </span>
+                    <span className="ckh-beat-kind">{blocking ? 'needs a usable location' : 'picture only'}</span>
+                    {pr.fix?.kind === 'locations' && (
+                      <button type="button" className="ckh-fix" onClick={() => onOpenTab?.('beatplan')}>Beat Plan</button>
+                    )}
+                    {pr.fix?.kind === 'removed_set' && (
+                      <button type="button" className="ckh-fix" onClick={() => onOpenTab?.('scenes')}>Move my beats</button>
+                    )}
+                    {pr.fix?.kind === 'scene_set' && pr.fix.scene_set_id && showId && (
+                      <Link className="ckh-fix" to={sceneSetsPath(showId, { from: `/episodes/${episode.id}?tab=checklist`, fromLabel: episode?.title || 'the episode checklist', need: `Beat ${pr.beat}: ${pr.text}` })}>Scene Sets</Link>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {requiredRows}
         </SectionCard>
           );
         })()
+      ))}
+        </StageBand>
       ))}
       </div>
 

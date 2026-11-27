@@ -1619,6 +1619,10 @@ const EpisodeDetail = () => {
             // again. ↻ there still reads afresh.
             initial={checksFresh}
             checksVersion={checksVersion}
+            // The same two states the badge and the production strip show, so
+            // the checklist's own summary cannot contradict them.
+            refreshing={checksUpdating}
+            stale={checksStale}
           />
         )}
 
