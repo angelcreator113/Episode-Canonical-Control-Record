@@ -67,7 +67,19 @@ async function manifestOf(sequelize, { episodeId, versionId, purpose, range }) {
       WHERE a.id IN (:angleIds) AND a.deleted_at IS NULL
         AND EXISTS (SELECT 1 FROM scene_set_episodes l WHERE l.scene_set_id = a.scene_set_id AND l.episode_id = :episodeId AND l.deleted_at IS NULL)
       ORDER BY a.id`, { angleIds, episodeId }) : [];
-    return { version, snapshot, takes, clips, angles };
+    // The still pictures the snapshot's overlay items name (PR 1), read as
+    // they stand now, exactly as a take or an angle is: one that is gone, or
+    // that has moved to another show or episode, resolves to nothing and the
+    // manifest reports asset_missing. file_hash pins the file.
+    const imageIds = uuids(snapshot.items.filter((i) => i.kind === 'overlay').map((i) => i && i.values && i.values.asset_id));
+    const images = imageIds.length ? await rows(`SELECT a.id, a.s3_key_raw AS storage_key, a.s3_url_processed AS url_processed,
+        a.s3_url_raw AS url_raw, a.content_type, a.width, a.height, a.file_size_bytes AS size_bytes, a.file_hash AS sha256
+      FROM assets a
+      JOIN episodes e ON e.id = :episodeId
+      WHERE a.id IN (:imageIds) AND a.deleted_at IS NULL
+        AND a.show_id = e.show_id AND (a.episode_id IS NULL OR a.episode_id = :episodeId)
+      ORDER BY a.id`, { imageIds, episodeId }) : [];
+    return { version, snapshot, takes, clips, angles, images };
   });
 
   const voiceSources = Object.fromEntries(Object.entries(read.takes).map(([approvalId, k]) => [approvalId, {
@@ -83,6 +95,7 @@ async function manifestOf(sequelize, { episodeId, versionId, purpose, range }) {
       edit: edit.editFrom(read.snapshot, read.takes),
       clips: byId(read.clips),
       angles: byId(read.angles),
+      images: byId(read.images),
       voiceSources,
       coverage: await coverageOf(episodeId),
       range,

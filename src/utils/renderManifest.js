@@ -80,7 +80,7 @@ function rangeOf(range, durationMs) {
  * key is one green-removal run's own); an original take and a scene angle
  * are weak (nothing stored says the file is still the one that was placed).
  */
-function assetBook({ clips = {}, angles = {} }) {
+function assetBook({ clips = {}, angles = {}, images = {} }) {
   const assets = {};
   const missing = new Set();
   const put = (ref, entry, found) => {
@@ -108,6 +108,30 @@ function assetBook({ clips = {}, angles = {} }) {
       const a = angles[id] || null;
       const url = (a && (kind === 'angle_video' ? a.video_clip_url : a.still_image_url)) || null;
       return put(`${kind}:${id}`, { ...blank, kind, record_id: id, url, identity: 'weak' }, Boolean(url));
+    },
+    /**
+     * A still picture (PR 1): the episode's title overlay, an invitation, a
+     * rendered phone screen. Pinned, as a cutout is: the row carries the
+     * file's hash, so a replaced file gives another manifest rather than
+     * passing silently. A picture that is gone resolves to nothing and is
+     * reported as a missing asset, the same way a take is.
+     */
+    image(id) {
+      const a = images[id] || null;
+      const url = (a && (a.url_processed || a.url_raw)) || null;
+      return put(`image:${id}`, {
+        ...blank,
+        kind: 'image',
+        record_id: id,
+        storage_key: (a && a.storage_key) || null,
+        url,
+        sha256: (a && a.sha256) || null,
+        size_bytes: num(a && a.size_bytes),
+        width: num(a && a.width),
+        height: num(a && a.height),
+        has_alpha: Boolean(a && a.content_type === 'image/png'),
+        identity: a && a.sha256 ? 'pinned' : 'weak',
+      }, Boolean(url || (a && a.storage_key)));
     },
     voice(source) {
       const id = source.source_asset_id || null;
@@ -154,7 +178,7 @@ function buildManifest(input) {
   const range = rangeOf(input.range, timeline.duration);
   const fromMs = tl.frameTime(range.start_frame);
   const toMs = range.whole ? timeline.duration : Math.min(timeline.duration, tl.frameTime(range.end_frame));
-  const book = assetBook({ clips, angles: input.angles || {} });
+  const book = assetBook({ clips, angles: input.angles || {}, images: input.images || {} });
   const blocking = [];
   const warnings = [];
 
@@ -162,6 +186,10 @@ function buildManifest(input) {
   const choices = new Map();
   const layerOf = (l) => {
     if (l.kind === 'caption') return { ...l };
+    // A still picture keeps the box, opacity and fit the edit gave it; the
+    // only thing added is the file it resolves to. No media choice is made:
+    // a picture has one file, unlike a take with its cutout.
+    if (l.kind === 'overlay') return { ...l, asset: book.image(l.asset_id), media: 'original' };
     if (l.kind === 'scene') {
       const asset = l.source_kind === 'raw_clip' ? book.rawClip(l.source_id, 'original') : book.angle(l.source_kind, l.source_id);
       return { ...l, asset, media: 'original', layout: { x: 0, y: 0, w: tl.FRAME_W, h: tl.FRAME_H }, fit: 'cover' };
