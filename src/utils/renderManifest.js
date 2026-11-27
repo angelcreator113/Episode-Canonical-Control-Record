@@ -75,6 +75,42 @@ function rangeOf(range, durationMs) {
 }
 
 /**
+ * Whether a still picture carries transparency (Evoni, 2026-11-27): true,
+ * false, or null for "not established". Never guessed from `image/png`,
+ * because a PNG may be flat and, more to the point, every picture the
+ * overlay tools make is stored with no content_type at all — a type test
+ * would call each of them opaque.
+ *
+ * What is trusted, and why:
+ *   true   the drawer of the picture recorded that it drew transparency.
+ *          `episodeTitleOverlayService.renderTitleOverlay` draws on a fresh
+ *          `createCanvas` (nothing fills the frame) and writes
+ *          `{ source: 'episode-title-overlay', transparent: true }` with the
+ *          row, so the flag is the maker's own account of the file, not a
+ *          reading of its name. The upload path writes the same key from the
+ *          file's mimetype, which is the very inference this avoids, so its
+ *          source is not on this list.
+ *   false  the format has no alpha channel to carry: a JPEG cannot hold
+ *          transparency whatever it depicts. A statement about the format,
+ *          not about the picture.
+ *   null   anything else, this being the honest answer for a PNG whose
+ *          transparency nobody recorded.
+ *
+ * Nothing here opens a file; the answer comes from the row the editor
+ * already read. A compositor must therefore handle null by looking at the
+ * file itself, and must not read it as "opaque".
+ */
+const TRANSPARENCY_RECORDED_BY = ['episode-title-overlay'];
+const FORMATS_WITHOUT_ALPHA = ['image/jpeg', 'image/jpg'];
+function alphaOf(a) {
+  if (!a) return false;
+  const meta = a.metadata && typeof a.metadata === 'object' ? a.metadata : null;
+  if (meta && meta.transparent === true && TRANSPARENCY_RECORDED_BY.includes(meta.source)) return true;
+  if (a.content_type && FORMATS_WITHOUT_ALPHA.includes(String(a.content_type).toLowerCase())) return false;
+  return null;
+}
+
+/**
  * The files the manifest names, each once, by a ref of its kind and record.
  * Identity: a voice source with its sha256 is strong; a cutout is pinned (its
  * key is one green-removal run's own); an original take and a scene angle
@@ -114,7 +150,8 @@ function assetBook({ clips = {}, angles = {}, images = {} }) {
      * rendered phone screen. Pinned, as a cutout is: the row carries the
      * file's hash, so a replaced file gives another manifest rather than
      * passing silently. A picture that is gone resolves to nothing and is
-     * reported as a missing asset, the same way a take is.
+     * reported as a missing asset, the same way a take is. Transparency is
+     * alphaOf's three answers, never a guess from the file's type.
      */
     image(id) {
       const a = images[id] || null;
@@ -129,7 +166,7 @@ function assetBook({ clips = {}, angles = {}, images = {} }) {
         size_bytes: num(a && a.size_bytes),
         width: num(a && a.width),
         height: num(a && a.height),
-        has_alpha: Boolean(a && a.content_type === 'image/png'),
+        has_alpha: alphaOf(a),
         identity: a && a.sha256 ? 'pinned' : 'weak',
       }, Boolean(url || (a && a.storage_key)));
     },

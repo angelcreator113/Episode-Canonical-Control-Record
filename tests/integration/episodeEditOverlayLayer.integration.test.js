@@ -75,15 +75,21 @@ const EDIT_TABLES = ['edit_versions', 'timeline_audio_items', 'timeline_items', 
     return { ep, show };
   };
 
-  /** A picture in the asset table, as the title overlay service writes one. */
-  const image = async ({ show = showA, episode = null, hash = 'a'.repeat(64), type = 'image/png' } = {}) => {
+  /**
+   * A picture in the asset table. `meta` is the row's metadata, which is
+   * where the drawer of a picture records transparency; the real title
+   * overlay service writes no content_type at all, which `type: null`
+   * reproduces.
+   */
+  const image = async ({ show = showA, episode = null, hash = 'a'.repeat(64), type = 'image/png', meta = null } = {}) => {
     const id = uuid();
     assets.push(id);
     await run(`INSERT INTO assets (id, name, asset_type, asset_role, show_id, episode_id, s3_key_raw, s3_url_raw,
-        s3_url_processed, content_type, width, height, file_size_bytes, file_hash, created_at, updated_at)
+        s3_url_processed, content_type, width, height, file_size_bytes, file_hash, metadata, created_at, updated_at)
       VALUES (:id, 'Title overlay', 'UI_OVERLAY', 'title_overlay', :show, :episode, :key, :url, :url,
-        :type, 1920, 1080, 4242, :hash, NOW(), NOW())`,
-    { id, show, episode, key: `overlays/${id}.png`, url: `https://example.invalid/${id}.png`, type, hash });
+        :type, 1920, 1080, 4242, :hash, :meta, NOW(), NOW())`,
+    { id, show, episode, key: `overlays/${id}.png`, url: `https://example.invalid/${id}.png`, type, hash,
+      meta: meta === null ? null : JSON.stringify(meta) });
     return id;
   };
 
@@ -197,9 +203,30 @@ const EDIT_TABLES = ['edit_versions', 'timeline_audio_items', 'timeline_items', 
     expect(Object.values(again.assets || {}).some((a) => a.kind === 'image')).toBe(false);
   });
 
+  // ── transparency, as the row records it (PR 1 correction) ──────────────
+  test('transparency is the drawer\'s own record, a format fact, or not established', async () => {
+    const w = await withLength(await world());
+    // Known transparent: the title overlay service draws on a fresh canvas
+    // and writes this with the row.
+    const drawn = await image({ episode: w.ep, type: null, meta: { source: 'episode-title-overlay', transparent: true } });
+    // Known opaque: a JPEG has no alpha channel to carry.
+    const flat = await image({ episode: w.ep, type: 'image/jpeg' });
+    // Not established: a PNG, which says nothing about its own pixels.
+    const plain = await image({ episode: w.ep, type: 'image/png' });
+    for (const id of [drawn, flat, plain]) await add(w, overlay(id));
+    const saved = await svc.createVersion(sequelize, await as(w.ep, { name: 'three pictures' }));
+
+    const m = await manifestOf(sequelize, { episodeId: w.ep, versionId: saved.version_id, purpose: 'preview', range: {} });
+    expect(m.assets[`image:${drawn}`].has_alpha).toBe(true);
+    expect(m.assets[`image:${flat}`].has_alpha).toBe(false);
+    expect(m.assets[`image:${plain}`].has_alpha).toBe(null);
+    // The row's metadata is read for that one answer and goes no further.
+    expect(JSON.stringify(m)).not.toContain('episode-title-overlay');
+  });
+
   test('a saved overlay reaches the manifest as a pinned image, and a lost one is reported', async () => {
     const w = await withLength(await world());
-    const a = await image({ episode: w.ep, hash: 'b'.repeat(64) });
+    const a = await image({ episode: w.ep, hash: 'b'.repeat(64), meta: { source: 'episode-title-overlay', transparent: true } });
     await add(w, overlay(a));
     const saved = await svc.createVersion(sequelize, await as(w.ep, { name: 'with overlay' }));
 

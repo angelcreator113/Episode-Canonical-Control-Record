@@ -70,10 +70,12 @@ async function manifestOf(sequelize, { episodeId, versionId, purpose, range }) {
     // The still pictures the snapshot's overlay items name (PR 1), read as
     // they stand now, exactly as a take or an angle is: one that is gone, or
     // that has moved to another show or episode, resolves to nothing and the
-    // manifest reports asset_missing. file_hash pins the file.
+    // manifest reports asset_missing. file_hash pins the file; metadata is
+    // read for the maker's own record of transparency (renderManifest's
+    // alphaOf) and goes no further than that one answer.
     const imageIds = uuids(snapshot.items.filter((i) => i.kind === 'overlay').map((i) => i && i.values && i.values.asset_id));
     const images = imageIds.length ? await rows(`SELECT a.id, a.s3_key_raw AS storage_key, a.s3_url_processed AS url_processed,
-        a.s3_url_raw AS url_raw, a.content_type, a.width, a.height, a.file_size_bytes AS size_bytes, a.file_hash AS sha256
+        a.s3_url_raw AS url_raw, a.content_type, a.width, a.height, a.file_size_bytes AS size_bytes, a.file_hash AS sha256, a.metadata
       FROM assets a
       JOIN episodes e ON e.id = :episodeId
       WHERE a.id IN (:imageIds) AND a.deleted_at IS NULL
