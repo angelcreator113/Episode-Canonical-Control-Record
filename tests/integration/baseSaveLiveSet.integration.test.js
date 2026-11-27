@@ -46,6 +46,7 @@ const models = require('../../src/models');
 const sceneGen = require('../../src/services/sceneGenerationService');
 const generationClaim = require('../../src/services/generationClaimService');
 const lockTrace = require('../helpers/lockTrace');
+const { databaseTextMatcher } = require('../helpers/databaseText');
 const networkGuard = require('../networkGuard/core');
 const { placeLockFixtures } = require('../helpers/placeLockFixtures');
 
@@ -59,7 +60,25 @@ const shouldSkip =
 
 const NOT_SAVED = 'The image was generated but it was not saved. Generating it again costs again.';
 const GONE = 'That scene set no longer exists.';
-const NOT_DATABASE_TEXT = /Instance could not be reloaded|find call returned null|Sequelize|violates|constraint|SELECT |UPDATE |relation /i;
+// This suite's OWN word list, unchanged and not inherited from the shared
+// one (Evoni, 2026-11-27): its two ORM phrases, and `relation ` with the
+// trailing space that keeps it narrower than the shared `relation`. The words
+// the shared list carries and this one does not — deadlock, syntax, canceling
+// statement, lock timeout — stay out, deliberately.
+//
+// What it DOES take is the shared SQL recognition, an approved improvement
+// rather than a like-for-like move: its own pattern had the SELECT and UPDATE
+// keywords only, so INSERT and DELETE statements, multiline statements and
+// clause fragments reached its assertion unflagged, while its keywords flagged
+// our own English ("Update your scene set.").
+const NOT_DATABASE_TEXT = databaseTextMatcher([
+  'Instance could not be reloaded',
+  'find call returned null',
+  'Sequelize',
+  'violates',
+  'constraint',
+  'relation ',
+]);
 const open = [];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const send = (req) => req.then((res) => res);

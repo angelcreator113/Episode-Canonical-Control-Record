@@ -55,6 +55,7 @@ const sceneGen = require('../../src/services/sceneGenerationService');
 const lockTrace = require('../helpers/lockTrace');
 const networkGuard = require('../networkGuard/core');
 const { placeLockFixtures } = require('../helpers/placeLockFixtures');
+const { databaseTextMatcher, BASE_WORDS } = require('../helpers/databaseText');
 
 const { sequelize } = models;
 const { PLACE_LOCKED_CODE, PLACE_LOCKED_MESSAGE } = placeLock;
@@ -67,7 +68,12 @@ const shouldSkip =
 
 const RETRY = { success: false, error: 'Someone else changed this at the same moment. Nothing was saved: try again.', code: 'RETRY' };
 const LOCKED = { success: false, code: PLACE_LOCKED_CODE, error: PLACE_LOCKED_MESSAGE };
-const NOT_DATABASE_TEXT = /deadlock|violates|constraint|SELECT |UPDATE |INSERT |relation|syntax|sequelize|canceling statement|lock timeout|could not obtain lock/i;
+// Shared with the other reference-writer suites (tests/helpers/databaseText),
+// plus this suite's own word: it exercises NOWAIT refusals, whose message is
+// the one text it must never pass on. The three bare keywords the shared
+// matcher replaced flagged our own English and missed the DELETE verb and any
+// statement broken over lines; the shapes catch those and not our wording.
+const NOT_DATABASE_TEXT = databaseTextMatcher([...BASE_WORDS, 'could not obtain lock']);
 
 const open = [];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

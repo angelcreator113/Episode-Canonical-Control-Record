@@ -55,6 +55,7 @@ const episodeLocations = require('../../src/services/episodeLocationsService');
 const lockTrace = require('../helpers/lockTrace');
 const networkGuard = require('../networkGuard/core');
 const { placeLockFixtures, waitForLockWait } = require('../helpers/placeLockFixtures');
+const { databaseTextMatcher, BASE_WORDS } = require('../helpers/databaseText');
 
 const { sequelize } = models;
 
@@ -63,70 +64,17 @@ const shouldSkip =
   process.env.DATABASE_URL?.includes('amazonaws.com') ||
   !process.env.DATABASE_URL?.includes('episode_metadata_test');
 
-// No database or ORM words may reach a response body.
+// No database or ORM words may reach a response body. One matcher serves
+// this suite and its three siblings (tests/helpers/databaseText); the corpus
+// that measures it, and the record of why the three bare SQL keywords were
+// replaced by shape recognition, live with it in
+// tests/unit/helpers/databaseText.test.js.
 //
-// This carried three bare keywords — `SELECT `, `UPDATE `, `INSERT `,
-// matched case-insensitively — and they flagged the routes' own English:
-// "Failed to update event" contains "update " and so failed this
-// assertion on 2026-11-26 (run 45902313934) with no database text in the body
-// at all. They also let real statements through: the DELETE verb was never
-// listed, and a statement broken over lines or tabs has no single space after
-// its verb.
-//
-// SQL is recognised by its SHAPE instead, so case and whitespace never matter
-// and prose cannot satisfy it (Evoni, 2026-11-27):
-//   - the two-word verbs only with their clause adjacent, and never onto an
-//     English article ("... from the library is not allowed here" is ours)
-//   - the write verb with a column assignment: prose says "set", never "set x ="
-//   - a read verb with its source: never a source that is an English article
-//     ("... an outfit from your closet")
-//   - a read verb with no source at all: a star, a literal or a function call
-//   - clauses prose does not carry: a condition with "=", a values list,
-//     RETURNING, ON CONFLICT, ORDER/GROUP BY, LIMIT n
-//
-// Measured against 34 leakage strings and 20 of this repo's own messages:
-// 34/34 caught with 0 false positives, where the keywords caught 27/34 with 13
-// false positives. The corpus is held by the test at the end of section 8.
-//
-// Every other token is unchanged, `relation` included. `relation` still flags
-// one phrasing of ours ("Could not update the relation between these
-// records"); that is pre-existing, is left exactly as it was, and is recorded
-// in the corpus test as known rather than changed here.
-const VERB_S = 'select';
-const VERB_U = 'update';
-const VERB_I = 'insert';
-const VERB_D = 'delete';
-const ARTICLE = 'the|a|an|your|my|our|its|their|this|that|these|those|here|there|his|her|every|any|all|one|two';
-// Whitespace and word boundaries as they reach the assertion. Every call site
-// matches against JSON.stringify(body), which writes a newline as the two
-// characters \ and n — so a statement broken over lines carries no whitespace
-// character at all once encoded, and the escape's trailing letter runs into
-// the next keyword, leaving \b with no boundary to find. WS accepts real
-// whitespace or such an escape; LB is the left-hand boundary, which accepts
-// one as well. Together they are why a multiline statement is caught now and
-// was not before.
-const WS = '(?:\\s|\\\\[nrt])';
-const LB = '(?:^|\\s|\\\\[nrt]|[^a-z0-9_\\\\])';
-const DATABASE_TEXT = new RegExp([
-  // the words, unchanged
-  'deadlock', 'violates', 'constraint', 'relation', 'syntax', 'sequelize',
-  'canceling statement', 'lock timeout', 'could not serialize',
-  'FOR KEY SHARE', 'NOWAIT', 'scene_sets', 'scene_plans', 'scene_set_episodes',
-  // the shapes: a verb with the clause that must follow it, and clauses prose
-  // does not carry. Never onto an English article, so "... from your closet"
-  // and "... from the season roadmap" are ours, not the database's.
-  `${VERB_I}${WS}+into${WS}`,
-  `${VERB_D}${WS}+from${WS}+(?!(?:${ARTICLE})\\b)["a-z_(]`,
-  `${VERB_U}\\b[\\s\\S]{0,160}?${LB}set\\b[\\s\\S]{0,40}?("?[a-z_][a-z0-9_]*"?|[a-z_]+\\.[a-z_"]+)${WS}*=`,
-  `${VERB_S}\\b[\\s\\S]{0,240}?${LB}from${WS}+(?!(?:${ARTICLE})\\b)["a-z_(]`,
-  `${VERB_S}${WS}+(\\*|\\d|[a-z_]+${WS}*\\()`,
-  `${LB}where\\b[\\s\\S]{0,80}?(=${WS}*\\$\\d|=${WS}*'|=${WS}*"|${LB}is${WS}+null\\b|${LB}in${WS}*\\()`,
-  `${LB}values${WS}*\\(`,
-  `${LB}returning\\b`,
-  `${LB}on${WS}+conflict\\b`,
-  `${LB}(order|group)${WS}+by\\b`,
-  `${LB}limit${WS}+\\d`,
-].join('|'), 'i');
+// This suite's own words on top of the shared ones: the lock modes and the
+// three table names its subject is about.
+const DATABASE_TEXT = databaseTextMatcher([...BASE_WORDS,
+  'could not serialize', 'FOR KEY SHARE', 'NOWAIT',
+  'scene_sets', 'scene_plans', 'scene_set_episodes']);
 
 // A supertest request only leaves for the server once something calls
 // .then on it, so a race must start it with this, never hold it as a value.
