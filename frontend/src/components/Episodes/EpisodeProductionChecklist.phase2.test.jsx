@@ -65,7 +65,12 @@ const show = (props = {}) => {
 };
 
 const settled = () => waitFor(() => expect(screen.getByTestId('checklist-summary')).toBeTruthy());
-const ready = () => waitFor(() => expect(screen.getByTestId('ckh-kind-required').textContent).toMatch(/of 8/));
+// An ANSWER, not merely the block: before anything has been read the
+// requirements say "— of 8", which /of 8/ also matched — so every case
+// using this helper could run against a checklist that had not finished
+// reading, and read fold states that were not set yet. It must see a
+// number. (CI caught this on 77d2ff584; locally it passed on timing.)
+const ready = () => waitFor(() => expect(screen.getByTestId('ckh-kind-required').textContent).toMatch(/\d+ of 8/));
 
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
