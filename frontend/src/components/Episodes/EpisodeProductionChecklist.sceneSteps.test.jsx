@@ -57,7 +57,13 @@ describe('EpisodeProductionChecklist: the scenes\' next step (S9 c)', () => {
     expect(next.textContent).toContain('Next: Add the missing images: beats 10 and 11');
     // Said once: the images row's own Open Scenes is the action.
     expect(screen.queryByTestId('checklist-scene-next-action')).toBeNull();
-    expect(screen.getAllByRole('button', { name: 'Open the Scenes plan' })).toHaveLength(1);
+    // Awaited, not read at once: the Fix button sits in the Scene Plan card's
+    // optional block, which renders hidden until the fold default is applied —
+    // an effect that runs a commit after the rows and after the Next line this
+    // case awaits above. CI caught the gap (PR #3953's run: the card's required
+    // Fix buttons present, its fold control still reading "Show 1 optional").
+    // Exactly one button, under exactly the same name; only the wait is new.
+    expect(await screen.findAllByRole('button', { name: 'Open the Scenes plan' })).toHaveLength(1);
     expect((await screen.findByTestId('check-note-scene_images')).textContent).toBe('1 ready · 2 need attention: beats 10, 11');
   });
 
