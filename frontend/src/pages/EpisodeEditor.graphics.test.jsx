@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { vi, describe, beforeEach, afterEach, test, expect } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 const auth = vi.hoisted(() => ({ user: { id: 'u1', groups: ['admin'] } }));
@@ -17,6 +17,14 @@ vi.mock('../services/api', () => ({
 
 import api from '../services/api';
 import EpisodeEditor from './EpisodeEditor';
+
+// jsdom has no PointerEvent: a MouseEvent with a pointerId stands in, so
+// clientX and button arrive (the same stand-in EpisodeEditor.edit.test.jsx uses).
+if (typeof window.PointerEvent === 'undefined') {
+  window.PointerEvent = class PointerEvent extends window.MouseEvent {
+    constructor(type, init = {}) { super(type, init); this.pointerId = init.pointerId ?? 1; }
+  };
+}
 
 const EP = 'ep-1';
 const SHOW = 'show-1';
@@ -54,12 +62,15 @@ function setup({ items = [], images = [], sourcesFails = false } = {}) {
     if (url === `/api/v1/voice-studio/${EP}/playable`) return ok({ takes: [], held: [] });
     return ok(null);
   });
-  vi.mocked(api.post).mockImplementation((url, body) => {
-    server.writes.push({ url, body });
+  const write = (method) => (url, body) => {
+    server.writes.push({ method, url, body });
     server.rev += 1;
     return ok({ edit_revision: String(server.rev), id: 'new-item' });
-  });
+  };
+  vi.mocked(api.post).mockImplementation(write('post'));
+  vi.mocked(api.patch).mockImplementation(write('patch'));
 }
+const lastWrite = () => server.writes[server.writes.length - 1];
 
 const draw = () => render(
   <MemoryRouter initialEntries={[`/episodes/${EP}/editor`]}>
@@ -67,7 +78,7 @@ const draw = () => render(
   </MemoryRouter>,
 );
 
-beforeEach(() => { vi.mocked(api.get).mockReset(); vi.mocked(api.post).mockReset(); localStorage.clear(); });
+beforeEach(() => { vi.mocked(api.get).mockReset(); vi.mocked(api.post).mockReset(); vi.mocked(api.patch).mockReset(); localStorage.clear(); });
 afterEach(() => { localStorage.clear(); });
 
 describe('the Graphics tab', () => {
@@ -127,5 +138,74 @@ describe('an edit with no pictures', () => {
     await screen.findByTestId('editor-monitor');
     expect(screen.queryByTestId(/^preview-overlay-/)).toBeNull();
     expect(screen.getByText('Static graphics supported · Animated widgets and interactive phone behavior not yet available')).toBeTruthy();
+  });
+});
+
+/**
+ * Moving and trimming a graphic (Evoni, 2026-11-28): both go through the
+ * edit operations that already existed — updateItem on /items/:id — and
+ * neither is a second editing mechanism.
+ */
+describe('moving and trimming a placed picture', () => {
+  const SMALL = {
+    ...OVERLAY_ITEM,
+    values: { ...OVERLAY_ITEM.values, layout: { x: 100, y: 50, w: 600, h: 400 } },
+  };
+  // Selecting re-renders the monitor, so the box is read again afterwards:
+  // the node the drag must receive is the one on screen now.
+  const select = async () => {
+    const first = await screen.findByTestId('preview-overlay-o1');
+    fireEvent.click(first.querySelector('.tle-monitor-pip-hit'));
+    await waitFor(() => expect(screen.getByTestId('preview-overlay-o1').className).toMatch(/can-arrange|is-selected/));
+    return screen.getByTestId('preview-overlay-o1');
+  };
+
+  test('dragging it in the preview saves its new place once, on release', async () => {
+    setup({ items: [SMALL], images: [PICTURE] });
+    draw();
+    const box = await select();
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, clientY: 100, pointerId: 11 });
+    fireEvent.pointerMove(box, { clientX: 160, clientY: 80, pointerId: 11 });
+    expect(server.writes).toHaveLength(0);              // nothing while the drag is live
+    fireEvent.pointerUp(box, { clientX: 160, clientY: 80, pointerId: 11 });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    const w = lastWrite();
+    expect(w.method).toBe('patch');
+    expect(w.url).toBe(`${BASE}/items/o1`);
+    expect(w.body.values.layout).toMatchObject({ w: 600, h: 400 });     // the size is kept
+    expect(w.body.values.layout.x).toBeGreaterThan(100);                // moved right
+    expect(w.body.values.layout.y).toBeLessThan(50);                    // and up
+    expect(w.body.edit_revision).toBe('7');
+  });
+
+  test('a locked Overlays lane refuses the move and saves nothing', async () => {
+    localStorage.setItem(`tle-view-${EP}`, JSON.stringify({ overlays: { locked: true } }));
+    setup({ items: [SMALL], images: [PICTURE] });
+    draw();
+    const box = await select();
+    fireEvent.pointerDown(box, { button: 0, clientX: 100, clientY: 100, pointerId: 12 });
+    fireEvent.pointerMove(box, { clientX: 200, clientY: 80, pointerId: 12 });
+    fireEvent.pointerUp(box, { clientX: 200, clientY: 80, pointerId: 12 });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(server.writes).toEqual([]);
+  });
+
+  test('trimming its end on the lane saves the new length, and it stops showing there', async () => {
+    setup({ items: [OVERLAY_ITEM], images: [PICTURE] });
+    draw();
+    const timeline = await screen.findByTestId('editor-timeline');
+    fireEvent.click(within(timeline).getByRole('button', { name: /^Overlays: Episode title/ }));
+    const handle = await screen.findByTestId('trim-end-o1');
+    const block = within(timeline).getByRole('button', { name: /^Overlays: Episode title/ });
+    const pxPerMs = parseFloat(block.style.width) / 2000;               // the block is 2000 ms wide
+    fireEvent.pointerDown(handle, { button: 0, clientX: 400, clientY: 10, pointerId: 13 });
+    fireEvent.pointerMove(handle, { clientX: 400 - pxPerMs * 1000, clientY: 10, pointerId: 13 });
+    fireEvent.pointerUp(handle, { clientX: 400 - pxPerMs * 1000, clientY: 10, pointerId: 13 });
+    await waitFor(() => expect(server.writes).toHaveLength(1));
+    const w = lastWrite();
+    expect(w.method).toBe('patch');
+    expect(w.url).toBe(`${BASE}/items/o1`);
+    expect(Math.abs(w.body.duration_ms - 1000)).toBeLessThanOrEqual(34);  // a frame's tolerance
+    expect(w.body.values).toBeUndefined();                                // only its length changed
   });
 });
