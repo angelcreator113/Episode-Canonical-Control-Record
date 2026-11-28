@@ -198,3 +198,28 @@
   font-weight: 700;
   color: color-mix(in srgb, var(--lala-ink) 45%, transparent);
 }
+
+/* The page header is sticky, so a card brought into view by scrollIntoView
+   lands underneath it: measured on the Scene Plan card, 373px of it sat
+   above the header's bottom edge, hiding the heading, the chip, the counts
+   and the first rows. The offset is the one EpisodeResultsSummary.css
+   already uses — the heights the header and the episode head publish as
+   they resize — so there is no second measurement of the same thing. */
+.ckh-card {
+  scroll-margin-top: calc(var(--app-header-h, 0px) + var(--ed-head-h, 0px) + var(--ed-tabs-h, 0px) + 16px);
+}
+
+/* At phone width the episode head sticks in its compact form and
+   Production's pill row sticks under the tabs as well (EpisodeDetail.css,
+   ".ed-page.ed-studio .ed-subpills"). This mirrors that rule's own
+   expression and adds the pill row, whose height is not published as a
+   variable: 51px measured at 375px. Without it the offset comes to 285px
+   against a sticky stack reaching 314px, so a card with room to scroll
+   would land 29px behind the pills. */
+@media (max-width: 768px) {
+  .ckh-card {
+    scroll-margin-top: calc(
+      var(--app-header-h, 0px) + var(--ed-head-compact-h, var(--ed-head-h, 0px))
+      + var(--ed-tabs-h, 0px) + 51px + 16px);
+  }
+}

@@ -1345,8 +1345,16 @@ const EpisodeDetail = () => {
 
         {/* Production's strip (Evoni's Production mock, 2026-10-17; work
             first, 2026-10-22 layout list): under the pills, one thin row,
-            the steps, the checks, Open Editor and Mark Ready. */}
-        {activeTab === 'production' && (
+            the steps, the checks, Open Editor and Mark Ready.
+            NOT on the Checklist (Evoni, 2026-11-27): there the strip says
+            the same things twice. The Hub's four stage bands already offer
+            all seven steps, and its summary is the progress display, so the
+            strip only repeated the count a third time. Nothing is lost:
+            Open Editor is step 5's tab (EpisodeEditTab's own link), and
+            Mark Ready is the header's status select, which lists In review.
+            The strip is unchanged and still shows on every other
+            Production view. */}
+        {activeTab === 'production' && tabKey !== 'production.checklist' && (
           <Suspense fallback={null}>
             {/* The strip's steps 1 and 3 are worked out from the production
                 checks, so while those are being read again — or after a
