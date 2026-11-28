@@ -102,11 +102,12 @@ const rows = async (sql, replacements = {}) => (await sequelize.query(sql, { rep
     expect(read.status).toBe(200);
     expect(read.body.facts.home_price_range).toMatchObject({ key: 'modest', label: expect.stringMatching(/^Modest/) });
 
-    const bad = await auth(request(app).put(`/api/v1/cast/characters/${id}/facts`)).send({ home_price_range: 'castle' });
+    const version = async () => (await auth(request(app).get(`/api/v1/cast/characters/${id}/facts`))).body.facts_version;
+    const bad = await auth(request(app).put(`/api/v1/cast/characters/${id}/facts`)).send({ home_price_range: 'castle', expected_version: await version() });
     expect(bad.status).toBe(400);
     expect(bad.body.error).toMatch(/Home price range is one of/);
 
-    const ok = await auth(request(app).put(`/api/v1/cast/characters/${id}/facts`)).send({ home_price_range: 'luxury' });
+    const ok = await auth(request(app).put(`/api/v1/cast/characters/${id}/facts`)).send({ home_price_range: 'luxury', expected_version: await version() });
     expect(ok.status).toBe(200);
     expect(ok.body.facts.home_price_range.key).toBe('luxury');
     const { factsPromptBlock } = require('../../src/services/characterFacts');

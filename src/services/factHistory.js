@@ -62,12 +62,12 @@ function words(key, v) {
   return String(v);
 }
 
-async function recordFactChanges(db, { character, showId = null, before, after, reason = null, by = null }) {
+async function recordFactChanges(db, { character, showId = null, before, after, reason = null, by = null, transaction = null }) {
   try {
     const changes = factDiff(before, after);
     if (!changes.length) return [];
     let storyOrder = null;
-    if (showId) storyOrder = await require('./storyClock').presentOrder(db, showId);
+    if (showId) storyOrder = await require('./storyClock').presentOrder(db, showId, transaction);
     for (const ch of changes) {
       await db.sequelize.query(
         `INSERT INTO character_fact_changes (registry_character_id, show_id, fact_key, before_value, after_value, reason, story_order, changed_by, source)
@@ -75,10 +75,13 @@ async function recordFactChanges(db, { character, showId = null, before, after, 
         { replacements: {
           cid: character.id, show: showId, key: ch.key, from: JSON.stringify(ch.from), to: JSON.stringify(ch.to),
           reason: reason ? String(reason).slice(0, 500) : null, order: Number.isInteger(storyOrder) ? storyOrder : null, by,
-        } });
+        }, transaction });
     }
     return changes;
   } catch (err) {
+    // On the save's own transaction the history is part of the save: a change
+    // that cannot be recorded is not made (services/characterFacts setFacts).
+    if (transaction) throw err;
     console.error(`[factHistory] the fact changes of ${character?.id} could not be recorded:`, err.message);
     return [];
   }

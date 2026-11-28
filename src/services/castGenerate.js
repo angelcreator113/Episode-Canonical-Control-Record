@@ -233,6 +233,7 @@ async function keep(db, { registryId, proposal, by = null } = {}) {
           character: made.character, feedProfile: made.profile,
           body: { followers: { count: p.pulse.follower_count, reason: 'Proposed with the character by "Make one for me" and kept.' } },
           by: String(by || 'cast-generate').slice(0, 255),
+          internal: true, // a character made a moment ago: no page holds older facts
         });
       } catch (ledgerErr) {
         console.error('[castGenerate] the starting count could not be written to the ledger:', ledgerErr.message);

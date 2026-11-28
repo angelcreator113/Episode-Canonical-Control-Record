@@ -119,4 +119,73 @@ describe('Their facts', () => {
     fireEvent.click(await screen.findByText('Suggest facts from their profile'));
     expect((await screen.findByRole('alert')).textContent).toMatch(/nothing written about them/);
   });
+
+  // Fact-update safety (Evoni, 2026-11-22): a save names the facts it read,
+  // and sends only the facts changed in the form.
+  const occupation = () => screen.getByLabelText('Occupation', { selector: 'input:not([type=checkbox])' });
+
+  test('a save sends the version it read and only the fact that was changed', async () => {
+    api.get.mockResolvedValue({ data: { facts: FACTS, facts_version: 'f1-read' } });
+    api.put.mockResolvedValue({ data: { facts: { ...FACTS, occupation: 'Designer' }, facts_version: 'f1-saved' } });
+    renderCard();
+    fireEvent.click(await screen.findByText('Edit facts'));
+    fireEvent.change(occupation(), { target: { value: 'Designer' } });
+    fireEvent.click(screen.getByText('Save facts'));
+    await screen.findByText('Saved.');
+    expect(api.put.mock.calls[0][1]).toEqual({ expected_version: 'f1-read', occupation: 'Designer' });
+
+    // The next save names the version the last one returned.
+    fireEvent.click(screen.getByText('Edit facts'));
+    fireEvent.change(occupation(), { target: { value: 'Tailor' } });
+    fireEvent.click(screen.getByText('Save facts'));
+    await screen.findByText('Saved.');
+    expect(api.put.mock.calls[1][1]).toEqual({ expected_version: 'f1-saved', occupation: 'Tailor' });
+  });
+
+  test('a save refused because the facts changed keeps what was typed, and Load the latest keeps it too', async () => {
+    // The card's other reads (history, check) answer empty; the facts read answers what is saved now.
+    let saved = { facts: FACTS, facts_version: 'f1-old' };
+    api.get.mockImplementation((url) => Promise.resolve({ data: url.endsWith('/facts') ? saved : {} }));
+    api.put.mockRejectedValueOnce(Object.assign(new Error('x'), {
+      response: { status: 409, data: { code: 'FACTS_CHANGED', error: 'These facts have changed since you opened them. Load the latest, then save again.' } },
+    }));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderCard();
+    fireEvent.click(await screen.findByText('Edit facts'));
+    fireEvent.change(occupation(), { target: { value: 'Designer' } });
+    fireEvent.change(screen.getByLabelText('Why these facts changed'), { target: { value: 'Her new line' } });
+    fireEvent.click(screen.getByText('Save facts'));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/changed since you opened them/);
+    // Nothing typed is lost.
+    expect(occupation().value).toBe('Designer');
+    expect(screen.getByLabelText('Why these facts changed').value).toBe('Her new line');
+
+    // Someone else changed the income meanwhile; the latest facts are loaded.
+    const latest = { ...FACTS, income: { amount: 20000, cadence: 'per_month', source: 'Brand deals' } };
+    saved = { facts: latest, facts_version: 'f1-new' };
+    api.put.mockResolvedValueOnce({ data: { facts: { ...latest, occupation: 'Designer' }, facts_version: 'f1-newer' } });
+    fireEvent.click(screen.getByTestId('ch-facts-load-latest'));
+    expect(await screen.findByText(/The latest facts are loaded\. What you typed is kept/)).toBeTruthy();
+    expect(occupation().value).toBe('Designer');
+    expect(screen.queryByTestId('ch-facts-load-latest')).toBeNull();
+
+    // The save names the new version and sends only her change: the income
+    // she never touched is not sent, so the newer one is kept.
+    fireEvent.click(screen.getByText('Save facts'));
+    await screen.findByText('Saved.');
+    expect(api.put.mock.calls[1][1]).toEqual({ expected_version: 'f1-new', occupation: 'Designer', reason: 'Her new line' });
+    expect(screen.getByText('$20,000 per month · Brand deals')).toBeTruthy();
+  });
+
+  test('a save refused for another reason offers no Load the latest', async () => {
+    api.get.mockResolvedValue({ data: { facts: FACTS, facts_version: 'f1-read' } });
+    api.put.mockRejectedValue(Object.assign(new Error('x'), { response: { status: 409, data: { error: '@taken is already held by another profile.' } } }));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    renderCard();
+    fireEvent.click(await screen.findByText('Edit facts'));
+    fireEvent.change(screen.getByLabelText('Handle', { selector: 'input:not([type=checkbox])' }), { target: { value: '@taken' } });
+    fireEvent.click(screen.getByText('Save facts'));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/already held/);
+    expect(screen.queryByTestId('ch-facts-load-latest')).toBeNull();
+  });
 });

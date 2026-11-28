@@ -96,15 +96,37 @@ async function proposeStarts(db, showId, { lalaProfileId = null } = {}) {
 
 const atWhere = (at) => (Number.isInteger(at) ? 'AND story_order <= :at' : '');
 
-/** The profile's accepted count at or before `at` (a story order; none: the latest), else null. */
-async function countAt(db, showId, profileId, at) {
+/**
+ * The profile's accepted row at or before `at` (a story order; none: the
+ * latest): { id, count }, else null. Two rows decided in the same
+ * millisecond are told apart by id, so the same row wins every time.
+ */
+async function acceptedAt(db, showId, profileId, at, transaction = null) {
   const [[row]] = await db.sequelize.query(
-    `SELECT count_after FROM pulse_followers
+    `SELECT id, count_after FROM pulse_followers
       WHERE show_id = :showId AND social_profile_id = :profileId AND status = 'accepted' AND deleted_at IS NULL ${atWhere(at)}
-      ORDER BY story_order DESC, decided_at DESC NULLS LAST, created_at DESC
+      ORDER BY story_order DESC, decided_at DESC NULLS LAST, created_at DESC, id DESC
       LIMIT 1`,
-    { replacements: { showId, profileId, at: Number.isInteger(at) ? at : null } });
-  return row ? Number(row.count_after) : null;
+    { replacements: { showId, profileId, at: Number.isInteger(at) ? at : null }, transaction });
+  return row ? { id: row.id, count: Number(row.count_after) } : null;
+}
+
+/** The profile's accepted count at or before `at` (a story order; none: the latest), else null. */
+async function countAt(db, showId, profileId, at, transaction = null) {
+  const row = await acceptedAt(db, showId, profileId, at, transaction);
+  return row ? row.count : null;
+}
+
+/**
+ * A change to a profile's accepted count is made with the profile's row
+ * locked, then its accepted rows (the order services/characterFacts
+ * lockFactRows uses), so it takes turns with a save of the facts.
+ */
+async function lockProfileLedger(db, transaction, showId, profileId) {
+  await db.sequelize.query("SET LOCAL lock_timeout = '10s'", { transaction });
+  const profile = await db.SocialProfile.findByPk(profileId, { transaction, lock: transaction.LOCK.NO_KEY_UPDATE });
+  await require('./characterFacts').lockLedger(db, transaction, showId, profileId);
+  return profile;
 }
 
 /** [{ social_profile_id, count, story_order }] for every profile with an accepted count at `at`. */
@@ -135,27 +157,32 @@ class LedgerError extends Error {
  */
 async function decide(db, row, { adjustTo = null, adjustBy = null, reason = null, by = null } = {}) {
   if (row.status !== 'proposed') throw new LedgerError(409, 'This change has already been decided.');
-  const counted = row.cause === 'start' ? 0 : await countAt(db, row.show_id, row.social_profile_id, row.story_order);
-  // Every change but a start needs the starting count first (Task #3086: posts and events too).
-  if (counted === null && row.cause !== 'start') throw new LedgerError(409, 'Accept the starting follower count first.');
-  const before = counted ?? 0;
   const adjusting = adjustTo !== null || adjustBy !== null;
   if (adjustBy !== null && !Number.isInteger(adjustBy)) throw new LedgerError(400, 'The change must be a whole number.');
-  const target = adjustBy !== null ? before + adjustBy : adjustTo;
-  if (adjusting) {
-    if (!Number.isInteger(target) || target < 0) throw new LedgerError(400, 'The count must be a whole number, 0 or more.');
-    if (typeof reason !== 'string' || !reason.trim()) throw new LedgerError(400, 'Say why in one line.');
-  }
-  const countAfter = adjusting ? target : (row.cause === 'start' ? row.count_after : Math.max(0, before + row.change));
-  const why = adjusting ? reason.trim().slice(0, 500) : row.reason;
   await db.sequelize.transaction(async (transaction) => {
+    // The profile, then its accepted rows, then this row as it is now: the
+    // count before it and whether it is still proposed are read under the locks.
+    const profile = await lockProfileLedger(db, transaction, row.show_id, row.social_profile_id);
+    await row.reload({ transaction, lock: transaction.LOCK.UPDATE });
+    if (row.status !== 'proposed') throw new LedgerError(409, 'This change has already been decided.');
+    const counted = row.cause === 'start' ? 0 : await countAt(db, row.show_id, row.social_profile_id, row.story_order, transaction);
+    // Every change but a start needs the starting count first (Task #3086: posts and events too).
+    if (counted === null && row.cause !== 'start') throw new LedgerError(409, 'Accept the starting follower count first.');
+    const before = counted ?? 0;
+    const target = adjustBy !== null ? before + adjustBy : adjustTo;
+    if (adjusting) {
+      if (!Number.isInteger(target) || target < 0) throw new LedgerError(400, 'The count must be a whole number, 0 or more.');
+      if (typeof reason !== 'string' || !reason.trim()) throw new LedgerError(400, 'Say why in one line.');
+    }
+    const countAfter = adjusting ? target : (row.cause === 'start' ? row.count_after : Math.max(0, before + row.change));
+    const why = adjusting ? reason.trim().slice(0, 500) : row.reason;
     await row.update({
       status: 'accepted', count_after: countAfter, change: countAfter - before, reason: why, decided_by: by, decided_at: new Date(),
     }, { transaction });
     if (row.cause === 'episode') await writeDecisionLog(db, row, { adjusted: adjusting, transaction });
+    // The profile's stored label and tier follow the accepted count (services/characterFacts), in the same transaction.
+    if (profile) await require('./characterFacts').syncFollowerCopies(db, row.show_id, row.social_profile_id, { transaction, profile });
   });
-  // The profile's stored label and tier follow the accepted count (services/characterFacts).
-  await require('./characterFacts').syncFollowerCopies(db, row.show_id, row.social_profile_id);
   // A big accepted jump can move the season plan (services/seasonArcProposals): a proposal, never awaited.
   if (row.cause !== 'start' && Math.abs(row.change) >= BIG_JUMP) require('./seasonArcProposals').proposeLater(db, row.show_id, 'follower_jump');
   return row;
@@ -180,17 +207,21 @@ async function writeDecisionLog(db, row, { adjusted, transaction }) {
 async function override(db, { showId, profileId, change, reason, at, by = null }) {
   if (!Number.isInteger(change) || change === 0) throw new LedgerError(400, 'The change must be a whole number other than 0.');
   if (typeof reason !== 'string' || !reason.trim()) throw new LedgerError(400, 'Say why in one line.');
-  const before = await countAt(db, showId, profileId, at);
-  if (before === null) throw new LedgerError(409, 'This character has no accepted starting count yet.');
-  const countAfter = before + change;
-  if (countAfter < 0) throw new LedgerError(400, 'That would take the count below 0.');
-  const row = await db.PulseFollower.create({
-    show_id: showId, social_profile_id: profileId, story_order: at, change, count_after: countAfter,
-    cause: 'override', reason: reason.trim().slice(0, 500), status: 'accepted', decided_by: by, decided_at: new Date(),
+  return db.sequelize.transaction(async (transaction) => {
+    // The count it starts from is read under the profile's and the ledger's locks.
+    const profile = await lockProfileLedger(db, transaction, showId, profileId);
+    const before = await countAt(db, showId, profileId, at, transaction);
+    if (before === null) throw new LedgerError(409, 'This character has no accepted starting count yet.');
+    const countAfter = before + change;
+    if (countAfter < 0) throw new LedgerError(400, 'That would take the count below 0.');
+    const row = await db.PulseFollower.create({
+      show_id: showId, social_profile_id: profileId, story_order: at, change, count_after: countAfter,
+      cause: 'override', reason: reason.trim().slice(0, 500), status: 'accepted', decided_by: by, decided_at: new Date(),
+    }, { transaction });
+    // The profile's stored label and tier follow the accepted count (services/characterFacts), in the same transaction.
+    if (profile) await require('./characterFacts').syncFollowerCopies(db, showId, profileId, { transaction, profile });
+    return row;
   });
-  // The profile's stored label and tier follow the accepted count (services/characterFacts).
-  await require('./characterFacts').syncFollowerCopies(db, showId, profileId);
-  return row;
 }
 
 // ── The episode follower change (Task #2956) ────────────────────────────────
@@ -355,6 +386,6 @@ async function proposeFromDeliverable(db, { showId, deliverable, lalaProfileId }
 
 module.exports = {
   TIER_MIDDLE, CAUSES, EPISODE_TIER_RATE, POST_LIKES_TO_FOLLOWERS, DELIVERABLE_RATE, MAX_PIECES, NOT_ORIGINAL,
-  parseApprox, estimateStart, proposeStarts, countAt, countsAt, decide, override, episodeChangeFrom, proposeEpisodeChange,
+  parseApprox, estimateStart, proposeStarts, acceptedAt, countAt, countsAt, lockProfileLedger, decide, override, episodeChangeFrom, proposeEpisodeChange,
   proposeFromPost, proposeFromPostLater, proposeFromDeliverable, LedgerError,
 };

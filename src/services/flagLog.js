@@ -60,19 +60,21 @@ async function logCheck(db, character, result, { source = 'check' } = {}) {
   }
 }
 
-async function setStatus(db, characterId, flagId, status, { from = null } = {}) {
+async function setStatus(db, characterId, flagId, status, { from = null, transaction = null } = {}) {
   try {
     await db.sequelize.query(
       `UPDATE consistency_flag_log SET status = :status, resolved_at = ${status === 'open' ? 'NULL' : 'NOW()'}, updated_at = NOW()
         WHERE registry_character_id = :cid AND flag_id = :fid AND source = 'check' ${from ? 'AND status = :from' : ''}`,
-      { replacements: { cid: characterId, fid: String(flagId), status, from } });
+      { replacements: { cid: characterId, fid: String(flagId), status, from }, transaction });
   } catch (err) {
+    // On a caller's transaction a failed statement has ended it: the caller must know.
+    if (transaction) throw err;
     console.error(`[flagLog] flag ${flagId} of ${characterId} could not be marked ${status}:`, err.message);
   }
 }
 
 const markFixed = (db, characterId, flagId) => setStatus(db, characterId, flagId, 'fixed', { from: 'open' });
-const markIntentional = (db, characterId, flagId, on) => setStatus(db, characterId, flagId, on ? 'intentional' : 'open');
+const markIntentional = (db, characterId, flagId, on, { transaction = null } = {}) => setStatus(db, characterId, flagId, on ? 'intentional' : 'open', { transaction });
 
 async function flagLogSummary(db, registryIds) {
   const counts = `COUNT(*)::int AS total,

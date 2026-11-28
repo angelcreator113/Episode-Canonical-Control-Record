@@ -59,7 +59,9 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
   });
 
   it('records each fact that changed, with why, who and when in the story, alongside the follower ledger', async () => {
+    const version = async () => (await as('get', `/characters/${ids.char}/facts`)).body.facts_version;
     const saved = await as('put', `/characters/${ids.char}/facts`, {
+      expected_version: await version(),
       occupation: 'Slow-fashion creator and vintage reseller',
       income: { amount: 60000, cadence: 'per_year', source: 'brand deals' },
       followers: { count: 2000000, reason: 'The swap went viral' },
@@ -73,7 +75,7 @@ const run = (sql, replacements = {}) => sequelize.query(sql, { replacements });
     ]);
 
     // The same values again change nothing.
-    await as('put', `/characters/${ids.char}/facts`, { occupation: 'Slow-fashion creator and vintage reseller' });
+    await as('put', `/characters/${ids.char}/facts`, { occupation: 'Slow-fashion creator and vintage reseller', expected_version: await version() });
     const [[{ n }]] = await run('SELECT COUNT(*)::int AS n FROM character_fact_changes WHERE registry_character_id = :char', ids);
     expect(n).toBe(2);
 

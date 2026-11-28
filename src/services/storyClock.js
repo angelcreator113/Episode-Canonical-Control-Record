@@ -60,10 +60,11 @@ function label(order) {
 }
 
 /** The present for a wall post: after the show's latest published episode. */
-async function presentOrder(models, showId) {
+async function presentOrder(models, showId, transaction = null) {
   const { Episode } = models;
   if (!Episode || !showId) return orderOf(0, 'after_episode');
   const latest = await Episode.findOne({
+    transaction,
     where: { show_id: showId, status: 'published', episode_number: { [Op.ne]: null } },
     order: [['episode_number', 'DESC']],
     attributes: ['episode_number'],

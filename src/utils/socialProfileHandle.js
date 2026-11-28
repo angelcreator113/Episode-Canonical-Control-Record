@@ -44,7 +44,7 @@ function escapeLike(value) {
 // leading @, soft-deleted rows included), or null. `excludeId` leaves one
 // profile out of the lookup — a rename passes the profile's own id, so saving
 // the same handle, or changing only its case or its @, is not a collision.
-async function findHandleHolder(db, handle, { excludeId } = {}) {
+async function findHandleHolder(db, handle, { excludeId, transaction = null } = {}) {
   const { Op } = require('sequelize');
   const withAt = normaliseHandle(handle);
   const forms = [withAt, withAt.slice(1)].filter(Boolean);
@@ -56,6 +56,7 @@ async function findHandleHolder(db, handle, { excludeId } = {}) {
     where,
     attributes: ['id', 'handle', 'deletedAt'],
     paranoid: false,
+    transaction,
   });
 }
 
