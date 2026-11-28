@@ -147,9 +147,13 @@ const EDIT_TABLES = ['edit_versions', 'timeline_audio_items', 'timeline_items', 
     await refused(svc.setSegmentLayout(sequelize, await as(w.ep, { segmentId: seg, body: { layout: { x: 1, y: 2, w: 300, h: 200, rotation: 15 } } })), 400, 'BAD_LAYOUT');
   });
 
-  test('overlay, phone_screen and gameplay_action wait for their state model; a performer whose take is removed is a blocking finding', async () => {
+  test('phone_screen and gameplay_action wait for their state model; a performer whose take is removed is a blocking finding', async () => {
     const w = await world();
-    for (const kind of ['overlay', 'phone_screen', 'gameplay_action']) await refused(add(w, { kind, values: {} }), 409, 'KIND_NOT_BUILT');
+    // `overlay` left this list in Gate 2b PR 1 (Evoni, 2026-11-27): a still
+    // picture needs no state model, so it is checked like any other kind
+    // now. Its own suite is episodeEditOverlayLayer.integration.test.js.
+    // These two still wait, and that is what this case keeps.
+    for (const kind of ['phone_screen', 'gameplay_action']) await refused(add(w, { kind, values: {} }), 409, 'KIND_NOT_BUILT');
     const r = await add(w, { kind: 'performer_clip', values: { raw_clip_id: w.guest, layout: LAYOUT } });
     await run('UPDATE episode_raw_clips SET deleted_at = NOW() WHERE id = :id', { id: w.guest });
     const { findings } = await svc.reviewReadiness(sequelize, { episodeId: w.ep });

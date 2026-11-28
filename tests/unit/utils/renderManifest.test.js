@@ -344,6 +344,55 @@ describe('the sound (AC 7, 8, 13)', () => {
   });
 });
 
+/**
+ * A still picture's transparency (PR 1 correction; Evoni, 2026-11-27):
+ * known-transparent, known-opaque and not-established, each from the row as
+ * the editor read it. No file is opened and `image/png` decides nothing.
+ */
+describe("a picture's transparency", () => {
+  const picture = (id, over = {}) => ({
+    id, storage_key: `overlays/${id}.png`, url_processed: `https://cdn.example/${id}.png`, url_raw: null,
+    content_type: null, width: 1920, height: 1080, size_bytes: 4242, sha256: null, metadata: null, ...over,
+  });
+  /** One overlay on beat 1, naming `id`, with the pictures the service read. */
+  const withPicture = (row) => rm.buildManifest(input({
+    edit: rich({ items: [...rich().items, item('o1', 'overlay', { asset_id: row.id, layout: { x: 0, y: 0, w: tl.FRAME_W, h: tl.FRAME_H }, fit: 'contain', layer: 0 }, { duration: 1000 })] }),
+    images: { [row.id]: row },
+  })).assets[`image:${row.id}`];
+
+  test('the drawer of the picture recorded transparency: true', () => {
+    // episodeTitleOverlayService draws on a fresh canvas and writes this.
+    expect(withPicture(picture('drawn', { metadata: { source: 'episode-title-overlay', transparent: true } })).has_alpha).toBe(true);
+  });
+
+  test('a JPEG has no alpha channel to carry: false', () => {
+    expect(withPicture(picture('flat', { content_type: 'image/jpeg' })).has_alpha).toBe(false);
+    expect(withPicture(picture('flat2', { content_type: 'IMAGE/JPG' })).has_alpha).toBe(false);
+  });
+
+  test('otherwise not established: null, and a PNG is never read as transparent or as opaque', () => {
+    expect(withPicture(picture('plain', { content_type: 'image/png' })).has_alpha).toBe(null);
+    // Every picture the overlay tools make is stored with no content_type:
+    // the answer is null, not the "opaque" a type test used to give.
+    expect(withPicture(picture('generated')).has_alpha).toBe(null);
+    // The upload path writes `transparent` from the file's mimetype, which
+    // is the inference this avoids, so its own source is not trusted.
+    expect(withPicture(picture('uploaded', { metadata: { source: 'episode-title-overlay-upload', transparent: true } })).has_alpha).toBe(null);
+    // A flag without the maker that stands behind it decides nothing.
+    expect(withPicture(picture('bare', { metadata: { transparent: true } })).has_alpha).toBe(null);
+  });
+
+  test('a picture that is gone is still a missing asset, reported as opaque like every other blank', () => {
+    expect(withPicture(picture('lost')).has_alpha).toBe(null);
+    const m = rm.buildManifest(input({
+      edit: rich({ items: [...rich().items, item('o1', 'overlay', { asset_id: 'gone', layout: { x: 0, y: 0, w: 10, h: 10 }, fit: 'contain', layer: 0 }, { duration: 1000 })] }),
+      images: {},
+    }));
+    expect(m.assets['image:gone']).toMatchObject({ has_alpha: false, url: null, identity: 'weak' });
+    expect(m.readiness.technical.blocking.some((f) => f.code === 'asset_missing' && f.asset === 'image:gone')).toBe(true);
+  });
+});
+
 describe('files and their identity (AC 9 in use, AC 10)', () => {
   test('AC 10 identity tiers: a voice source with its sha256 is strong, a cutout pinned, an original take and an angle weak', () => {
     const m = rm.buildManifest(input());

@@ -55,8 +55,14 @@ const DIALOGUE_ANCHORS = ['beat_start', 'edit_start'];
 const C1_ITEM_KINDS = ['object_keyframe', 'camera_keyframe', 'object_visibility', 'angle_change', 'transition', 'audio_offset', 'caption_override'];
 // C1b (Gate 2a, 2026-11-02; migration 20261102120000): items with validated values (R8.5, D3, D4).
 // overlay, phone_screen and gameplay_action are in the schema but refused here until their state model is built.
-const C1B_ITEM_KINDS = ['visual_mode', 'performer_clip', 'caption'];
-const C1B_LATER_KINDS = ['overlay', 'phone_screen', 'gameplay_action'];
+const C1B_ITEM_KINDS = ['visual_mode', 'performer_clip', 'caption', 'overlay'];
+// Still refused: each needs a state model of its own (Gate 2b). `overlay`
+// left this list in PR 1 because a still picture needs no state — it is an
+// asset, a box, a length and an order, all of which the model already has.
+const C1B_LATER_KINDS = ['phone_screen', 'gameplay_action'];
+// How a picture fills its box. The same two words the manifest already uses
+// for a clip (renderManifest's `fit`), so a reader learns one vocabulary.
+const OVERLAY_FITS = ['contain', 'cover'];
 const ITEM_KINDS = [...C1_ITEM_KINDS, ...C1B_ITEM_KINDS];
 const VISUAL_MODES = ['gameplay', 'cinematic'];
 /** Caption and title styles (D4): the preview and the render draw each the same way, from the same key. */
@@ -1055,6 +1061,44 @@ async function c1bItem(sequelize, episodeId, kind, values, durationMs, t) {
     if (!layout || ['x', 'y', 'w', 'h'].some((k) => layout[k] === undefined)) fail(400, 'BAD_LAYOUT', 'A caption has its place: { x, y, w, h }');
     return { values: { text, style_key: values.style_key, layout }, duration_ms: int(durationMs, 'duration_ms', { min: 33 }) };
   }
+  if (kind === 'overlay') {
+    // A still picture over the frame: the episode's title overlay, an
+    // invitation, a rendered phone screen. The asset is named, never
+    // uploaded here, and nothing about it is written or regenerated.
+    onlyKeys(values, ['asset_id', 'layout', 'fit', 'layer'], 'overlay');
+    checkId(values.asset_id, 'Overlay image');
+    // Ownership, as R5.3 asks of every row: the picture belongs to this
+    // episode's show, and is either this episode's or the show's to reuse
+    // (a phone screen is a show asset; a title overlay is an episode's).
+    // Read without a lock: an asset's existence is not part of the edit's
+    // timing, so it does not join the edit's consistency unit.
+    const a = await one(sequelize, `SELECT a.id, a.show_id, a.episode_id, a.deleted_at
+      FROM assets a WHERE a.id = :id`, { id: values.asset_id }, t);
+    const ep = await one(sequelize, 'SELECT show_id FROM episodes WHERE id = :id', { id: episodeId }, t);
+    if (!a || a.deleted_at) fail(404, 'NOT_FOUND', 'Overlay image not found');
+    if (!ep || !a.show_id || String(a.show_id) !== String(ep.show_id)) {
+      fail(409, 'WRONG_SHOW', "An overlay image belongs to this episode's show");
+    }
+    if (a.episode_id && String(a.episode_id) !== String(episodeId)) {
+      fail(409, 'WRONG_EPISODE', 'That overlay image belongs to another episode');
+    }
+    // The box: the frame's own coordinates, as a caption and a performer
+    // clip use. Absent means the whole frame, taken from editTimeline's
+    // size rather than written here, so one change makes a portrait frame.
+    const layout = values.layout === undefined
+      ? { x: 0, y: 0, w: tl.FRAME_W, h: tl.FRAME_H }
+      : layoutOf(values.layout);
+    if (!layout || ['x', 'y', 'w', 'h'].some((k) => layout[k] === undefined)) {
+      fail(400, 'BAD_LAYOUT', 'An overlay has its place: { x, y, w, h }');
+    }
+    const fit = values.fit === undefined ? 'contain' : values.fit;
+    if (!OVERLAY_FITS.includes(fit)) fail(400, 'BAD_VALUE', `An overlay's fit is one of ${OVERLAY_FITS.join(', ')}`);
+    const layer = values.layer == null ? 0 : int(values.layer, 'layer', { max: 99 });
+    return {
+      values: { asset_id: values.asset_id, layout, fit, layer },
+      duration_ms: int(durationMs, 'duration_ms', { min: 33 }),
+    };
+  }
   if (kind === 'performer_clip') {
     onlyKeys(values, ['raw_clip_id', 'source_in_ms', 'source_out_ms', 'layout', 'layer'], 'performer clip');
     checkId(values.raw_clip_id, 'Take');
@@ -1368,7 +1412,12 @@ async function updateItem(sequelize, { episodeId, editRevision, userId, batch, i
       // A C1b item's values change field by field, and the whole is checked again (R8.5).
       const cur = await one(sequelize, 'SELECT duration_ms FROM timeline_items WHERE id = :itemId', { itemId }, t);
       const merged = values === null ? r.values : { ...r.values, ...values };
-      const length = body.duration_ms !== undefined ? body.duration_ms : (r.kind === 'caption' ? cur.duration_ms : null);
+      // A kind with a length of its own keeps it when the change does not
+      // mention it, so moving an overlay's box does not have to resend how
+      // long it shows. A performer clip is the exception below: its length
+      // is its source range, worked out again from the range itself.
+      const KEEPS_LENGTH = ['caption', 'overlay'];
+      const length = body.duration_ms !== undefined ? body.duration_ms : (KEEPS_LENGTH.includes(r.kind) ? cur.duration_ms : null);
       const checked = await c1bItem(sequelize, episodeId, r.kind, merged, r.kind === 'performer_clip' && body.duration_ms === undefined ? null : length, t);
       values = checked.values;
       await q(sequelize, 'UPDATE timeline_items SET duration_ms = :d, updated_at = NOW() WHERE id = :itemId', { d: checked.duration_ms, itemId }, t);
