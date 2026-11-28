@@ -321,6 +321,20 @@ function snapshotRawClipIds(snapshot) {
 }
 
 /**
+ * The pictures the LIVE edit's overlay items name (Gate 2b PR 1b): the
+ * asset ids, each once, in no particular order. The editor's sources read
+ * needs them to resolve what the monitor must draw, and asks here because
+ * this service is the only place that names an edit table (R5.6 checklist
+ * 6, held by tests/unit/guards/episodeEditGuard). Reads only.
+ */
+async function liveOverlayAssetIds(sequelize, episodeId, t) {
+  const list = await rows(sequelize, `SELECT "values" FROM timeline_items
+    WHERE episode_id = :episodeId AND kind = 'overlay' AND deleted_at IS NULL`, { episodeId }, t);
+  const ids = list.map((r) => (r && r.values ? r.values.asset_id : null));
+  return [...new Set(ids.filter((id) => UUID_RE.test(String(id || ''))).map(String))];
+}
+
+/**
  * What in an episode's editing work uses one take (Evoni, 2026-11-12), for
  * the take's removal to ask: the live edit's rows, by the edit's own live
  * filters (LIVE: a superseded segment and a removed row are not live), and
@@ -1628,7 +1642,7 @@ module.exports = {
   setPipSettings, addVisibilityRule, addItem, addAudioItem, removeRow,
   updateItem, updateAudioItem, updateVisibility, splitSceneClip, reorderSceneClip, batchOps, BATCH_STEPS,
   createVersion, listVersions, getVersion, restoreVersion,
-  lockEdit, rawClipUses, snapshotRawClipIds,
+  lockEdit, rawClipUses, snapshotRawClipIds, liveOverlayAssetIds,
   reviewReadiness, layoutAtTime, mixPlanOf,
   // For the render manifest (Evoni, 2026-11-16), which reads a saved version as the edit is read.
   liveRows, editFrom, voiceTakesFor, versionRow,

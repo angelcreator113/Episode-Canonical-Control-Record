@@ -36,7 +36,8 @@
  */
 'use strict';
 
-const { imageRowsFor, overlayAssetIds, forPreview } = require('./overlayImages');
+const { imageRowsFor, forPreview } = require('./overlayImages');
+const { liveOverlayAssetIds } = require('./episodeEditService');
 
 const STATUS_TEXT = {
   ready: 'Ready to place',
@@ -129,12 +130,11 @@ async function existingWork(sequelize, { episodeId }) {
     };
   });
 
-  // The pictures the live edit's overlay items name. Read with the manifest's
-  // rule, so the editor shows a picture exactly when the render resolves one.
-  // "values" is a reserved word, quoted here as episodeEditService quotes it.
-  const items = await rows(sequelize, `SELECT kind, "values" FROM timeline_items
-    WHERE episode_id = :episodeId AND kind = 'overlay' AND deleted_at IS NULL`, { episodeId });
-  const imageRows = await imageRowsFor(sequelize, { episodeId, ids: overlayAssetIds(items) });
+  // The pictures the live edit's overlay items name, resolved with the
+  // manifest's rule so the editor shows a picture exactly when the render
+  // resolves one. The ids come from episodeEditService, which is the only
+  // place allowed to name an edit table (R5.6 checklist 6).
+  const imageRows = await imageRowsFor(sequelize, { episodeId, ids: await liveOverlayAssetIds(sequelize, episodeId) });
   const images = imageRows.map(forPreview);
 
   const count = (s) => plan.filter((p) => p.status === s).length;
