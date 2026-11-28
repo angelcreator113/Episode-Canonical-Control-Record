@@ -10,7 +10,8 @@
  * disabled with the reason.
  *
  * Gate 2a (D3, D4, D5): a Lala or guest clip's start, source in and out,
- * place, opacity and layer; a caption's words, style, start, length, place
+ * place, opacity and layer; a graphic's fit, layer, start, length, place and
+ * opacity (PR 1b); a caption's words, style, start, length, place
  * and opacity; Prime's opacity; and on the beat card the beat's visual mode
  * and its timed mode changes.
  */
@@ -123,6 +124,8 @@ function TextField({ label, value, max, onCommit, disabled }) {
 }
 
 const STYLE_NAMES = { caption: 'Caption', title: 'Title', lower_third: 'Lower third' };
+/** How a still picture fills its box (PR 1b): the service's own two words. */
+const FIT_NAMES = { contain: 'Contain (whole picture)', cover: 'Cover (fill the box)' };
 const pctOf = (o) => Math.round((o == null ? 1 : Number(o)) * 100);
 
 /** Place and size at 1920×1080, and opacity (D5); rotation is deferred. onLayout gets the whole new layout. */
@@ -168,7 +171,7 @@ function ClipTab({ block, layout, editable, act }) {
       {block.kind === 'segment' && can
         ? <NumberField label="Start" unit="ms" value={Math.round(block.start)} step={33} onCommit={(v) => act.move(block, v)} note="Where it starts on the edit clock" />
         : <Field label="Start time" value={timecode(block.start)} />}
-      {['dialogue', 'audio_item', 'performer_clip', 'caption'].includes(block.kind) && can && <NumberField label="Start" unit="ms" value={Math.round(block.start)} step={33} onCommit={(v) => act.move(block, v)} />}
+      {['dialogue', 'audio_item', 'performer_clip', 'caption', 'overlay'].includes(block.kind) && can && <NumberField label="Start" unit="ms" value={Math.round(block.start)} step={33} onCommit={(v) => act.move(block, v)} />}
       <Field label="End time" value={timecode(block.end)} />
       <Field label="Duration" value={timecode(block.end - block.start)} />
 
@@ -260,6 +263,33 @@ function ClipTab({ block, layout, editable, act }) {
             </>
           )}
           <Transform layout={layout} can={can} onLayout={(l) => act.itemLayout(block, l)} what="the caption" />
+        </>
+      )}
+      {block.kind === 'overlay' && (
+        <>
+          <Field label="Graphic" value={block.label} />
+          {can ? (
+            <>
+              <div className="tle-field">
+                <label className="tle-field-label" htmlFor="f-overlay-fit">Fit</label>
+                <select id="f-overlay-fit" className="tle-input tle-select" value={row.values?.fit || 'contain'}
+                  onChange={(e) => act.item(block, { values: { fit: e.target.value } }, 'Change how the graphic fits')}>
+                  {Object.entries(FIT_NAMES).map(([k, n]) => <option key={k} value={k}>{n}</option>)}
+                </select>
+              </div>
+              <NumberField label="Layer" value={row.values?.layer ?? 0} min={0} max={99} onCommit={(v) => act.item(block, { values: { layer: Math.round(v) } }, 'Change layer')}
+                note="Higher layers are drawn in front of other graphics; graphics are drawn over everything else" />
+              <NumberField label="Length" unit="ms" value={row.duration_ms} min={33} step={33} onCommit={(v) => act.item(block, { duration_ms: Math.round(v) }, 'Change graphic length')} />
+            </>
+          ) : (
+            <>
+              <Field label="Fit" value={FIT_NAMES[row.values?.fit] || FIT_NAMES.contain} />
+              <Field label="Layer" value={row.values?.layer ?? 0} />
+              <Field label="Length" value={ms(row.duration_ms)} />
+            </>
+          )}
+          <Transform layout={layout} can={can} onLayout={(l) => act.itemLayout(block, l)} what="the graphic" />
+          {block.missing && <p className="tle-insp-warn">This graphic is not in the episode&apos;s pictures: it was removed, or it belongs to another show or episode. The render reports it as a missing asset.</p>}
         </>
       )}
       {block.kind === 'dialogue' && block.problem && <p className="tle-insp-warn">This take will not play: {block.problem.replace(/_/g, ' ')}.</p>}
@@ -445,7 +475,7 @@ export default function EditorInspector({
 }) {
   const [tab, setTab] = useState('clip');
   const stored = block?.kind === 'segment' ? (block.row?.layout || block.layout || null)
-    : (block?.kind === 'performer_clip' || block?.kind === 'caption') ? (block.row?.values?.layout || block.layout || null) : null;
+    : (block?.kind === 'performer_clip' || block?.kind === 'caption' || block?.kind === 'overlay') ? (block.row?.values?.layout || block.layout || null) : null;
   // While a box is dragged in the preview, its place follows the drag; its stored opacity stays.
   const layout = stored !== undefined && liveLayout && liveLayout.id === block?.id
     ? { ...liveLayout.layout, ...(stored?.opacity != null ? { opacity: stored.opacity } : {}) }

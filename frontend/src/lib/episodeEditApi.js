@@ -10,6 +10,7 @@
  */
 import api from '../services/api';
 import { unwrapEpisode } from '../utils/timelineLoad';
+import { graphicsCatalogue } from './editorGraphics';
 
 const enc = encodeURIComponent;
 const editBase = (episodeId) => `/api/v1/episodes/${enc(episodeId)}/edit`;
@@ -67,6 +68,21 @@ export const episodeEditApi = {
     if (!d || !Array.isArray(d.plan)) throw new Error('unrecognised existing-work response');
     return d;
   }),
+  /**
+   * The pictures the editor can offer (PR 1b): the episode's own pieces and
+   * the show's overlay images, from the two lists that already own them.
+   * One failure does not empty the other list.
+   */
+  graphics: (episodeId, showId) => Promise.all([
+    api.get(`/api/v1/episodes/${enc(episodeId)}/overlays`).then((r) => dataOf(r)?.pieces || dataOf(r) || [], (err) => {
+      console.error('[EpisodeEditor] the episode pieces could not be read:', err?.message);
+      return [];
+    }),
+    showId ? api.get(`/api/v1/ui-overlays/${enc(showId)}?episode_id=${enc(episodeId)}`).then((r) => r?.data?.data || [], (err) => {
+      console.error('[EpisodeEditor] the show overlays could not be read:', err?.message);
+      return [];
+    }) : Promise.resolve([]),
+  ]).then(([pieces, overlays]) => graphicsCatalogue({ pieces: Array.isArray(pieces) ? pieces : [], overlays })),
   /** The episode's raw clips (Lala, guests, Prime), each with url_raw, url_cutout, thumbnail_url. */
   rawClips: (episodeId) => api.get(`/api/v1/episode-clips/${enc(episodeId)}`).then((r) => (Array.isArray(r?.data?.data) ? r.data.data : [])),
   /** The scene sets linked to the episode, each with its angles. */

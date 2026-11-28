@@ -14,6 +14,13 @@
  * background. Other raw clips are scene clips. The Text tab adds captions,
  * titles and lower thirds at the playhead.
  *
+ * Gate 2b PR 1b: the Graphics tab lists the episode's approved pictures and
+ * the show's reusable ones — the title overlay and framed card, the
+ * invitation and the event's documents, and the Phone Hub's screens — each
+ * from the list that already owns it, deduped by asset id, variants
+ * included. Nothing is uploaded, generated or designed here: a tile only
+ * places a picture that already exists on the Overlays lane.
+ *
  * Prepare From Existing Work, B1 (2026-11-03): the Existing work tab lists the
  * scene plan, footage and approved takes beat by beat (ExistingWork). Clips
  * with no beat stay listed when a beat is focused (marked "No beat"), and a
@@ -31,11 +38,13 @@ const TABS = [
   { key: 'work', label: 'Existing work' },
   { key: 'scenes', label: 'Scenes' },
   { key: 'audio', label: 'Audio' },
+  { key: 'graphics', label: 'Graphics' },
   { key: 'text', label: 'Text' },
   { key: 'transitions', label: 'Transitions' },
 ];
 
 const PERFORMER = { lala: 'Lala', justawoman: 'Prime', guest: 'Guest' };
+const NO_GRAPHICS = Object.freeze({ loading: false, error: null, data: Object.freeze([]) });
 
 const duration = (seconds) => {
   const s = Math.round(Number(seconds) || 0);
@@ -65,6 +74,8 @@ export const TEXT_STYLES = [
   { style_key: 'lower_third', label: 'Lower third', hint: 'A name or place on a band at the lower left', layout: { x: 96, y: 820, w: 900, h: 140 } },
 ];
 export const TEXT_MS = 3000;
+/** How long a graphic shows when it is placed; changed in the inspector. */
+export const GRAPHIC_MS = 4000;
 const assetOfAngle = (a, kind) => ({ kind, id: a.id, label: `${a.set_name || 'Scene'} · ${a.angle_label || a.angle_name || 'Angle'}`, source_kind: kind });
 const assetOfTake = (t) => ({ kind: 'take', id: t.approval_id, label: `Beat ${t.beat_number} · line ${t.line_index + 1}`, beat_number: t.beat_number, line_index: t.line_index });
 
@@ -104,7 +115,7 @@ const markCount = (c) => (Array.isArray(c.beat_marks) ? c.beat_marks.length : 0)
 const NO_SOURCES = { loading: false, data: null, error: null };
 
 export default function AssetBrowser({
-  episodeId, rawClips, sceneSets, takes, sources = NO_SOURCES, placedAngles, focusBeat, editable = false, onPlace, onDragAsset,
+  episodeId, rawClips, sceneSets, takes, sources = NO_SOURCES, graphics = NO_GRAPHICS, placedAngles, focusBeat, editable = false, onPlace, onDragAsset,
 }) {
   const place = { editable, onPlace, onDragAsset };
   const [tab, setTab] = useState('assets');
@@ -237,6 +248,28 @@ export default function AssetBrowser({
             </ul>
             <h3 className="tle-set-name">Music and SFX</h3>
             <p className="tle-empty tle-pending">Pending: the music and SFX library with licence records (design R8.8). No sound is invented in its place.</p>
+          </>
+        )}
+
+        {tab === 'graphics' && (
+          <>
+            {graphics.loading && <p className="tle-empty">Reading the episode's graphics…</p>}
+            {graphics.error && <p className="tle-empty tle-pending">The graphics could not be read: {graphics.error}</p>}
+            {!graphics.loading && !graphics.error && !graphics.data.length && (
+              <p className="tle-empty">
+                No approved graphics yet. The title overlay and the framed card are made on
+                {' '}<Link to={`/episodes/${episodeId}?tab=overlays`}>Production › Overlays</Link>; phone screens are designed in the
+                {' '}<Link to="/phone-hub">Phone Hub</Link>. Nothing is uploaded or generated here.
+              </p>
+            )}
+            <ul className="tle-grid">
+              {graphics.data.filter((g) => matches(`${g.label} ${g.meta}`)).map((g) => (
+                <Tile key={g.asset_id} image={g.url} label={g.label} meta={g.meta} kind="image"
+                  asset={{ kind: 'overlay', id: g.asset_id, label: g.label }} {...place} />
+              ))}
+            </ul>
+            <p className="tle-empty">Placed full frame at the playhead on the Overlays lane. Move and resize it in the preview; set its fit, layer, opacity and length in the inspector.</p>
+            <p className="tle-empty tle-pending">Static pictures only. Animated widgets and the phone's interactive behaviour are not available yet, and no finished video is rendered here.</p>
           </>
         )}
 

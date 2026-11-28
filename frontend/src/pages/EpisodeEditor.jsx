@@ -41,7 +41,13 @@ import {
 } from '../lib/editorModel';
 import { mixPlan } from '../lib/editTimeline';
 import { framePlan, mixAt, snapToFrame } from '../lib/previewPlan';
-import { TEXT_MS } from '../components/EpisodeEditor/AssetBrowser';
+import { TEXT_MS, GRAPHIC_MS } from '../components/EpisodeEditor/AssetBrowser';
+
+// What a move is called in the undo list, and which lane's lock a paste
+// must respect, for the three item kinds the producer moves (PR 1b adds
+// the graphic).
+const MOVE_LABEL = { caption: 'Move caption', performer_clip: 'Move performer clip', overlay: 'Move graphic' };
+const PASTE_LANE = { caption: 'captions', performer_clip: 'performer', overlay: 'overlays' };
 import * as ops from '../lib/editOps';
 import useEditOps from '../components/EpisodeEditor/useEditOps';
 import usePreviewPlayback from '../components/EpisodeEditor/usePreviewPlayback';
@@ -120,6 +126,11 @@ export default function EpisodeEditor() {
   const takes = useRead(() => episodeEditApi.takes(episodeId), [episodeId]);
   // Prepare From Existing Work, B1: the scene plan, beat by beat (reads only).
   const sources = useRead(() => episodeEditApi.sources(episodeId), [episodeId]);
+  // The pictures the Graphics tab offers (PR 1b): the episode's own pieces
+  // and the show's overlay images, from the two lists that own them. What is
+  // already PLACED is resolved by sources.images, not by this catalogue.
+  const showId = episode.data?.show_id || null;
+  const graphics = useRead(() => (showId ? episodeEditApi.graphics(episodeId, showId) : Promise.resolve([])), [episodeId, showId]);
 
   // Takes: Voice Studio's playable list, and (P4) the URL each take the edit names carries in GET /edit.
   const media = useMemo(() => {
@@ -128,8 +139,14 @@ export default function EpisodeEditor() {
     const fromEdit = Object.entries(edit.data?.edit?.voiceTakes || {})
       .filter(([id, k]) => !known.has(String(id)) && k.audio_url)
       .map(([id, k]) => ({ approval_id: id, audio_url: k.audio_url, beat_number: k.beat_number, line_index: k.line_index }));
-    return mediaIndex({ rawClips: rawClips.data || [], sceneSets: sceneSets.data || [], takes: [...listed, ...fromEdit] });
-  }, [rawClips.data, sceneSets.data, takes.data, edit.data]);
+    return mediaIndex({
+      rawClips: rawClips.data || [], sceneSets: sceneSets.data || [], takes: [...listed, ...fromEdit],
+      // The pictures the edit already names, resolved by the manifest's own
+      // rule. A failed read is not an empty list: imagesRead says which it
+      // is, so the monitor never calls an unread picture missing.
+      images: sources.data?.images || [], imagesRead: !sources.error,
+    });
+  }, [rawClips.data, sceneSets.data, takes.data, edit.data, sources.data, sources.error]);
   const model = useMemo(() => (edit.data ? buildTimeline(edit.data.edit, media) : null), [edit.data, media]);
   // Which angles each beat already has on the edit (Existing work says "On the edit").
   const placedAngles = useMemo(() => {
@@ -179,7 +196,11 @@ export default function EpisodeEditor() {
   const reloadAll = useCallback(async () => {
     await edit.reload();
     findings.reload().catch((err) => console.error('[EpisodeEditor] findings reload failed:', err?.message));
-  }, [edit.reload, findings.reload]);
+    // The pictures the edit names change with the edit itself (PR 1b): a
+    // graphic just placed has to resolve at once, and one just removed has
+    // to stop being read. The same refresh the findings already use.
+    sources.reload().catch((err) => console.error('[EpisodeEditor] sources reload failed:', err?.message));
+  }, [edit.reload, findings.reload, sources.reload]);
   // Editing is an admin's (the server refuses anyone else's writes): others get the editor read
   // only, and useEditOps sends nothing for them, whatever starts the change (a key, a drop, a field).
   const { user } = useAuth();
@@ -215,7 +236,7 @@ export default function EpisodeEditor() {
     ? [...(edit.data.edit.visibility || [])].reverse().find((r) => r.scope === 'beat' && r.beat_number === cardBeat.beat && r.visible === false) || null
     : null;
   const frame = useMemo(() => (edit.data ? framePlan(edit.data.edit, playhead, media) : null), [edit.data, playhead, media]);
-  const hidden = { scene: view.scene?.hidden, prime: view.prime?.hidden, performer: view.performer?.hidden, captions: view.captions?.hidden };
+  const hidden = { scene: view.scene?.hidden, prime: view.prime?.hidden, performer: view.performer?.hidden, captions: view.captions?.hidden, overlays: view.overlays?.hidden };
 
   // The mix, once per edit; what each sound does at t, with the preview-only lane mutes.
   const mix = useMemo(() => (edit.data ? mixPlan(edit.data.edit) : null), [edit.data]);
@@ -321,6 +342,13 @@ export default function EpisodeEditor() {
       editor.run(ops.addItem({ kind: 'caption', ...anchorForNew(at), duration_ms: TEXT_MS, values: { text: text.trim().slice(0, 500), style_key: asset.style_key, layout: asset.layout } }, `Add ${asset.label.toLowerCase()}`));
       return;
     }
+    if (asset.kind === 'overlay') {
+      if (refuseNoC1b('A graphic') || refuseLocked('overlays', 'Add graphic')) return;
+      // Full frame, the service's own default: it is sent nothing but the
+      // picture, so the box comes from editTimeline's frame size.
+      editor.run(ops.addItem({ kind: 'overlay', ...anchorForNew(at), duration_ms: GRAPHIC_MS, values: { asset_id: asset.id } }, `Add ${asset.label}`));
+      return;
+    }
     if (asset.performer && (lane === 'performer' || lane == null)) {
       if (refuseNoC1b('Lala over the scene') || refuseLocked('performer', 'Place performer')) return;
       if (!(asset.duration_ms > 0)) {
@@ -375,7 +403,7 @@ export default function EpisodeEditor() {
     if (block.kind === 'segment') editor.run(ops.moveSegment(block.row, ops.anchorAt(block.row, at, model.beats)));
     else if (block.kind === 'dialogue') editor.run(ops.moveDialogue(block.row, ops.anchorAt(block.row, at, model.beats)));
     else if (block.kind === 'audio_item') editor.run(ops.updateAudioItem(block.row, ops.anchorAt(block.row, at, model.beats), 'Move sound'));
-    else if (block.kind === 'performer_clip' || block.kind === 'caption') editor.run(ops.updateItem(block.row, ops.anchorAt(block.row, at, model.beats), block.kind === 'caption' ? 'Move caption' : 'Move performer clip'));
+    else if (block.kind === 'performer_clip' || block.kind === 'caption' || block.kind === 'overlay') editor.run(ops.updateItem(block.row, ops.anchorAt(block.row, at, model.beats), MOVE_LABEL[block.kind]));
     else if (block.kind === 'scene_clip') {
       // Scene clips are laid end to end in their beat: a drag changes their order, never a time.
       const { from, to } = sceneOrder(block, newStart);
@@ -413,13 +441,15 @@ export default function EpisodeEditor() {
         const delta = Math.max(-v.source_in_ms, Math.min(v.source_out_ms - v.source_in_ms - 33, Math.round(at - block.start)));
         editor.run(ops.updateItem(row, { values: { source_in_ms: v.source_in_ms + delta }, ...ops.anchorAt(row, block.start + delta, model.beats) }, 'Trim performer clip'));
       }
-    } else if (block.kind === 'caption') {
+    } else if (block.kind === 'caption' || block.kind === 'overlay') {
+      // A caption and a graphic are both trimmed by their own length.
+      const what = block.kind === 'overlay' ? 'Change graphic length' : 'Change caption length';
       if (edge === 'end') {
-        editor.run(ops.updateItem(row, { duration_ms: Math.max(33, Math.round(at - block.start)) }, 'Change caption length'));
+        editor.run(ops.updateItem(row, { duration_ms: Math.max(33, Math.round(at - block.start)) }, what));
       } else {
         // Its end stays where it is.
         const delta = Math.max(-block.start, Math.min(row.duration_ms - 33, Math.round(at - block.start)));
-        editor.run(ops.updateItem(row, { duration_ms: row.duration_ms - delta, ...ops.anchorAt(row, block.start + delta, model.beats) }, 'Change caption length'));
+        editor.run(ops.updateItem(row, { duration_ms: row.duration_ms - delta, ...ops.anchorAt(row, block.start + delta, model.beats) }, what));
       }
     }
   }, [editor, view, model]);
@@ -432,7 +462,7 @@ export default function EpisodeEditor() {
     else if (b.kind === 'segment') editor.run(ops.removeSegment(b.row));
     else if (b.kind === 'dialogue') editor.run(ops.removeDialogue(b.row));
     else if (b.kind === 'audio_item') editor.run(ops.removeAudioItem(b.row));
-    else if (b.kind === 'performer_clip' || b.kind === 'caption') editor.run(ops.removeItem(b.row));
+    else if (b.kind === 'performer_clip' || b.kind === 'caption' || b.kind === 'overlay') editor.run(ops.removeItem(b.row));
   }, [editor, allBlocks, view]);
 
   const splitAtPlayhead = useCallback((block) => {
@@ -476,9 +506,9 @@ export default function EpisodeEditor() {
       const body = { track: row.track, asset_ref: row.asset_ref, slot: row.slot, source_in_ms: row.source_in_ms, source_out_ms: row.source_out_ms,
         anchor_kind: 'edit_start', offset_ms: at, gain_db: row.gain_db, fade_in_ms: row.fade_in_ms, fade_out_ms: row.fade_out_ms, duck_under_dialogue_db: row.duck_under_dialogue_db };
       editor.run(ops.addAudioItem(Object.fromEntries(Object.entries(body).filter(([, v]) => v != null)), `Paste ${label}`));
-    } else if (kind === 'performer_clip' || kind === 'caption') {
-      if (refuseLocked(kind === 'caption' ? 'captions' : 'performer', 'Paste')) return;
-      const body = { kind, ...anchorForNew(at), values: row.values, ...(kind === 'caption' ? { duration_ms: row.duration_ms } : {}) };
+    } else if (kind === 'performer_clip' || kind === 'caption' || kind === 'overlay') {
+      if (refuseLocked(PASTE_LANE[kind], 'Paste')) return;
+      const body = { kind, ...anchorForNew(at), values: row.values, ...(kind === 'performer_clip' ? {} : { duration_ms: row.duration_ms }) };
       editor.run(ops.addItem(body, `Paste ${label}`));
     }
   }, [clipboard, model, playhead, editor, focusBeat, view]);
@@ -498,7 +528,7 @@ export default function EpisodeEditor() {
     layout: (block, layout) => { if (!refuseLocked('prime', 'Move Prime')) editor.run(ops.setSegmentLayout(segmentOf(block).row, layout)); },
     item: (block, changes, label) => { if (!refuseLocked(block.lane, 'Change')) editor.run(ops.updateItem(block.row, changes, label)); },
     itemLayout: (block, layout) => {
-      if (!refuseLocked(block.lane, 'Move')) editor.run(ops.updateItem(block.row, { values: { layout } }, block.kind === 'caption' ? 'Move caption' : 'Move performer clip'));
+      if (!refuseLocked(block.lane, 'Move')) editor.run(ops.updateItem(block.row, { values: { layout } }, MOVE_LABEL[block.kind] || 'Move'));
     },
     visualMode: (beat, mode) => { if (!refuseNoC1b('A visual mode')) editor.run(ops.setBeatVisualMode(beat.beat, mode, beat.visual_mode_set ?? null)); },
     addModeChange: (beat, mode) => {
@@ -703,13 +733,14 @@ export default function EpisodeEditor() {
         <div className="tle-upper">
           <AssetBrowser episodeId={episodeId} rawClips={{ ...rawClips, error: messageOf(rawClips.error) }} sceneSets={{ ...sceneSets, error: messageOf(sceneSets.error) }}
             takes={{ ...takes, error: messageOf(takes.error) }} sources={{ ...sources, error: messageOf(sources.error) }} placedAngles={placedAngles} focusBeat={focusBeat}
+          graphics={{ loading: graphics.loading, error: messageOf(graphics.error), data: graphics.data || [] }}
             editable={editable} onPlace={(asset) => placeAsset(asset, playhead)} onDragAsset={setDraggingAsset} />
           <div className="tle-split-v" role="separator" aria-orientation="vertical" aria-label="Resize the media panel" onPointerDown={(e) => dragLeft(e, { axis: 'x' })} onDoubleClick={resetLeft} />
           <EditorPreview frame={frame} duration={model.duration} selectedId={selectedId} onSelect={setSelectedId} onPrevEdit={prevEdit} onNextEdit={nextEdit} hidden={hidden}
             playing={player.playing} rate={player.rate} onToggle={player.toggle} volume={volume} onVolume={setVolume}
             muted={previewMuted} onMute={() => setPreviewMuted((m) => !m)} sounds={sounds} failedVideo={failedVideo} onVideoFailed={onVideoFailed}
             editable={editable} primeLocked={laneLocked('prime')} onLayoutDrag={setLiveLayout}
-            locked={{ performer: laneLocked('performer'), captions: laneLocked('captions') }}
+            locked={{ performer: laneLocked('performer'), captions: laneLocked('captions'), overlays: laneLocked('overlays') }}
             onLayoutCommit={(id, layout) => {
               const b = allBlocks.find((x) => x.id === id);
               if (!b) return;
