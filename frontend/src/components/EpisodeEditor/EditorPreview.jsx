@@ -17,6 +17,13 @@
  * selected performer clip or caption is moved and resized like Prime, with
  * the same handles (ArrangeBox). The beat's visual mode is shown, not drawn:
  * what a mode changes on screen is the render's (Gate 3).
+ *
+ * Gate 2b PR 1b: a still picture (the Overlays lane) draws last of all, over
+ * everything, at the box, opacity, fit and order the edit gives it, and is
+ * moved and resized with the same handles. Its opacity is applied once, by
+ * the ArrangeBox; the image sets only its fit. A picture the edit names but
+ * this episode may not draw says so; a graphics list that could not be read
+ * says THAT instead, because an unread list is not a missing picture.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { SkipBack, Play, Pause, SkipForward, Volume2, VolumeX, Maximize } from 'lucide-react';
@@ -145,6 +152,7 @@ export default function EditorPreview({
   const pip = frame?.pip && !hidden.prime ? frame.pip : null;
   const performers = hidden.performer ? [] : (frame?.performers || []);
   const captions = hidden.captions ? [] : (frame?.captions || []);
+  const overlays = hidden.overlays ? [] : (frame?.overlays || []);
   const arrange = (id, laneLocked) => editable && !laneLocked && selectedId === id && !playing;
   const boxProps = (id, laneLocked) => ({
     id, selected: selectedId === id, canArrange: arrange(id, laneLocked), onSelect, onDrag: onLayoutDrag, onCommit: onLayoutCommit, scale,
@@ -193,6 +201,17 @@ export default function EditorPreview({
               </ArrangeBox>
             );
           })}
+          {/* Still pictures last, over everything, in layersAt's order (PR 1b).
+              Opacity is the ArrangeBox's, never the image's as well. */}
+          {overlays.map((o) => (
+            <ArrangeBox key={o.item_id} {...boxProps(o.item_id, locked.overlays)} layout={o.layout} opacity={o.opacity}
+              className="tle-monitor-pip tle-monitor-overlay" testid={`preview-overlay-${o.item_id}`} handlePrefix="overlay"
+              label={`Graphic: ${o.name || 'Overlay'}`} title="Select this graphic">
+              {o.url
+                ? <img className="tle-monitor-overlay-img" src={o.url} alt={o.name || 'Overlay'} style={{ objectFit: o.fit }} />
+                : <span>{o.unread ? 'The graphics could not be read' : 'The graphic is missing'}</span>}
+            </ArrangeBox>
+          ))}
           {frame?.mode === 'cinematic' && <span className="tle-monitor-mode" title="The beat's visual mode. What it changes on screen is drawn by the render (Gate 3).">Cinematic</span>}
           {frame?.prime_missing && <span className="tle-monitor-badge">Prime footage missing</span>}
           <span className="tle-monitor-note">Working preview{rate !== 1 ? ` · ${rate}×` : ''}</span>

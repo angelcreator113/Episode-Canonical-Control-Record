@@ -24,21 +24,25 @@ export const LANES = [
   { key: 'dialogue', name: 'Dialogue', sub: 'Lala · guests', kind: 'audio' },
   { key: 'phone', name: 'Phone', sub: 'Screens', kind: 'video', pending: 'Phone screens: Gate 2b (their state model)' },
   { key: 'gameplay', name: 'Gameplay', sub: 'Actions · cursor · UI', kind: 'video', pending: 'Gameplay actions: Gate 2b (their state model)' },
-  { key: 'overlays', name: 'Overlays', sub: 'Widgets · images', kind: 'video', pending: 'Overlays: Gate 2b (their state model)' },
+  { key: 'overlays', name: 'Overlays', sub: 'Widgets · images', kind: 'video', note: 'Static graphics supported · Animated widgets and interactive phone behavior not yet available' },
   { key: 'music', name: 'Music', sub: 'Bed', kind: 'audio' },
   { key: 'sfx', name: 'SFX', sub: 'Effects', kind: 'audio' },
   { key: 'captions', name: 'Captions & titles', sub: 'Text', kind: 'video' },
 ];
 
 /** The media an edit names, looked up by id. */
-export function mediaIndex({ rawClips = [], sceneSets = [], takes = [] } = {}) {
+export function mediaIndex({ rawClips = [], sceneSets = [], takes = [], images = [], imagesRead = true } = {}) {
   const clips = new Map(rawClips.map((c) => [String(c.id), c]));
   const angles = new Map();
   for (const set of sceneSets) {
     for (const a of set.angles || []) angles.set(String(a.id), { ...a, set_name: set.name || set.title || null, set_id: set.id });
   }
   const takesById = new Map(takes.map((t) => [String(t.approval_id), t]));
-  return { clips, angles, takes: takesById };
+  // The pictures the edit's overlay items name, by id (PR 1b). `imagesRead`
+  // is false while the read failed, so a picture that is merely unread is
+  // never drawn as a missing one.
+  const imagesById = new Map((images || []).map((i) => [String(i.id), i]));
+  return { clips, angles, takes: takesById, images: imagesById, imagesRead };
 }
 
 const clipName = (c) => (c ? c.label || c.original_filename || 'Untitled clip' : null);
@@ -141,6 +145,17 @@ export function buildTimeline(edit, media = mediaIndex()) {
   for (const s of itemSpans(edit, timeline, 'caption')) {
     const v = s.item.values || {};
     blocks.captions.push({ id: s.item.id, lane: 'captions', kind: 'caption', start: s.start, end: s.end, label: v.text || 'Caption', row: s.item, layout: v.layout, style_key: v.style_key });
+  }
+  // Still pictures on the Overlays lane (PR 1b). The label is the picture's
+  // own name when the edit could resolve it, so a block says what it draws.
+  for (const s of itemSpans(edit, timeline, 'overlay')) {
+    const v = s.item.values || {};
+    const img = media.images?.get(String(v.asset_id)) || null;
+    blocks.overlays.push({
+      id: s.item.id, lane: 'overlays', kind: 'overlay', start: s.start, end: s.end,
+      label: img?.name || 'Graphic', image: img?.url || null, row: s.item, layout: v.layout,
+      missing: !img && media.imagesRead !== false,
+    });
   }
   for (const item of edit.items || []) {
     if ((item.kind === 'performer_clip' || item.kind === 'caption') && resolveAnchor(edit, timeline, item).error) {

@@ -98,7 +98,25 @@ export function framePlan(edit, t, media, { safari = isSafari() } = {}) {
   const pipLayer = layered.layers.find((l) => l.kind === 'pip');
   if (pip && pipLayer) { pip.opacity = pipLayer.opacity; pip.layout = pipLayer.layout; }
   const captions = layered.layers.filter((l) => l.kind === 'caption').map((l) => ({ item_id: l.item_id, text: l.text, style_key: l.style_key, layout: l.layout, opacity: l.opacity }));
-  return { t, beat: at.beat, scene, performers, pip, captions, mode: layered.mode, prime_missing: at.prime_missing, scene_gap: at.scene_gap };
+  // Still pictures (PR 1b), last, in the order layersAt already put them.
+  // The picture itself comes from media.images, which the editor fills from
+  // GET /edit/sources. That read resolves a picture by the server's one
+  // rule (services/overlayImages), so the monitor shows a picture exactly
+  // when the render will find one — this file still reads nothing of the
+  // render's own code. `unresolved` means the edit names a picture this
+  // episode may not draw; `unread` means the list could not be read at
+  // all, which is not the same thing and must not be drawn as missing.
+  const overlays = layered.layers.filter((l) => l.kind === 'overlay').map((l) => {
+    const img = media.images?.get(String(l.asset_id)) || null;
+    return {
+      item_id: l.item_id, asset_id: l.asset_id, layout: l.layout, opacity: l.opacity,
+      fit: l.fit === 'cover' ? 'cover' : 'contain', layer: l.layer,
+      url: img?.url || null, name: img?.name || null,
+      unresolved: !img && media.imagesRead !== false,
+      unread: !img && media.imagesRead === false,
+    };
+  });
+  return { t, beat: at.beat, scene, performers, pip, captions, overlays, mode: layered.mode, prime_missing: at.prime_missing, scene_gap: at.scene_gap };
 }
 
 /** The lane a mix event plays on (the track-header mute keys). */

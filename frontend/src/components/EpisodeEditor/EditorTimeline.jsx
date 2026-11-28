@@ -28,9 +28,9 @@ import { pointerXY, pointerIn } from '../../lib/editorRotation';
 export const LABEL_W = 190;
 
 /** What can be dragged along the clock, and which edges trim. */
-export const MOVABLE = new Set(['segment', 'dialogue', 'audio_item', 'scene_clip', 'performer_clip', 'caption']);
+export const MOVABLE = new Set(['segment', 'dialogue', 'audio_item', 'scene_clip', 'performer_clip', 'caption', 'overlay']);
 export const TRIM_EDGES = {
-  segment: ['start', 'end'], scene_clip: ['end'], audio_item: ['start', 'end'], performer_clip: ['start', 'end'], caption: ['start', 'end'],
+  segment: ['start', 'end'], scene_clip: ['end'], audio_item: ['start', 'end'], performer_clip: ['start', 'end'], caption: ['start', 'end'], overlay: ['start', 'end'],
 };
 /** Which lane takes which media (an asset's `kind`). */
 export const LANE_TAKES = {
@@ -168,6 +168,7 @@ export default function EditorTimeline({
               onDragLeave={() => setDropLane((cur) => (cur === lane.key ? null : cur))}
               onDrop={(e) => { setDropLane(null); if (takes(lane.key)) { e.preventDefault(); onDropAsset?.(lane.key, draggingAsset, timeFromEvent(e)); } }}>
               {lane.pending && <span className="tle-lane-pending">{lane.pending}</span>}
+              {!lane.pending && lane.note && !(model.blocks[lane.key] || []).length && <span className="tle-lane-pending tle-lane-note">{lane.note}</span>}
               {(model.blocks[lane.key] || []).map((b) => {
                 const selected = selectedId === b.id;
                 const canMove = editable && MOVABLE.has(b.kind) && !locked(lane.key);

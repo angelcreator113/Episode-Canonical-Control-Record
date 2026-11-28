@@ -50,10 +50,18 @@ describe('buildTimeline', () => {
 
   test('every lane is drawn; lanes without a data model say what unlocks them', () => {
     expect(LANES.map((l) => l.key)).toEqual(['scene', 'performer', 'prime', 'prime_vo', 'dialogue', 'phone', 'gameplay', 'overlays', 'music', 'sfx', 'captions']);
-    for (const key of ['phone', 'gameplay', 'overlays']) {
+    for (const key of ['phone', 'gameplay']) {
       expect(LANES.find((l) => l.key === key).pending).toMatch(/Gate 2b/);
       expect(model.blocks[key]).toEqual([]);
     }
+    // Overlays stopped waiting in Gate 2b PR 1b: it carries still pictures,
+    // and its line says what it can and cannot do rather than what unlocks
+    // it. The lane is still there, and still empty with nothing placed.
+    const overlays = LANES.find((l) => l.key === 'overlays');
+    expect(overlays).toBeTruthy();
+    expect(overlays.pending).toBeUndefined();
+    expect(overlays.note).toBe('Static graphics supported · Animated widgets and interactive phone behavior not yet available');
+    expect(model.blocks.overlays).toEqual([]);
     for (const key of ['performer', 'captions']) expect(LANES.find((l) => l.key === key).pending).toBeUndefined();
   });
 

@@ -600,7 +600,10 @@ describe('what the manifest does not touch (AC 16)', () => {
     const migrations = fs.readdirSync(path.join(ROOT, 'src/migrations'));
     expect(migrations.filter((f) => /manifest/i.test(f) || /render_?manifest/i.test(read(`src/migrations/${f}`)))).toEqual([]);
     expect(fs.readdirSync(path.join(ROOT, 'src/models')).filter((f) => /manifest/i.test(f))).toEqual([]);
-    for (const f of ['src/utils/renderManifest.js', 'src/services/renderManifestService.js']) {
+    // services/overlayImages joins the list in PR 1b: the service shares its
+    // picture rule with the editor rather than keeping a second copy, so the
+    // shared module is held to the same no-write, no-network standard.
+    for (const f of ['src/utils/renderManifest.js', 'src/services/renderManifestService.js', 'src/services/overlayImages.js']) {
       const code = read(f);
       expect(code).not.toMatch(/\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE|TRUNCATE)\b/i);
       expect(code).not.toMatch(/\.(sync|create|update|destroy|upsert|bulkCreate)\(/);
@@ -608,7 +611,7 @@ describe('what the manifest does not touch (AC 16)', () => {
     }
     // All the service loads: the edit's service, the pure builder, Sequelize's isolation levels, and the coverage read with its models.
     expect([...read('src/services/renderManifestService.js').matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort())
-      .toEqual(['../models', '../utils/renderManifest', './episodeEditService', './productionCoverageService', 'sequelize']);
+      .toEqual(['../models', '../utils/renderManifest', './episodeEditService', './overlayImages', './productionCoverageService', 'sequelize']);
     expect(read('src/services/renderManifestService.js')).toMatch(/SET TRANSACTION READ ONLY/);
   });
 

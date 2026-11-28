@@ -22,8 +22,22 @@
  *   unread       the angles could not be read (the answer also carries `error`)
  *
  * The plan's own order (beat, then sort_order) is kept. Nothing is placed here.
+ *
+ * `images` (PR 1b; Evoni, 2026-11-28) is the other half of what the editor
+ * needs to draw: the still pictures THIS EDIT ALREADY NAMES, resolved by the
+ * render manifest's own rule (services/overlayImages). It answers a question
+ * the graphics picker cannot: a picture that is placed but not in any
+ * catalogue list — a show screen an episode override has replaced, a
+ * variant, an asset of another kind — still has to appear on the monitor,
+ * and must disappear from it exactly when the render would call it missing.
+ * One entry per picture that may be drawn: { id, url, width, height, name }.
+ * A placed id that is absent from this list is a missing graphic; the field
+ * is always present, so "nothing placed" is [] and never a failed read.
  */
 'use strict';
+
+const { imageRowsFor, forPreview } = require('./overlayImages');
+const { liveOverlayAssetIds } = require('./episodeEditService');
 
 const STATUS_TEXT = {
   ready: 'Ready to place',
@@ -116,9 +130,17 @@ async function existingWork(sequelize, { episodeId }) {
     };
   });
 
+  // The pictures the live edit's overlay items name, resolved with the
+  // manifest's rule so the editor shows a picture exactly when the render
+  // resolves one. The ids come from episodeEditService, which is the only
+  // place allowed to name an edit table (R5.6 checklist 6).
+  const imageRows = await imageRowsFor(sequelize, { episodeId, ids: await liveOverlayAssetIds(sequelize, episodeId) });
+  const images = imageRows.map(forPreview);
+
   const count = (s) => plan.filter((p) => p.status === s).length;
   return {
     plan,
+    images,
     summary: {
       plan_rows: plan.length,
       beats_planned: new Set(plan.map((p) => p.beat_number)).size,
